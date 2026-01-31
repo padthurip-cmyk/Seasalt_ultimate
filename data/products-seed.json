@@ -1,0 +1,731 @@
+{
+  "products": [
+    {
+      "id": "prod_dry_fruit_laddu",
+      "handleId": "product_118f7ea3-eb63-df05-cb79-43738d06c709",
+      "name": "Dry Fruit Laddu",
+      "description": "A wholesome and energy-packed sweet made with a blend of premium dry fruits like almonds, cashews, dates, pumpkin seeds, and raisins. Our Dry Fruit Laddu is free from refined sugar, made with natural sweetness and rich in nutrients. Perfect for guilt-free snacking, festive gifting, or a healthy dessert for all age groups.",
+      "images": ["163af4_e6a395f4ac2549f5a77ad25f2ec23b60~mv2.jpg"],
+      "primaryCategory": "Sweets & Snacks",
+      "subCategory": "Laddus",
+      "ribbon": "Healthy",
+      "variants": [
+        { "size": "250gm", "price": 350.0 },
+        { "size": "500gm", "price": 350.0 },
+        { "size": "1kg", "price": 1040.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_turmeric_powder",
+      "handleId": "product_2a24dec4-209d-544b-93b2-84928e410ccf",
+      "name": "Turmeric Powder",
+      "description": "Our Turmeric Powder is made from high-quality, sun-dried turmeric roots, finely ground to retain their natural color, earthy aroma, and medicinal value. Rich in curcumin, it adds a golden hue and warm flavor to your dishes while supporting overall wellness. 100% pure with no added colors or preservatives – just the goodness of nature in every spoon.",
+      "images": ["163af4_76e4b86c589c416fb6d30ecdf540fd66~mv2.jpg"],
+      "primaryCategory": "Masalas & Karam Podis",
+      "subCategory": "Masalas",
+      "ribbon": "Traditional",
+      "variants": [
+        { "size": "250gm", "price": 125.0 },
+        { "size": "500gm", "price": 125.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_kura_karam",
+      "handleId": "product_ccea6b00-3af3-1c44-f27c-6594959dc350",
+      "name": "Kura Karam",
+      "description": "Our Red Chilli Powder is made from carefully selected, sun-dried red chillies that are finely ground to preserve their natural color, aroma, and heat. This pure spice adds vibrant red color and bold flavor to your dishes, making it perfect for curries, stir-fries, and marinades. Free from additives and preservatives, it brings you the true essence of traditional home-style cooking.",
+      "images": ["163af4_a97d93f9ec1a4dfb95de4954b433d257~mv2.jpg"],
+      "primaryCategory": "Masalas & Karam Podis",
+      "subCategory": "Karam Podis",
+      "ribbon": "Chilli Powder",
+      "variants": [
+        { "size": "500gm", "price": 300.0 },
+        { "size": "1kg", "price": 300.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_mutton_kheema_pickle",
+      "handleId": "product_11b30747-fc83-7d9d-021b-a62d9fd73f62",
+      "name": "Mutton Kheema Pickle",
+      "description": "Get ready to spice up your meals with our Mutton Kheema Pickle – a unique and delicious blend of finely minced tender mutton, slow-cooked in traditional Andhra-style masala, garlic, red chillies, and Peanut Oil. Each spoonful is packed with the juiciness of kheema, the heat of authentic spices, and the rich aroma of handmade pickling. Perfect as a side with hot rice, dosas, rotis.",
+      "images": ["53b0e3_3be3a6d6eeb44946828b9b967a645931~mv2.jpg"],
+      "primaryCategory": "Non Veg Pickles",
+      "subCategory": "Mutton",
+      "ribbon": "Telugu Spl",
+      "variants": [
+        { "size": "500gm", "price": 1000.0 },
+        { "size": "1kg", "price": 1000.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_gongura_prawns",
+      "handleId": "product_945978e3-f834-86e6-4d33-8924b8cbc21c",
+      "name": "Gongura Prawns",
+      "description": "Savor the perfect fusion of coastal flavor and Andhra spice with our Gongura Prawns Pickle. Made using fresh, succulent prawns and tangy gongura leaves (sorrel leaves), this pickle is slow-cooked in aromatic spices, garlic, and Peanut oil to bring out bold, lip-smacking taste in every bite.",
+      "images": ["53b0e3_6a2ee4df6cfe45bfa571742350b0a551~mv2.png"],
+      "primaryCategory": "Non Veg Pickles",
+      "subCategory": "Seafood",
+      "ribbon": "Telugu Spl",
+      "variants": [
+        { "size": "500gm", "price": 850.0 },
+        { "size": "1kg", "price": 850.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_gongura_chicken_boneless",
+      "handleId": "product_d29034f9-3d5d-9425-fa8c-131ba8fa188d",
+      "name": "Gongura Chicken Boneless",
+      "description": "Indulge in the fiery, tangy taste of Andhra with our Boneless Gongura Chicken Pickle – a mouthwatering blend of tender boneless chicken pieces slow-cooked with gongura (sorrel leaves), traditional spices, garlic. The natural tang of gongura combined with juicy chicken and a spicy masala base makes this a pickle that's bursting with bold flavor in every bite. Perfect as a side with hot rice, rotis, or even as a spicy snack!",
+      "images": ["53b0e3_99a38423b54b4327828de1ef6b257a46~mv2.png"],
+      "primaryCategory": "Non Veg Pickles",
+      "subCategory": "Chicken",
+      "ribbon": "Best in Class",
+      "variants": [
+        { "size": "500gm", "price": 630.0 },
+        { "size": "1kg", "price": 570.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_flax_seeds_laddu",
+      "handleId": "product_2f085dc4-ce31-9701-4f0b-c0ce367f7b87",
+      "name": "Flax Seeds Laddu",
+      "description": "Fuel your day with our Flax Seeds Laddu, a delicious and nutritious sweet made with roasted flax seeds, sesame seeds (nuvvulu), jaggery, and ghee. These laddus are rich in omega-3 fatty acids, calcium, and natural fiber, making them a guilt-free treat for all ages.",
+      "images": ["163af4_9b4713713ca44be29f4b3cedd665d38c~mv2.jpg"],
+      "primaryCategory": "Sweets & Snacks",
+      "subCategory": "Laddus",
+      "ribbon": "Healthy",
+      "variants": [
+        { "size": "250gm", "price": 220.0 },
+        { "size": "500gm", "price": 220.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_janthikalu",
+      "handleId": "product_b763b700-9b4a-b6bc-9d24-fbb580557505",
+      "name": "Janthikalu",
+      "description": "Crispy, golden, and full of flavor – our Janthikalu are a beloved South Indian classic made with a perfect blend of rice flour, gram flour, butter, and aromatic spices. Each spiral is hand-pressed and deep-fried to perfection, delivering a light, crunchy texture and a rich, savory taste. Whether it's festive celebrations or everyday snacking, Janthikalu are the perfect companion for your tea or coffee.",
+      "images": ["163af4_a2137bc79ea74d20af5fd90b82f88e3b~mv2.jpg"],
+      "primaryCategory": "Sweets & Snacks",
+      "subCategory": "Snacks",
+      "ribbon": "Telugu Spl",
+      "variants": [
+        { "size": "250gm", "price": 150.0 },
+        { "size": "500gm", "price": 150.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_chekkalu_pachi_karam",
+      "handleId": "product_a1dd2609-cc45-c865-5782-5b38c6be689c",
+      "name": "Chekkalu - Pachi Karam & Sago",
+      "description": "Introducing a bold twist to a classic favorite – Chekkalu made with Sago (Saggubiyyam) and coated in Pachi Karam (fresh green chilli masala). These crispy rice flour crackers are loaded with the crunch of sago and the fiery kick of freshly ground green chillies, garlic, and spices. Each bite is a perfect balance of crispy texture and zingy heat, making it an irresistible snack for spice lovers. Ideal for tea-time, festive platters, or anytime cravings.",
+      "images": ["163af4_281785428c1a4f1ebb5821acf8cbd370~mv2.jpg"],
+      "primaryCategory": "Sweets & Snacks",
+      "subCategory": "Snacks",
+      "ribbon": "Sago Spl",
+      "variants": [
+        { "size": "250gm", "price": 170.0 },
+        { "size": "500gm", "price": 170.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_chekkalu_peanut",
+      "handleId": "product_fab55195-70da-375b-1f33-2703eecba246",
+      "name": "Chekkalu",
+      "description": "Enjoy the ultimate South Indian snack with our Peanut Chekkalu – crispy rice flour crackers blended with roasted groundnuts (peanuts), curry leaves, and just the right touch of spice. Each bite delivers a satisfying crunch and rich, nutty flavor that makes it perfect for tea-time, festivals, or anytime munching. Handmade in small batches, our chekkalu are preservative-free and packed with traditional homemade taste.",
+      "images": ["163af4_ba68548805f943cb9e2e8f6fc31f57f3~mv2.jpg"],
+      "primaryCategory": "Sweets & Snacks",
+      "subCategory": "Snacks",
+      "ribbon": "Peanut Spl",
+      "variants": [
+        { "size": "250gm", "price": 150.0 },
+        { "size": "500gm", "price": 150.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_munagaaku_karam",
+      "handleId": "product_845c3f6b-e23f-7632-f16b-0a6aeaa29460",
+      "name": "Munagaaku Karam",
+      "description": "Savor the authentic taste of Andhra with our Munagaaku Karam Podi, made from sun-dried drumstick leaves (munagaaku), roasted lentils, red chillies, garlic, and aromatic spices. Known as a superfood rich in iron, calcium, and antioxidants, drumstick leaves are gently roasted and blended to create a spicy, flavorful chutney powder that's both delicious and deeply nourishing. Mix it with hot rice and ghee or sprinkle on idlis, dosas, and upma for a wholesome kick.",
+      "images": ["163af4_8e4278b579364734ba7ff3650898bcf8~mv2.jpg"],
+      "primaryCategory": "Masalas & Karam Podis",
+      "subCategory": "Karam Podis",
+      "ribbon": "Podis",
+      "variants": [
+        { "size": "100gm", "price": 80.0 },
+        { "size": "250gm", "price": 120.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_pudina_karam",
+      "handleId": "product_a5666256-fd03-cbb2-52a9-e158d0341586",
+      "name": "Pudina Karam",
+      "description": "Elevate your meals with the bold, refreshing flavor of our Pudina Karam Podi – a unique blend of sun-dried mint leaves (pudina), roasted lentils, garlic, red chillies, and traditional spices. This aromatic podi brings together the coolness of mint with the heat of South Indian spices, making it perfect for mixing with hot rice and ghee, sprinkling over idlis and dosas, or even using as a seasoning for snacks.",
+      "images": ["163af4_625bd2ee00b7403aa27e238f8f270290~mv2.jpg"],
+      "primaryCategory": "Masalas & Karam Podis",
+      "subCategory": "Karam Podis",
+      "ribbon": "Podis",
+      "variants": [
+        { "size": "100gm", "price": 80.0 },
+        { "size": "250gm", "price": 120.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_karivepaku_karam",
+      "handleId": "product_de2694ee-0838-b625-485c-446b44906146",
+      "name": "Karivepaku Karam",
+      "description": "Bring home the rich aroma and nutrition of curry leaves with our Karivepaku Karam Podi – a wholesome, spicy powder made from handpicked karivepaku (curry leaves), roasted lentils, garlic, red chillies, and traditional spices. Curry leaves are known for their digestive and immunity-boosting benefits, and we've captured their essence in this versatile chutney powder. Mix it with hot rice and ghee, sprinkle over idli, dosa, or stir into your curries for a burst of authentic South Indian flavor.",
+      "images": ["163af4_1f3cc39a9ba543ed881feb8ae3a27ce0~mv2.jpg"],
+      "primaryCategory": "Masalas & Karam Podis",
+      "subCategory": "Karam Podis",
+      "ribbon": "Podis",
+      "variants": [
+        { "size": "100gm", "price": 80.0 },
+        { "size": "250gm", "price": 120.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_combo_chicken_coriander",
+      "handleId": "product_3af312df-7214-dc92-74f8-bc2e29254afe",
+      "name": "Chicken + Coriander",
+      "description": "500 Grams Chicken with Bone + 500 Grams Coriander. Ultimate Pickle Combo: Chicken with Bone & Coriander Delight. Chicken with Bone Pickle – Packed with juicy, tender pieces and rich, spicy flavor that lingers — this one's a true treat for meat lovers. Coriander Pickle – Fresh, vibrant, and zesty! A burst of herbal spice that adds the perfect punch to any meal.",
+      "images": ["163af4_7dc576230bc64852b4861a7bcb77015c~mv2.jpg"],
+      "primaryCategory": "Combos",
+      "subCategory": "Value Packs",
+      "ribbon": "Combo",
+      "variants": [
+        { "size": "1kg", "price": 800.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_combo_avakaya_tomato",
+      "handleId": "product_5ad51e8f-110d-02e4-1458-d81a75f5fe37",
+      "name": "Avakaya + Tomato",
+      "description": "500 Grams Avakaya + 500 Grams Tomato. Enjoy the perfect blend of flavors with our Avakaya & Tomato Pickle Combo! A spicy, tangy treat made with traditional recipes and premium ingredients – a must-have for every meal!",
+      "images": ["163af4_a5be29aba0f7461583b94fe4daa4f830~mv2.jpg"],
+      "primaryCategory": "Combos",
+      "subCategory": "Value Packs",
+      "ribbon": "Combo",
+      "variants": [
+        { "size": "1kg", "price": 550.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_kakarakaya_karam",
+      "handleId": "product_5908ef11-8e39-a6ca-2a7c-06ae2927f5f1",
+      "name": "Kakarakaya Karam",
+      "description": "A bold and flavorful South Indian-style spice blend made with sun-dried bitter gourd (karela), lentils, spices, and aromatic herbs. This unique podi delivers a perfect balance of bitterness, heat, and earthy undertones — ideal for those who love traditional flavors with a healthy twist.",
+      "images": ["163af4_058b8624a4a0474e973d90b19e119a1a~mv2.jpg"],
+      "primaryCategory": "Masalas & Karam Podis",
+      "subCategory": "Karam Podis",
+      "ribbon": "Podis",
+      "variants": [
+        { "size": "100gm", "price": 80.0 },
+        { "size": "250gm", "price": 120.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_nalla_karam",
+      "handleId": "product_cd34697c-5ef9-afdd-9a07-00872e01174f",
+      "name": "Nalla Karam",
+      "description": "Experience the bold, rustic flavor of Andhra with our Nalla Karam Podi – a spicy, aromatic blend of roasted lentils, dry red chillies, garlic, and sesame seeds. Traditionally ground to perfection, this Nalla Karam powder adds a punch to hot rice, idlis, dosas, and even ghee-roti combos. Made with pure, natural ingredients and no preservatives, every spoonful delivers authentic homemade taste.",
+      "images": ["163af4_b1dc36c9300848e8b343b93fb28488c3~mv2.jpg"],
+      "primaryCategory": "Masalas & Karam Podis",
+      "subCategory": "Karam Podis",
+      "ribbon": "Podis",
+      "variants": [
+        { "size": "100gm", "price": 80.0 },
+        { "size": "250gm", "price": 120.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_garam_masala",
+      "handleId": "product_9cbf2077-e421-66ab-7eb9-4b74d5eeeec3",
+      "name": "Garam Masala",
+      "description": "The Heart of Indian Flavor, Garam Masala is a traditional Indian spice blend made from a mix of warm, aromatic spices like cumin, coriander, cardamom, cloves, cinnamon, and black pepper. It adds depth, warmth, and a rich fragrance to curries, rice, and snacks. A must-have in any Indian kitchen, Garam Masala enhances flavor without adding heat.",
+      "images": ["163af4_02d29cde3ae1441fb01b32dcde60046f~mv2.jpg"],
+      "primaryCategory": "Masalas & Karam Podis",
+      "subCategory": "Masalas",
+      "ribbon": "All you need",
+      "variants": [
+        { "size": "100gm", "price": 80.0 },
+        { "size": "250gm", "price": 120.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_thonuku_avakaya",
+      "handleId": "product_a6871afa-44f9-e5d0-a88a-b2696ea25cf3",
+      "name": "Thonuku Avakaya",
+      "description": "Tiny Pieces, Mighty Flavor. Experience the fiery, tangy delight of Thonuku Avakaya, a traditional Andhra pickle. Crafted with the finest, hand-picked mangoes, cut into bite-sized pieces and infused with a blend of fiery red chilies and aromatic spices. Ground to perfection using a traditional hand grinder, this pickle is free from artificial preservatives and additives, offering a pure and authentic taste.",
+      "images": ["163af4_97644604f7ac4711baf4e5b40e49c25a~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Mango",
+      "ribbon": "",
+      "variants": [
+        { "size": "500gm", "price": 300.0 },
+        { "size": "1kg", "price": 250.0 }
+      ],
+      "active": false,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_pandu_mirchi_pachadi",
+      "handleId": "product_e67a9d82-d4f7-0628-13ee-fbde3aa0594e",
+      "name": "Pandu Mirchi Pachadi",
+      "description": "A Fiery Delight. Experience the fiery, tangy delight of Pandu Mirchi Pachadi, a traditional Andhra condiment. Crafted with the finest, hand-picked green chillies, this pachadi offers a burst of flavor in every bite. The perfect balance of spice and tanginess makes it a versatile condiment that can be enjoyed with a variety of dishes.",
+      "images": ["53b0e3_1383b71f1c1541f78e702c5364c59f09~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Chilli",
+      "ribbon": "South Special",
+      "variants": [
+        { "size": "500gm", "price": 300.0 },
+        { "size": "1kg", "price": 280.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_biryani_masala",
+      "handleId": "product_4c1e44d7-fb72-f5b9-4f06-23c6e29006e5",
+      "name": "Biryani Masala (Black Masala)",
+      "description": "A Taste of History, A Secret Recipe – Our Black Biryani Masala is a traditional spice blend crafted with a complex mix of whole spices, slow-roasted and ground to perfection. This unique masala delivers a bold aroma and very strong flavour that enhances every grain of rice, making your biryanis and pulaos truly unforgettable. Perfect for all varieties of Biryanis and Pulaos, this masala brings out the rich, restaurant-style taste in your favorite recipes.",
+      "images": ["163af4_7f81a30887664bba8fc94f652c1dd5e1~mv2.jpg"],
+      "primaryCategory": "Masalas & Karam Podis",
+      "subCategory": "Masalas",
+      "ribbon": "Biryani's Spl",
+      "variants": [
+        { "size": "100gm", "price": 200.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_kara_podi",
+      "handleId": "product_94cc56e8-d3d0-4edb-258a-5cc565a6178a",
+      "name": "Kara Podi",
+      "description": "A Pinch of Perfection, Kara Podi, also known as Idli Podi or Karam Podi, is a flavorful and versatile spice powder popular in South Indian cuisine. It's a delightful accompaniment to various dishes, primarily idli, dosa, and upma.",
+      "images": ["163af4_a2bfe3454c4e456cb2b6aedc429a3484~mv2.jpg"],
+      "primaryCategory": "Masalas & Karam Podis",
+      "subCategory": "Karam Podis",
+      "ribbon": "Podis",
+      "variants": [
+        { "size": "100gm", "price": 80.0 },
+        { "size": "250gm", "price": 120.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_boneless_mutton_pickle",
+      "handleId": "product_88d447b9-5cf2-1614-df1f-b5f8623891e7",
+      "name": "Boneless Mutton Pickle",
+      "description": "Mutton Madness, Pickled Perfection. Crafted with the finest, boneless mutton pieces, marinated in a blend of aromatic spices and red chilies. This pickle offers a burst of flavor in every bite. The perfect balance of spice and tang makes it a versatile condiment that can be enjoyed with a variety of dishes.",
+      "images": ["163af4_49e10247b3dc47c5a04781c942fff330~mv2.jpg"],
+      "primaryCategory": "Non Veg Pickles",
+      "subCategory": "Mutton",
+      "ribbon": "Telugu Spl",
+      "variants": [
+        { "size": "500gm", "price": 900.0 },
+        { "size": "1kg", "price": 860.0 }
+      ],
+      "active": false,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_chicken_pickle_boneless",
+      "handleId": "product_54b1d5f9-8e94-2988-f777-2aabcec3b41c",
+      "name": "Chicken Pickle Boneless",
+      "description": "A Flavorful Boneless Delight, Crafted with the finest, boneless chicken pieces, marinated in a blend of aromatic spices and red chilies. This pickle offers a burst of flavor in every bite. The perfect balance of spice and tang makes it a versatile condiment that can be enjoyed with a variety of dishes.",
+      "images": ["53b0e3_bd4b8d8643724c3dbbded34896cc40c4~mv2.jpg"],
+      "primaryCategory": "Non Veg Pickles",
+      "subCategory": "Chicken",
+      "ribbon": "Best in Class",
+      "variants": [
+        { "size": "500gm", "price": 630.0 },
+        { "size": "1kg", "price": 570.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_catla_fish_pickle",
+      "handleId": "product_059a35d4-e49c-508f-8afa-766c70cdc927",
+      "name": "Catla Fish Pickle",
+      "description": "A Flavorful Fishy Feast, Crafted with the finest, hand-picked Catla fish pieces, marinated in a blend of aromatic spices and red chilies. This pickle offers a burst of flavor in every bite. The perfect balance of spice and tang makes it a versatile condiment that can be enjoyed with a variety of dishes.",
+      "images": ["163af4_48b60025e68f412c884576a2ad5c748b~mv2.jpg"],
+      "primaryCategory": "Non Veg Pickles",
+      "subCategory": "Seafood",
+      "ribbon": "River Fed",
+      "variants": [
+        { "size": "500gm", "price": 630.0 },
+        { "size": "1kg", "price": 570.0 }
+      ],
+      "active": false,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_gongura_nilva_pachadi",
+      "handleId": "product_0a7dcdec-4ee8-6f7f-ecdd-6e9b7189f103",
+      "name": "Gongura Nilva Pachadi",
+      "description": "A Tangy, Spicy Delight, Experience the fiery, tangy delight of Gongura Nilva Pachadi, a traditional Andhra condiment. Crafted with the finest, hand-picked gongura leaves and a blend of aromatic spices, this pachadi offers a burst of flavor in every bite. The perfect balance of tanginess and spice makes it a versatile condiment that can be enjoyed with a variety of dishes.",
+      "images": ["53b0e3_d3504025073140cab435c56935e0a2ef~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Gongura",
+      "ribbon": "Herbal",
+      "variants": [
+        { "size": "500gm", "price": 330.0 },
+        { "size": "1kg", "price": 270.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_chicken_pickle_bone",
+      "handleId": "product_c6a8ecde-6f86-08db-42f8-83dc9afbbc7d",
+      "name": "Chicken Pickle with Bone",
+      "description": "The Original, The Best. Crafted with the finest, hand-picked chicken pieces, marinated in a blend of aromatic spices and red chilies. This pickle offers a burst of flavor in every bite. The perfect balance of spice and tang makes it a versatile condiment that can be enjoyed with a variety of dishes.",
+      "images": ["53b0e3_4a25ae4fca044360a5317828d4bf9dc3~mv2.jpg"],
+      "primaryCategory": "Non Veg Pickles",
+      "subCategory": "Chicken",
+      "ribbon": "All time favourite",
+      "variants": [
+        { "size": "500gm", "price": 540.0 },
+        { "size": "1kg", "price": 460.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_dhaniyala_avakaya",
+      "handleId": "product_8132dde3-97d6-3bc6-d1e1-29f344d4ac89",
+      "name": "Dhaniyala Avakaya",
+      "description": "A Coriander-Infused Delight, Experience the unique flavor of Dhaniyala Avakaya, a traditional Andhra pickle with a twist. Crafted with the finest, hand-picked mangoes sourced directly from local farms, this pickle is infused with a blend of carefully selected herbs and spices, including perfectly toasted coriander seeds. Ground to perfection using a traditional hand grinder, this pickle is free from artificial preservatives and additives, offering a pure and authentic taste.",
+      "images": ["163af4_9afc89cef11c4b91aa790c539a22f8ae~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Mango",
+      "ribbon": "Telugu Spl",
+      "variants": [
+        { "size": "500gm", "price": 330.0 },
+        { "size": "1kg", "price": 270.0 }
+      ],
+      "active": false,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_chintakaya_pickle",
+      "handleId": "product_72c1ae90-db11-78c9-1c13-8c0b64b4389a",
+      "name": "Chintakaya Pickle",
+      "description": "A Burst of Flavorful Tartness, Chintakaya pickle, or raw tamarind pickle, is a popular South Indian condiment known for its tangy and spicy flavor. It's a perfect accompaniment to various dishes like idli, dosa, and rice.",
+      "images": ["163af4_cb643917d5504904a55358babce4fb80~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Tamarind",
+      "ribbon": "Raw Tamarind",
+      "variants": [
+        { "size": "500gm", "price": 380.0 },
+        { "size": "1kg", "price": 320.0 }
+      ],
+      "active": false,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_coriander_nilva_pachadi",
+      "handleId": "product_1f267580-daa5-8428-f367-6d8565d5f127",
+      "name": "Coriander Nilva Pachadi",
+      "description": "A Refreshing Twist, Experience the unique flavor of Coriander Nilva Pachadi, a refreshing and tangy Indian condiment. Crafted with the finest, hand-picked coriander leaves, this pachadi is a burst of flavor in every bite. The perfect balance of tanginess and spice makes it a versatile condiment that can be enjoyed with a variety of dishes.",
+      "images": ["53b0e3_df7b35b3764a4fb0888e24e5e0e7facb~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Herbal",
+      "ribbon": "Herbal",
+      "variants": [
+        { "size": "500gm", "price": 330.0 },
+        { "size": "1kg", "price": 300.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_dhaniyala_maagaya",
+      "handleId": "product_ecd49472-001d-7077-d9d0-93dca9e6e220",
+      "name": "Dhaniyala Maagaya",
+      "description": "A Coriander Symphony, Experience the harmonious blend of tangy mangoes and aromatic coriander in our Dhaniyala Maagaya. Crafted with the finest, hand-picked mangoes sourced directly from local farms, this pickle is infused with a unique blend of carefully selected herbs and spices, including perfectly toasted coriander seeds. Ground to perfection using a traditional hand grinder, this pickle is free from artificial preservatives and additives, offering a pure and authentic taste.",
+      "images": ["53b0e3_44f8a3dc204f49c781d426335bf62ad8~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Mango",
+      "ribbon": "Raw Mango",
+      "variants": [
+        { "size": "500gm", "price": 330.0 },
+        { "size": "1kg", "price": 270.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_amla_patchadi",
+      "handleId": "product_b52ca6c4-7990-9f83-7d88-34fa32ef1887",
+      "name": "Amla Patchadi",
+      "description": "Pure and Authentic Taste, Experience the tangy and spicy delight of Amla Pachadi, a traditional Indian condiment. Crafted with the finest, hand-picked Amla fruits, cooked to perfection with a blend of aromatic spices and red chilies. This pachadi offers a burst of flavor, perfect for those who prefer a tangy, savory taste.",
+      "images": ["163af4_23da098b073749529dca236bbdb68880~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Herbal",
+      "ribbon": "Herbal",
+      "variants": [
+        { "size": "500gm", "price": 330.0 },
+        { "size": "1kg", "price": 270.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_amla_avakaya",
+      "handleId": "product_bd83c0a8-3c35-0e9f-637d-bbb42ce8da86",
+      "name": "Amla Avakaya",
+      "description": "A Healthier Pickle, Discover the unique flavor of Amla Avakaya, a tangy and spicy Indian pickle. Crafted with the finest, hand-picked Amla fruits, infused with a blend of aromatic spices and red chilies. Ground to perfection using a traditional hand grinder, this pickle is free from artificial preservatives and additives, offering a pure and authentic taste. Amla, known for its numerous health benefits, adds a tangy twist to this traditional pickle.",
+      "images": ["163af4_594311a7d08f4b0ebf096b7fae665633~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Herbal",
+      "ribbon": "Herbal",
+      "variants": [
+        { "size": "500gm", "price": 300.0 },
+        { "size": "1kg", "price": 280.0 }
+      ],
+      "active": false,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_ginger_pickle",
+      "handleId": "product_3c87ba26-45b0-2741-b54f-bacba5b21171",
+      "name": "Ginger Pickle",
+      "description": "A Healthier Pickle, Experience the fiery, tangy delight of Ginger Pickle, a traditional Indian condiment. Crafted with the finest, hand-picked ginger roots, this pickle offers a burst of flavor in every bite. The perfect balance of spice and tang makes it a versatile condiment that can be enjoyed with a variety of dishes.",
+      "images": ["53b0e3_fd749ebdc8b345a0843acca96e7f6114~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Herbal",
+      "ribbon": "Herbal",
+      "variants": [
+        { "size": "500gm", "price": 330.0 },
+        { "size": "1kg", "price": 270.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_avakaya",
+      "handleId": "product_8f24633e-bba9-7273-a1ac-a8bf57a53a51",
+      "name": "Avakaya",
+      "description": "A Taste of Tradition, Crafted with Love, Indulge in the authentic taste of homemade Avakaya, a tangy and spicy Indian pickle. Crafted with the finest, hand-picked mangoes sourced directly from local farms, our Avakaya is a burst of flavor in every bite. Infused with a unique blend of carefully selected herbs and spices, this pickle is free from artificial preservatives and additives.",
+      "images": ["163af4_58038c71b77b4b8eae82c58c8e4f9b5c~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Mango",
+      "ribbon": "Traditional",
+      "variants": [
+        { "size": "500gm", "price": 330.0 },
+        { "size": "1kg", "price": 270.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_mutton_pickle_bone",
+      "handleId": "product_9c4b5c7e-427d-a512-a56d-331899137c87",
+      "name": "Mutton Pickle with Bone",
+      "description": "A Flavorful Journey, Bone-In, Crafted with the finest, hand-picked mutton pieces, marinated in a blend of aromatic spices and red chilies. This pickle offers a burst of flavor in every bite. The perfect balance of spice and tang makes it a versatile condiment that can be enjoyed with a variety of dishes.",
+      "images": ["163af4_a90976c76dbb41949c5b1c2c1875d099~mv2.jpg"],
+      "primaryCategory": "Non Veg Pickles",
+      "subCategory": "Mutton",
+      "ribbon": "Telugu Spl",
+      "variants": [
+        { "size": "500gm", "price": 750.0 },
+        { "size": "1kg", "price": 700.0 }
+      ],
+      "active": false,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_prawn_pickle",
+      "handleId": "product_237bf09f-664d-418f-087f-908a557bb678",
+      "name": "Prawn Pickle",
+      "description": "Salty, Spicy, Seafood Sensation, Crafted with the finest, hand-picked prawns, marinated in a blend of aromatic spices and red chilies. This pickle offers a burst of flavor in every bite. The perfect balance of spice and tang makes it a versatile condiment that can be enjoyed with a variety of dishes.",
+      "images": ["53b0e3_52f7a2f8bf9b4e95975f93aa19b63c26~mv2.jpg"],
+      "primaryCategory": "Non Veg Pickles",
+      "subCategory": "Seafood",
+      "ribbon": "Straight from Godavari",
+      "variants": [
+        { "size": "500gm", "price": 800.0 },
+        { "size": "1kg", "price": 750.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_tomato_pickle",
+      "handleId": "product_ea653ef7-fb81-b5e7-7835-5a0dc7967fb7",
+      "name": "Tomato Pickle",
+      "description": "A Spicy Sensation, Naturally, Experience the fiery fusion of green chilies and ripe tomatoes in our Pandu Mirchi Tomato Pachadi. This traditional Andhra condiment is a perfect blend of tangy, spicy, and sweet flavors. Crafted with the finest, hand-picked ingredients, our pachadi is a burst of flavor in every bite.",
+      "images": ["53b0e3_315289d09db24d65a1b33ecab2a2a8e9~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Tomato",
+      "ribbon": "South Special",
+      "variants": [
+        { "size": "500gm", "price": 300.0 },
+        { "size": "1kg", "price": 280.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_mint_pickle",
+      "handleId": "product_5c99db86-fa2d-57ef-5641-fd64723dc475",
+      "name": "Mint Pickle",
+      "description": "Freshness in Every Bite, A zesty blend of fresh mint leaves (Pudina), aromatic spices, and tangy goodness — our Mint Pickle adds a refreshing twist to every meal. Perfect with rice, rotis, or snacks!",
+      "images": ["53b0e3_f21bc86babaf464dbf6d199bdaa3de15~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Herbal",
+      "ribbon": "Herbal",
+      "variants": [
+        { "size": "500gm", "price": 330.0 },
+        { "size": "1kg", "price": 270.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_turum_magaya",
+      "handleId": "product_47d93dce-5ed4-aafb-6ec1-bcbd830f2d97",
+      "name": "Turum Magaya",
+      "description": "A Tangy, Spicy Delight, Indulge in the fiery passion of Turum Magaya, a spicy pickle that will tantalize your taste buds. Crafted with the finest, hand-picked mangoes sourced directly from local farms and infused with a blend of fiery red chilies, this pickle is a true taste of Andhra Pradesh. Ground to perfection using a traditional hand grinder, this pickle is free from artificial preservatives and additives, offering a pure and authentic taste.",
+      "images": ["163af4_c6b4746af50c4937838b9d6bf8ff5884~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Mango",
+      "ribbon": "Freshly",
+      "variants": [
+        { "size": "500gm", "price": 330.0 },
+        { "size": "1kg", "price": 270.0 }
+      ],
+      "active": false,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_maagaya",
+      "handleId": "product_063d1dc5-c9a6-4de4-b646-172f8206cf15",
+      "name": "Maagaya",
+      "description": "A Burst of Tangy, Spicy Delight, Experience the authentic taste of homemade Avakaya, a tangy and spicy Indian pickle. Our Avakaya is made with the finest, hand-picked mangoes sourced directly from local farms. The mangoes are infused with a unique blend of carefully selected herbs and spices, ground to perfection using a traditional hand grinder. This time-honored method ensures the rich flavors are fully extracted, resulting in a truly authentic taste.",
+      "images": ["53b0e3_ad2fb569d13446b8a80e30ec17ec1c2d~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Mango",
+      "ribbon": "Traditional",
+      "variants": [
+        { "size": "500gm", "price": 330.0 },
+        { "size": "1kg", "price": 270.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_lemon_pickle",
+      "handleId": "product_d221721b-3e66-b86f-367a-6a3b1a30cdce",
+      "name": "Lemon Pickle",
+      "description": "A Tangy Twist, Experience the tangy, spicy delight of Lemon Pickle, a traditional Indian condiment. Crafted with the finest, hand-picked lemons, this pickle offers a burst of flavor in every bite. The perfect balance of tanginess and spice makes it a versatile condiment that can be enjoyed with a variety of dishes.",
+      "images": ["163af4_4b0acd7a2e6048bd8f740d24f8f33a6a~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Citrus",
+      "ribbon": "Freshly Made",
+      "variants": [
+        { "size": "500gm", "price": 330.0 },
+        { "size": "1kg", "price": 270.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    },
+    {
+      "id": "prod_mixed_vegetable_avakaya",
+      "handleId": "product_913f8f34-27ba-0883-0166-bc8ec11ac13f",
+      "name": "Mixed Vegetable Avakaya",
+      "description": "A Colorful Crunch, This unique blend of carrots, tindora, cauliflower, and mango offers a delightful balance of sour, and spicy. Each bite is a burst of freshness and a burst of flavor.",
+      "images": ["53b0e3_cf6497e892ba4f1b9ecc11129f7b6325~mv2.jpg"],
+      "primaryCategory": "Vegetarian Pickles",
+      "subCategory": "Mixed",
+      "ribbon": "Fresh Vegetables",
+      "variants": [
+        { "size": "500gm", "price": 300.0 },
+        { "size": "1kg", "price": 250.0 }
+      ],
+      "active": true,
+      "brand": "Sea Salt Pickles"
+    }
+  ],
+  "categories": [
+    {
+      "id": "cat_veg_pickles",
+      "name": "Vegetarian Pickles",
+      "icon": "🥒",
+      "subCategories": ["Mango", "Tomato", "Citrus", "Herbal", "Gongura", "Chilli", "Tamarind", "Mixed"]
+    },
+    {
+      "id": "cat_nonveg_pickles",
+      "name": "Non Veg Pickles",
+      "icon": "🍗",
+      "subCategories": ["Chicken", "Mutton", "Seafood"]
+    },
+    {
+      "id": "cat_masalas",
+      "name": "Masalas & Karam Podis",
+      "icon": "🌶️",
+      "subCategories": ["Masalas", "Karam Podis"]
+    },
+    {
+      "id": "cat_sweets",
+      "name": "Sweets & Snacks",
+      "icon": "🍬",
+      "subCategories": ["Laddus", "Snacks"]
+    },
+    {
+      "id": "cat_combos",
+      "name": "Combos",
+      "icon": "🎁",
+      "subCategories": ["Value Packs"]
+    }
+  ],
+  "siteConfig": {
+    "spinWheelEnabled": true,
+    "spinWheelOdds": 30,
+    "rewards": [99, 299, 599],
+    "deliveryCharges": {
+      "standard": 50,
+      "freeAbove": 500
+    }
+  }
+}
