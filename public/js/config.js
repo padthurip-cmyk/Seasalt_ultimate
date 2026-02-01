@@ -34,14 +34,14 @@ const CONFIG = {
     // FIREBASE CONFIGURATION
     // ============================================
     // Replace these with your Firebase project credentials
-  FIREBASE: {
+FIREBASE: {
     apiKey: "AIzaSyBxFGj5F3JQw9RMYvRUqV18LGoZ62ereEE",
     authDomain: "seasaltpickles-c058e.firebaseapp.com",
     projectId: "seasaltpickles-c058e",
     storageBucket: "seasaltpickles-c058e.firebasestorage.app",
     messagingSenderId: "110925953869",
     appId: "1:110925953869:web:b47246f06a91ce1bf35504"
-}    
+},   
     // ============================================
     // RAZORPAY CONFIGURATION
     // ============================================
