@@ -1,11 +1,16 @@
 /**
  * SeaSalt Pickles - Spin Wheel Module
  * =====================================
- * Handles the spin wheel with Firebase OTP.
- * SVG-based wheel with 8 segments and country code support.
+ * DEMO MODE: Skips real OTP, goes directly to spin wheel
+ * Set DEMO_MODE = false when Firebase Blaze plan is enabled
  */
 
 const SpinWheel = (function() {
+    // ========================================
+    // DEMO MODE - Set to false for production
+    // ========================================
+    const DEMO_MODE = true; // Change to false when Firebase Blaze is enabled
+    
     // DOM Elements
     let modal, phoneSection, otpSection, wheelSection, resultSection;
     let phoneInput, countryCodeSelect, sendOtpBtn, otpInputs, verifyOtpBtn;
@@ -35,6 +40,8 @@ const SpinWheel = (function() {
     let recaptchaVerifier = null;
     
     function initFirebase() {
+        if (DEMO_MODE) return; // Skip Firebase in demo mode
+        
         if (!firebase.apps.length) {
             firebase.initializeApp(CONFIG.FIREBASE);
         }
@@ -196,6 +203,22 @@ const SpinWheel = (function() {
         sendOtpBtn.disabled = true;
         sendOtpBtn.innerHTML = '<span class="animate-pulse">Sending...</span>';
         
+        // ========================================
+        // DEMO MODE: Skip OTP, go directly to wheel
+        // ========================================
+        if (DEMO_MODE) {
+            setTimeout(() => {
+                Store.setUser({ phone: userPhone });
+                phoneSection.classList.add('hidden');
+                wheelSection.classList.remove('hidden');
+                sendOtpBtn.innerHTML = 'Send OTP ✨';
+                sendOtpBtn.disabled = false;
+                UI.showToast('Welcome! Spin the wheel to win!', 'success');
+            }, 800);
+            return;
+        }
+        
+        // Real Firebase OTP (requires Blaze plan)
         try {
             if (auth && recaptchaVerifier) {
                 confirmationResult = await auth.signInWithPhoneNumber(userPhone, recaptchaVerifier);
