@@ -1,57 +1,56 @@
 /**
  * SeaSalt Pickles - Spin Wheel Module
  * =====================================
- * Handles the spin wheel marketing feature with Firebase OTP.
- * Rewards are added to user's wallet.
+ * Handles the spin wheel with Firebase OTP.
+ * SVG-based wheel with 8 segments and country code support.
  */
 
 const SpinWheel = (function() {
-    // ============================================
-    // DOM ELEMENTS
-    // ============================================
+    // DOM Elements
     let modal, phoneSection, otpSection, wheelSection, resultSection;
-    let phoneInput, sendOtpBtn, otpInputs, verifyOtpBtn;
+    let phoneInput, countryCodeSelect, sendOtpBtn, otpInputs, verifyOtpBtn;
     let spinWheel, spinBtn, closeBtn, continueBtn;
     let winResult, loseResult, winAmount;
     
-    // ============================================
-    // STATE
-    // ============================================
+    // State
     let confirmationResult = null;
     let userPhone = null;
     let isSpinning = false;
+    let currentRotation = 0;
     
-    // ============================================
-    // FIREBASE AUTH
-    // ============================================
+    // 8 Segments (45 degrees each)
+    const SEGMENTS = [
+        { value: 99, type: 'win' },
+        { value: 0, type: 'lose' },
+        { value: 299, type: 'win' },
+        { value: 0, type: 'lose' },
+        { value: 599, type: 'win' },
+        { value: 0, type: 'lose' },
+        { value: 99, type: 'win' },
+        { value: 0, type: 'lose' }
+    ];
+    
+    // Firebase Auth
     let auth = null;
     let recaptchaVerifier = null;
     
     function initFirebase() {
-        // Initialize Firebase if not already done
         if (!firebase.apps.length) {
             firebase.initializeApp(CONFIG.FIREBASE);
         }
         auth = firebase.auth();
         
-        // Set up invisible reCAPTCHA
         recaptchaVerifier = new firebase.auth.RecaptchaVerifier('send-otp-btn', {
             size: 'invisible',
-            callback: () => {
-                // reCAPTCHA solved
-            }
+            callback: () => {}
         });
     }
     
-    // ============================================
-    // INITIALIZATION
-    // ============================================
-    
+    // Initialize
     function init() {
         cacheElements();
         bindEvents();
         
-        // Check if spin wheel should be shown
         if (shouldShowSpinWheel()) {
             showModal();
         }
@@ -65,6 +64,7 @@ const SpinWheel = (function() {
         resultSection = document.getElementById('result-section');
         
         phoneInput = document.getElementById('phone-input');
+        countryCodeSelect = document.getElementById('country-code');
         sendOtpBtn = document.getElementById('send-otp-btn');
         otpInputs = document.querySelectorAll('.otp-input');
         verifyOtpBtn = document.getElementById('verify-otp-btn');
@@ -80,16 +80,26 @@ const SpinWheel = (function() {
     }
     
     function bindEvents() {
-        // Phone input validation
+        // Phone input
         phoneInput.addEventListener('input', (e) => {
-            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
-            sendOtpBtn.disabled = e.target.value.length !== 10;
+            e.target.value = e.target.value.replace(/\D/g, '');
+            const maxLength = getMaxPhoneLength();
+            e.target.value = e.target.value.slice(0, maxLength);
+            validatePhoneInput();
         });
+        
+        // Country code change
+        if (countryCodeSelect) {
+            countryCodeSelect.addEventListener('change', () => {
+                updatePhonePlaceholder();
+                validatePhoneInput();
+            });
+        }
         
         // Send OTP
         sendOtpBtn.addEventListener('click', handleSendOtp);
         
-        // OTP inputs auto-focus
+        // OTP inputs
         otpInputs.forEach((input, index) => {
             input.addEventListener('input', (e) => {
                 e.target.value = e.target.value.replace(/\D/g, '').slice(0, 1);
@@ -105,46 +115,58 @@ const SpinWheel = (function() {
                 }
             });
             
-            // Paste handler
             input.addEventListener('paste', (e) => {
                 e.preventDefault();
                 const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
                 pastedData.split('').forEach((char, i) => {
-                    if (otpInputs[i]) {
-                        otpInputs[i].value = char;
-                    }
+                    if (otpInputs[i]) otpInputs[i].value = char;
                 });
                 checkOtpComplete();
             });
         });
         
-        // Verify OTP
         verifyOtpBtn.addEventListener('click', handleVerifyOtp);
-        
-        // Spin button
         spinBtn.addEventListener('click', handleSpin);
-        
-        // Close button
         closeBtn.addEventListener('click', hideModal);
-        
-        // Continue button
         continueBtn.addEventListener('click', hideModal);
     }
     
-    // ============================================
-    // VISIBILITY CONTROL
-    // ============================================
+    // Phone Helpers
+    function getMaxPhoneLength() {
+        const code = countryCodeSelect ? countryCodeSelect.value : '+91';
+        const lengths = {
+            '+91': 10, '+1': 10, '+44': 10, '+61': 9, '+971': 9,
+            '+65': 8, '+60': 10, '+966': 9, '+974': 8, '+968': 8,
+            '+973': 8, '+965': 8, '+64': 9, '+27': 9, '+49': 11,
+            '+33': 9, '+39': 10, '+81': 10, '+82': 10, '+86': 11,
+            '+852': 8, '+63': 10, '+66': 9, '+62': 11, '+84': 9,
+            '+92': 10, '+880': 10, '+94': 9, '+977': 10
+        };
+        return lengths[code] || 10;
+    }
     
+    function getMinPhoneLength() {
+        const code = countryCodeSelect ? countryCodeSelect.value : '+91';
+        const mins = { '+65': 8, '+974': 8, '+968': 8, '+973': 8, '+965': 8, '+852': 8 };
+        return mins[code] || 8;
+    }
+    
+    function updatePhonePlaceholder() {
+        const max = getMaxPhoneLength();
+        phoneInput.placeholder = `Enter ${max}-digit number`;
+        phoneInput.maxLength = max;
+    }
+    
+    function validatePhoneInput() {
+        const min = getMinPhoneLength();
+        sendOtpBtn.disabled = phoneInput.value.length < min;
+    }
+    
+    // Visibility
     function shouldShowSpinWheel() {
-        // Check master switch
         if (!CONFIG.SPIN_WHEEL.ENABLED) return false;
-        
-        // Check if user has already spun
         if (Store.hasUserSpun()) return false;
-        
-        // Check site config
         if (!Store.getState('siteConfig')?.spinWheelEnabled) return false;
-        
         return true;
     }
     
@@ -152,13 +174,7 @@ const SpinWheel = (function() {
         modal.classList.remove('hidden');
         document.body.style.overflow = 'hidden';
         phoneInput.focus();
-        
-        // Initialize Firebase on first show
-        try {
-            initFirebase();
-        } catch (error) {
-            console.warn('Firebase initialization failed, using mock OTP');
-        }
+        try { initFirebase(); } catch (e) { console.warn('Firebase init failed'); }
     }
     
     function hideModal() {
@@ -166,57 +182,43 @@ const SpinWheel = (function() {
         document.body.style.overflow = '';
     }
     
-    // ============================================
-    // OTP HANDLING
-    // ============================================
-    
+    // OTP Handling
     async function handleSendOtp() {
         const phone = phoneInput.value.trim();
-        if (phone.length !== 10) {
-            UI.showToast('Please enter a valid 10-digit number', 'error');
+        const countryCode = countryCodeSelect ? countryCodeSelect.value : '+91';
+        
+        if (phone.length < getMinPhoneLength()) {
+            UI.showToast('Please enter a valid phone number', 'error');
             return;
         }
         
-        userPhone = `+91${phone}`;
+        userPhone = `${countryCode}${phone}`;
         sendOtpBtn.disabled = true;
-        sendOtpBtn.textContent = 'Sending...';
+        sendOtpBtn.innerHTML = '<span class="animate-pulse">Sending...</span>';
         
         try {
-            // Try Firebase OTP
             if (auth && recaptchaVerifier) {
                 confirmationResult = await auth.signInWithPhoneNumber(userPhone, recaptchaVerifier);
                 showOtpSection();
                 UI.showToast('OTP sent successfully!', 'success');
             } else {
-                // Mock OTP for development
                 mockSendOtp();
             }
         } catch (error) {
             console.error('OTP Error:', error);
-            
-            // Check if already verified
-            if (error.code === 'auth/phone-number-already-exists') {
-                mockSendOtp();
-                return;
-            }
-            
             UI.showToast('Failed to send OTP. Please try again.', 'error');
             sendOtpBtn.disabled = false;
-            sendOtpBtn.textContent = 'Send OTP';
+            sendOtpBtn.innerHTML = 'Send OTP ✨';
             
-            // Reset reCAPTCHA
             if (recaptchaVerifier) {
                 recaptchaVerifier.clear();
-                recaptchaVerifier = new firebase.auth.RecaptchaVerifier('send-otp-btn', {
-                    size: 'invisible'
-                });
+                recaptchaVerifier = new firebase.auth.RecaptchaVerifier('send-otp-btn', { size: 'invisible' });
             }
         }
     }
     
     function mockSendOtp() {
-        // For development: accept any 6-digit OTP
-        console.log('Using mock OTP verification. Enter any 6 digits.');
+        console.log('Mock OTP mode - enter any 6 digits');
         showOtpSection();
         UI.showToast('OTP sent! (Demo: enter any 6 digits)', 'info');
     }
@@ -225,6 +227,7 @@ const SpinWheel = (function() {
         phoneSection.classList.add('hidden');
         otpSection.classList.remove('hidden');
         otpInputs[0].focus();
+        sendOtpBtn.innerHTML = 'Send OTP ✨';
     }
     
     function checkOtpComplete() {
@@ -234,132 +237,104 @@ const SpinWheel = (function() {
     
     async function handleVerifyOtp() {
         const otp = Array.from(otpInputs).map(i => i.value).join('');
-        
         if (otp.length !== 6) {
             UI.showToast('Please enter complete OTP', 'error');
             return;
         }
         
         verifyOtpBtn.disabled = true;
-        verifyOtpBtn.textContent = 'Verifying...';
+        verifyOtpBtn.innerHTML = '<span class="animate-pulse">Verifying...</span>';
         
         try {
-            // Try Firebase verification
             if (confirmationResult) {
                 await confirmationResult.confirm(otp);
             }
-            
-            // Verification successful (or mock mode)
             onOtpVerified();
-            
         } catch (error) {
             console.error('Verification Error:', error);
-            
-            // In mock mode, accept any OTP
-            if (!confirmationResult) {
-                onOtpVerified();
-                return;
-            }
+            if (!confirmationResult) { onOtpVerified(); return; }
             
             UI.showToast('Invalid OTP. Please try again.', 'error');
             verifyOtpBtn.disabled = false;
-            verifyOtpBtn.textContent = 'Verify & Spin';
-            
-            // Clear OTP inputs
+            verifyOtpBtn.innerHTML = 'Verify & Spin 🎰';
             otpInputs.forEach(input => input.value = '');
             otpInputs[0].focus();
         }
     }
     
     function onOtpVerified() {
-        // Save user phone
         Store.setUser({ phone: userPhone });
-        
-        // Show wheel
         otpSection.classList.add('hidden');
         wheelSection.classList.remove('hidden');
-        
+        verifyOtpBtn.innerHTML = 'Verify & Spin 🎰';
         UI.showToast('Verified! Spin the wheel!', 'success');
     }
     
-    // ============================================
-    // SPIN MECHANICS
-    // ============================================
-    
+    // Spin Mechanics
     function handleSpin() {
         if (isSpinning) return;
         isSpinning = true;
         spinBtn.disabled = true;
-        spinBtn.textContent = 'Spinning...';
+        spinBtn.innerHTML = '<span class="text-2xl animate-spin inline-block">🎰</span> Spinning...';
         
-        // Calculate result
         const result = calculateSpinResult();
-        const { degrees, won, amount } = result;
         
-        // Set CSS variable for rotation
-        spinWheel.style.setProperty('--spin-degrees', `${degrees}deg`);
-        spinWheel.style.transform = `rotate(${degrees}deg)`;
+        // 8 segments = 45 degrees each
+        const segmentAngle = 360 / SEGMENTS.length;
+        const segmentCenter = result.segmentIndex * segmentAngle + (segmentAngle / 2);
         
-        // Wait for animation to complete
+        // 5 full rotations + landing position
+        const targetRotation = currentRotation + (5 * 360) + (360 - segmentCenter);
+        
+        spinWheel.style.transform = `rotate(${targetRotation}deg)`;
+        currentRotation = targetRotation;
+        
         setTimeout(() => {
-            showResult(won, amount);
+            showResult(result.won, result.amount);
         }, 4000);
     }
     
     function calculateSpinResult() {
-        // Check winning odds
-        const random = Math.random();
-        const won = random < (1 / CONFIG.SPIN_WHEEL.WINNING_ODDS);
+        const won = Math.random() < (1 / CONFIG.SPIN_WHEEL.WINNING_ODDS);
         
-        // Calculate reward amount if won
         let amount = 0;
         let segmentIndex = 0;
         
         if (won) {
-            const rewardRandom = Math.random();
+            const r = Math.random();
             let cumulative = 0;
             
-            for (const [reward, probability] of Object.entries(CONFIG.SPIN_WHEEL.REWARD_PROBABILITIES)) {
-                cumulative += probability;
-                if (rewardRandom <= cumulative) {
+            for (const [reward, prob] of Object.entries(CONFIG.SPIN_WHEEL.REWARD_PROBABILITIES)) {
+                cumulative += prob;
+                if (r <= cumulative) {
                     amount = parseInt(reward);
                     break;
                 }
             }
             
-            // Map amount to segment
-            // Segments: 0=₹99, 1=Try Again, 2=₹299, 3=Try Again, 4=₹599, 5=Try Again
-            if (amount === 99) segmentIndex = 0;
-            else if (amount === 299) segmentIndex = 2;
-            else if (amount === 599) segmentIndex = 4;
+            // Map to segment: 0=₹99, 2=₹299, 4=₹599, 6=₹99
+            if (amount === 99) {
+                segmentIndex = Math.random() < 0.5 ? 0 : 6;
+            } else if (amount === 299) {
+                segmentIndex = 2;
+            } else if (amount === 599) {
+                segmentIndex = 4;
+            }
         } else {
-            // Random losing segment (1, 3, or 5)
-            const loseSegments = [1, 3, 5];
+            // Lose segments: 1, 3, 5, 7
+            const loseSegments = [1, 3, 5, 7];
             segmentIndex = loseSegments[Math.floor(Math.random() * loseSegments.length)];
         }
         
-        // Calculate degrees
-        // Each segment is 60 degrees
-        // Add extra rotations (5 full spins = 1800 degrees)
-        const baseRotation = 1800;
-        const segmentDegrees = 60;
-        const segmentCenter = (segmentIndex * segmentDegrees) + (segmentDegrees / 2);
-        
-        // Wheel spins clockwise, pointer is at top
-        // To land on segment N, we need to rotate so segment N is at top
-        // This means rotating (360 - segmentCenter) degrees for the final position
-        const degrees = baseRotation + (360 - segmentCenter) + Math.random() * 20 - 10;
-        
-        return { degrees, won, amount };
+        return { won, amount, segmentIndex };
     }
     
     function showResult(won, amount) {
-        // Mark spin as completed
         Store.markSpinCompleted();
         
-        // Record spin result (async, don't wait)
         if (userPhone) {
-            API.recordSpin(userPhone.replace('+91', ''), won ? 'win' : 'lose', amount).catch(console.error);
+            const phoneNumber = userPhone.replace(/^\+\d+/, '');
+            API.recordSpin(phoneNumber, won ? 'win' : 'lose', amount).catch(console.error);
         }
         
         wheelSection.classList.add('hidden');
@@ -367,34 +342,22 @@ const SpinWheel = (function() {
         closeBtn.classList.remove('hidden');
         
         if (won) {
-            // Add to wallet
             Store.addToWallet(amount, 'Spin Wheel Reward');
             UI.updateCartUI();
-            
             winAmount.textContent = CONFIG.formatPrice(amount);
             winResult.classList.remove('hidden');
             loseResult.classList.add('hidden');
-            
-            UI.showToast(`You won ${CONFIG.formatPrice(amount)}!`, 'success');
+            UI.showToast(`🎉 You won ${CONFIG.formatPrice(amount)}!`, 'success');
         } else {
             winResult.classList.add('hidden');
             loseResult.classList.remove('hidden');
         }
         
         isSpinning = false;
+        spinBtn.innerHTML = '<span class="text-2xl">🎰</span><span>SPIN NOW!</span><span class="text-2xl">🎰</span>';
     }
     
-    // ============================================
-    // PUBLIC API
-    // ============================================
-    
-    return {
-        init,
-        show: showModal,
-        hide: hideModal,
-        shouldShow: shouldShowSpinWheel
-    };
+    return { init, show: showModal, hide: hideModal, shouldShow: shouldShowSpinWheel };
 })();
 
-// Make SpinWheel globally available
 window.SpinWheel = SpinWheel;
