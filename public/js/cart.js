@@ -10,8 +10,8 @@ const Cart = (function() {
     // ============================================
     let checkoutInProgress = false;
     
-    // Razorpay Key
-    const RAZORPAY_KEY = 'rzp_live_yjiOeJIzOI1s5k';
+    // Razorpay Key (Test Mode)
+    const RAZORPAY_KEY = 'rzp_test_SC97Hjqvf4LjoW';
     
     // ============================================
     // INITIALIZATION
