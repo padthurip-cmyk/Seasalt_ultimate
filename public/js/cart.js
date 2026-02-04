@@ -10,6 +10,9 @@ const Cart = (function() {
     // ============================================
     let checkoutInProgress = false;
     
+    // Razorpay Key
+    const RAZORPAY_KEY = 'rzp_live_yjiOeJIzOI1s5k';
+    
     // ============================================
     // INITIALIZATION
     // ============================================
@@ -117,7 +120,7 @@ const Cart = (function() {
         const cart = Store.getCart();
         
         // Validate cart
-        if (cart.items.length === 0) {
+        if (!cart || !cart.items || cart.items.length === 0) {
             UI.showToast('Your cart is empty', 'error');
             return;
         }
@@ -213,90 +216,67 @@ const Cart = (function() {
                         </button>
                     </div>
                     
+                    <!-- Content -->
                     <div class="p-4 space-y-4">
-                        <!-- Delivery Address -->
-                        <div class="checkout-section">
-                            <h4 class="checkout-section-title">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                                Delivery Address
-                            </h4>
-                            <div class="space-y-3">
-                                <div>
-                                    <label class="form-label">Full Name</label>
-                                    <input type="text" id="checkout-name" class="form-input" placeholder="Enter your full name">
-                                </div>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="form-label">Phone</label>
-                                        <input type="tel" id="checkout-phone-display" class="form-input" value="${user.phone.replace('+91', '')}" readonly>
-                                    </div>
-                                    <div>
-                                        <label class="form-label">Pincode</label>
-                                        <input type="text" id="checkout-pincode" maxlength="6" class="form-input" placeholder="6-digit pincode">
-                                    </div>
-                                </div>
-                                <div>
-                                    <label class="form-label">Address</label>
-                                    <textarea id="checkout-address" class="form-input" rows="3" placeholder="House/Flat No, Building, Street, Area"></textarea>
-                                </div>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="form-label">City</label>
-                                        <input type="text" id="checkout-city" class="form-input" placeholder="City">
-                                    </div>
-                                    <div>
-                                        <label class="form-label">State</label>
-                                        <input type="text" id="checkout-state" class="form-input" placeholder="State">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
                         <!-- Order Summary -->
-                        <div class="checkout-section">
-                            <h4 class="checkout-section-title">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                                Order Summary
-                            </h4>
+                        <div class="bg-gray-50 rounded-xl p-4">
+                            <h4 class="font-semibold text-gray-800 mb-3">Order Summary</h4>
                             <div class="space-y-2 text-sm">
                                 ${cart.items.map(item => `
                                     <div class="flex justify-between">
-                                        <span class="text-gray-600">${item.name} (${item.size}) × ${item.quantity}</span>
+                                        <span class="text-gray-600">${item.name} (${item.weight}) × ${item.quantity}</span>
                                         <span class="font-medium">${CONFIG.formatPrice(item.price * item.quantity)}</span>
                                     </div>
                                 `).join('')}
-                                <hr class="my-2">
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Subtotal</span>
-                                    <span class="font-medium">${CONFIG.formatPrice(cart.subtotal)}</span>
-                                </div>
-                                <div class="flex justify-between">
-                                    <span class="text-gray-600">Delivery</span>
-                                    <span class="font-medium">${cart.deliveryCharge === 0 ? '<span class="text-spice-leaf">FREE</span>' : CONFIG.formatPrice(cart.deliveryCharge)}</span>
-                                </div>
-                                ${cart.walletDiscount > 0 ? `
+                                <div class="border-t pt-2 mt-2">
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">Subtotal</span>
+                                        <span class="font-medium">${CONFIG.formatPrice(cart.subtotal)}</span>
+                                    </div>
+                                    <div class="flex justify-between">
+                                        <span class="text-gray-600">Delivery</span>
+                                        <span class="font-medium">${cart.deliveryCharge === 0 ? 'FREE' : CONFIG.formatPrice(cart.deliveryCharge)}</span>
+                                    </div>
+                                    ${cart.walletDiscount > 0 ? `
                                     <div class="flex justify-between text-spice-gold">
                                         <span>Wallet Discount</span>
                                         <span class="font-medium">-${CONFIG.formatPrice(cart.walletDiscount)}</span>
                                     </div>
-                                ` : ''}
-                                <hr class="my-2">
-                                <div class="flex justify-between text-lg font-bold">
-                                    <span>Total</span>
-                                    <span class="text-pickle-600">${CONFIG.formatPrice(cart.total)}</span>
+                                    ` : ''}
+                                    <div class="flex justify-between text-lg font-bold mt-2 pt-2 border-t">
+                                        <span>Total</span>
+                                        <span class="text-pickle-600">${CONFIG.formatPrice(cart.total)}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                         
-                        <!-- Pay Button -->
+                        <!-- Delivery Address -->
+                        <div>
+                            <h4 class="font-semibold text-gray-800 mb-3">Delivery Address</h4>
+                            <div class="space-y-3">
+                                <input type="text" id="checkout-name" placeholder="Full Name" 
+                                    class="w-full py-3 px-4 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pickle-500 focus:bg-white">
+                                <input type="text" id="checkout-pincode" maxlength="6" placeholder="Pincode" 
+                                    class="w-full py-3 px-4 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pickle-500 focus:bg-white">
+                                <textarea id="checkout-address" placeholder="Full Address" rows="2"
+                                    class="w-full py-3 px-4 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pickle-500 focus:bg-white resize-none"></textarea>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <input type="text" id="checkout-city" placeholder="City" 
+                                        class="w-full py-3 px-4 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pickle-500 focus:bg-white">
+                                    <input type="text" id="checkout-state" placeholder="State" 
+                                        class="w-full py-3 px-4 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pickle-500 focus:bg-white">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Footer -->
+                    <div class="sticky bottom-0 bg-white p-4 border-t border-gray-100 rounded-b-2xl">
                         <button id="pay-now-btn" class="w-full py-4 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600 transition-all flex items-center justify-center gap-2">
                             <span>Pay ${CONFIG.formatPrice(cart.total)}</span>
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
                         </button>
-                        
-                        <p class="text-center text-xs text-gray-500">
-                            By placing this order, you agree to our Terms & Conditions
-                        </p>
                     </div>
                 </div>
             </div>
@@ -305,13 +285,14 @@ const Cart = (function() {
         document.body.appendChild(modal);
         document.body.style.overflow = 'hidden';
         
-        // Close handlers
-        const closeCheckout = () => {
+        // Close cart sidebar
+        UI.closeCart();
+        
+        // Event handlers
+        modal.querySelector('.close-checkout').addEventListener('click', () => {
             modal.remove();
             document.body.style.overflow = '';
-        };
-        
-        modal.querySelector('.close-checkout').addEventListener('click', closeCheckout);
+        });
         
         // Pincode validation
         const pincodeInput = modal.querySelector('#checkout-pincode');
@@ -319,13 +300,17 @@ const Cart = (function() {
             e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
         });
         
-        // Pay button
+        // Pay button - NOW USES RAZORPAY
         modal.querySelector('#pay-now-btn').addEventListener('click', () => {
-            processPayment(modal);
+            processPaymentWithRazorpay(modal);
         });
     }
     
-    async function processPayment(modal) {
+    // ============================================
+    // RAZORPAY PAYMENT - MAIN FUNCTION
+    // ============================================
+    
+    async function processPaymentWithRazorpay(modal) {
         // Validate form
         const name = modal.querySelector('#checkout-name').value.trim();
         const pincode = modal.querySelector('#checkout-pincode').value.trim();
@@ -351,19 +336,23 @@ const Cart = (function() {
         const cart = Store.getCart();
         const user = Store.getState().user;
         
+        // Generate order ID
+        const orderId = 'SS' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 4).toUpperCase();
+        
         // Create order data
         const orderData = {
+            orderId: orderId,
             user: {
                 phone: user.phone,
-                name
+                name: name
             },
             address: {
                 fullName: name,
                 phone: user.phone,
-                address,
-                city,
-                state,
-                pincode
+                address: address,
+                city: city,
+                state: state,
+                pincode: pincode
             },
             items: cart.items,
             subtotal: cart.subtotal,
@@ -373,25 +362,104 @@ const Cart = (function() {
             useWallet: cart.useWallet
         };
         
+        // If total is 0 (wallet covers everything), skip Razorpay
+        if (cart.total <= 0) {
+            completeOrder(orderData, modal, 'wallet', 'Paid with Wallet');
+            return;
+        }
+        
+        // Open Razorpay
         try {
-            // For demo: simulate successful payment
-            // In production, integrate Razorpay here
+            const options = {
+                key: RAZORPAY_KEY,
+                amount: cart.total * 100, // Amount in paise
+                currency: 'INR',
+                name: 'SeaSalt Pickles',
+                description: 'Order ' + orderId,
+                image: 'https://seasaltultimate.netlify.app/images/logo.png',
+                prefill: {
+                    name: name,
+                    contact: user.phone ? user.phone.replace(/^\+91/, '') : ''
+                },
+                notes: {
+                    order_id: orderId,
+                    address: address + ', ' + city
+                },
+                theme: {
+                    color: '#D4451A'
+                },
+                handler: function(response) {
+                    // Payment successful!
+                    console.log('✅ Razorpay Payment Success:', response);
+                    completeOrder(orderData, modal, 'razorpay', response.razorpay_payment_id);
+                },
+                modal: {
+                    ondismiss: function() {
+                        console.log('Payment cancelled by user');
+                        payBtn.disabled = false;
+                        payBtn.innerHTML = `<span>Pay ${CONFIG.formatPrice(cart.total)}</span>`;
+                        checkoutInProgress = false;
+                    }
+                }
+            };
             
-            await simulatePayment(orderData, modal);
+            if (typeof Razorpay === 'undefined') {
+                throw new Error('Razorpay not loaded');
+            }
+            
+            const rzp = new Razorpay(options);
+            
+            rzp.on('payment.failed', function(response) {
+                console.error('❌ Payment Failed:', response.error);
+                UI.showToast('Payment failed: ' + response.error.description, 'error');
+                payBtn.disabled = false;
+                payBtn.innerHTML = `<span>Pay ${CONFIG.formatPrice(cart.total)}</span>`;
+                checkoutInProgress = false;
+            });
+            
+            // Open Razorpay payment modal
+            rzp.open();
             
         } catch (error) {
-            console.error('Payment Error:', error);
-            UI.showToast('Payment failed. Please try again.', 'error');
+            console.error('Razorpay Error:', error);
+            UI.showToast('Payment initialization failed. Please try again.', 'error');
             payBtn.disabled = false;
             payBtn.innerHTML = `<span>Pay ${CONFIG.formatPrice(cart.total)}</span>`;
-        } finally {
             checkoutInProgress = false;
         }
     }
     
-    async function simulatePayment(orderData, modal) {
-        // Simulate payment processing
-        await new Promise(resolve => setTimeout(resolve, 2000));
+    // ============================================
+    // COMPLETE ORDER AFTER PAYMENT
+    // ============================================
+    
+    function completeOrder(orderData, modal, paymentMethod, paymentId) {
+        // Save order to localStorage
+        const orders = JSON.parse(localStorage.getItem('seasalt_orders') || '[]');
+        
+        const newOrder = {
+            id: orderData.orderId,
+            items: orderData.items.map(item => ({
+                id: item.id,
+                name: item.name,
+                price: item.price,
+                quantity: item.quantity,
+                weight: item.weight,
+                image: item.image
+            })),
+            address: orderData.address,
+            subtotal: orderData.subtotal,
+            delivery: orderData.deliveryCharge,
+            walletUsed: orderData.walletDiscount,
+            total: orderData.total,
+            paymentMethod: paymentMethod,
+            paymentId: paymentId,
+            status: 'confirmed',
+            createdAt: new Date().toISOString()
+        };
+        
+        orders.unshift(newOrder);
+        localStorage.setItem('seasalt_orders', JSON.stringify(orders));
         
         // Deduct wallet if used
         if (orderData.walletDiscount > 0) {
@@ -408,10 +476,12 @@ const Cart = (function() {
         document.body.style.overflow = '';
         
         // Show success
-        showOrderSuccess(orderData);
+        showOrderSuccess(orderData, paymentId);
+        
+        checkoutInProgress = false;
     }
     
-    function showOrderSuccess(orderData) {
+    function showOrderSuccess(orderData, paymentId) {
         const modal = document.createElement('div');
         modal.className = 'fixed inset-0 z-[100] flex items-center justify-center p-4';
         modal.innerHTML = `
@@ -419,11 +489,12 @@ const Cart = (function() {
             <div class="relative bg-white rounded-2xl p-8 w-full max-w-sm text-center animate-bounce-in">
                 <div class="text-6xl mb-4">🎉</div>
                 <h3 class="font-display text-2xl font-bold text-gray-800 mb-2">Order Placed!</h3>
-                <p class="text-gray-600 mb-6">Your delicious pickles are on the way!</p>
-                <div class="bg-pickle-50 rounded-xl p-4 mb-6">
+                <p class="text-gray-600 mb-4">Your delicious pickles are on the way!</p>
+                <div class="bg-pickle-50 rounded-xl p-4 mb-4">
                     <p class="text-sm text-gray-600 mb-1">Order Total</p>
                     <p class="text-2xl font-bold text-pickle-600">${CONFIG.formatPrice(orderData.total)}</p>
                 </div>
+                ${paymentId ? `<p class="text-xs text-gray-400 mb-4">Payment ID: ${paymentId}</p>` : ''}
                 <button class="w-full py-4 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600 transition-all" id="order-success-close">
                     Continue Shopping
                 </button>
@@ -438,86 +509,14 @@ const Cart = (function() {
     }
     
     // ============================================
-    // RAZORPAY INTEGRATION (Production)
-    // ============================================
-    
-    async function initRazorpayPayment(orderData) {
-        try {
-            // Create Razorpay order via backend
-            const { orderId, amount } = await API.createPaymentOrder(
-                orderData.total * 100, // Amount in paise
-                `ORDER_${Date.now()}`
-            );
-            
-            const options = {
-                key: CONFIG.RAZORPAY.KEY_ID,
-                amount: amount,
-                currency: CONFIG.RAZORPAY.CURRENCY,
-                name: CONFIG.RAZORPAY.NAME,
-                description: CONFIG.RAZORPAY.DESCRIPTION,
-                order_id: orderId,
-                handler: async function(response) {
-                    // Verify payment
-                    const verified = await API.verifyPayment({
-                        razorpay_order_id: response.razorpay_order_id,
-                        razorpay_payment_id: response.razorpay_payment_id,
-                        razorpay_signature: response.razorpay_signature
-                    });
-                    
-                    if (verified.success) {
-                        // Create order
-                        await API.createOrder({
-                            ...orderData,
-                            paymentId: response.razorpay_payment_id,
-                            status: 'confirmed'
-                        });
-                        
-                        // Handle success
-                        handlePaymentSuccess(orderData);
-                    } else {
-                        UI.showToast('Payment verification failed', 'error');
-                    }
-                },
-                prefill: {
-                    contact: orderData.user.phone
-                },
-                theme: {
-                    color: CONFIG.RAZORPAY.THEME_COLOR
-                }
-            };
-            
-            const rzp = new Razorpay(options);
-            rzp.open();
-            
-        } catch (error) {
-            console.error('Razorpay Error:', error);
-            throw error;
-        }
-    }
-    
-    function handlePaymentSuccess(orderData) {
-        // Deduct wallet if used
-        if (orderData.walletDiscount > 0) {
-            Store.deductFromWallet(orderData.walletDiscount, 'Order Payment');
-        }
-        
-        // Clear cart
-        Store.clearCart();
-        UI.updateCartUI();
-        UI.closeCart();
-        
-        // Show success
-        showOrderSuccess(orderData);
-    }
-    
-    // ============================================
     // PUBLIC API
     // ============================================
     
     return {
         init,
         addToCart: handleAddToCart,
-        checkout: handleCheckout
+        checkout: handleCheckout,
+        placeOrder: processPaymentWithRazorpay
     };
 })();
 
