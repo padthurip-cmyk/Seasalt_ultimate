@@ -58,49 +58,131 @@ const App = (function() {
     
     async function loadData() {
         try {
-            console.log('[App] Loading data from Supabase...');
+            console.log('[App] Loading data...');
             
-            // Try to load from API
-            const [productsRes, categoriesRes, configRes] = await Promise.all([
-                API.getProducts().catch(function(e) { console.error('[App] Products API error:', e); return null; }),
-                API.getCategories().catch(function(e) { console.error('[App] Categories API error:', e); return null; }),
-                API.getSiteConfig().catch(function(e) { console.error('[App] Config API error:', e); return null; })
-            ]);
+            // Try API module first
+            var productsRes = null;
+            var categoriesRes = null;
+            var configRes = null;
             
-            console.log('[App] Products response:', productsRes);
-            console.log('[App] Categories response:', categoriesRes);
-            console.log('[App] Config response:', configRes);
+            try {
+                var results = await Promise.all([
+                    API.getProducts().catch(function(e) { console.error('[App] API.getProducts error:', e); return null; }),
+                    API.getCategories().catch(function(e) { console.error('[App] API.getCategories error:', e); return null; }),
+                    API.getSiteConfig().catch(function(e) { return null; })
+                ]);
+                productsRes = results[0];
+                categoriesRes = results[1];
+                configRes = results[2];
+            } catch(e) {
+                console.error('[App] Promise.all failed:', e);
+            }
             
-            // Check if API returned data (data must be a non-empty array)
+            // Validate API results
             var hasProducts = productsRes && productsRes.data && Array.isArray(productsRes.data) && productsRes.data.length > 0;
             var hasCategories = categoriesRes && categoriesRes.data && Array.isArray(categoriesRes.data) && categoriesRes.data.length > 0;
             
-            console.log('[App] Has products:', hasProducts, '| Has categories:', hasCategories);
+            console.log('[App] API results - products:', hasProducts ? productsRes.data.length : 'NONE', '| categories:', hasCategories ? categoriesRes.data.length : 'NONE');
             
             if (hasProducts && hasCategories) {
-                console.log('[App] ✅ Using Supabase data! Products:', productsRes.data.length, 'Categories:', categoriesRes.data.length);
+                console.log('[App] ✅ Using Supabase data');
                 Store.setProducts(productsRes.data);
                 Store.setCategories(categoriesRes.data);
-                if (configRes && configRes.data) {
-                    Store.setSiteConfig(configRes.data);
-                }
+                if (configRes && configRes.data) Store.setSiteConfig(configRes.data);
             } else {
-                // Fallback to mock data
-                console.log('[App] ⚠️ Supabase data incomplete, using local seed data...');
-                console.log('[App] Products was:', productsRes);
-                console.log('[App] Categories was:', categoriesRes);
-                await loadSeedData();
+                // INLINE SUPABASE FALLBACK - direct fetch if API module failed
+                console.log('[App] ⚠️ API module failed, trying direct Supabase fetch...');
+                var loaded = await loadFromSupabaseDirect();
+                if (!loaded) {
+                    console.log('[App] ⚠️ Direct Supabase also failed, using seed data...');
+                    await loadSeedData();
+                }
             }
             
+            // Final check
+            console.log('[App] Final state - Products:', Store.getProducts().length, '| Categories:', Store.getCategories().length);
+            
             // Render UI
-            console.log('[App] Rendering UI with', Store.getProducts().length, 'products and', Store.getCategories().length, 'categories');
             renderInitialUI();
             
         } catch (error) {
-            console.error('[App] ❌ Data loading error:', error);
-            // Fallback to seed data
+            console.error('[App] ❌ Fatal error:', error);
             await loadSeedData();
             renderInitialUI();
+        }
+    }
+    
+    // Direct Supabase fetch as fallback
+    async function loadFromSupabaseDirect() {
+        var SB_URL = 'https://yosjbsncvghpscsrvxds.supabase.co/rest/v1/';
+        var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
+        var SB_H = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
+        var EMOJIS = { mango: '🥭', mixed: '🫙', nonveg: '🍗', specialty: '⭐' };
+        
+        try {
+            console.log('[App-Direct] Fetching from Supabase...');
+            
+            var prodRes = await fetch(SB_URL + 'products?select=*', { headers: SB_H });
+            var catRes = await fetch(SB_URL + 'categories?select=*', { headers: SB_H });
+            
+            if (!prodRes.ok || !catRes.ok) {
+                console.error('[App-Direct] HTTP error - products:', prodRes.status, 'categories:', catRes.status);
+                return false;
+            }
+            
+            var rawProducts = await prodRes.json();
+            var rawCategories = await catRes.json();
+            
+            console.log('[App-Direct] Raw products:', rawProducts.length, rawProducts);
+            console.log('[App-Direct] Raw categories:', rawCategories.length, rawCategories);
+            
+            if (!rawProducts || rawProducts.length === 0) return false;
+            
+            // Transform products
+            var products = [];
+            for (var i = 0; i < rawProducts.length; i++) {
+                var p = rawProducts[i];
+                if (p.is_active === false) continue;
+                
+                var variants = [];
+                try {
+                    var v = (typeof p.variants === 'string') ? JSON.parse(p.variants) : p.variants;
+                    if (Array.isArray(v)) variants = v;
+                } catch(e) {}
+                if (variants.length === 0) variants = [{ weight: '250g', price: 199 }];
+                variants = variants.map(function(x) { return { weight: String(x.weight || '250g'), price: Number(x.price) || 199 }; });
+                
+                products.push({
+                    id: p.id, name: p.name || 'Product', description: p.description || '',
+                    category: p.category || 'mixed',
+                    image: p.image || 'https://placehold.co/400x400/D4451A/fff?text=SeaSalt',
+                    badge: p.badge || null,
+                    isFeatured: (p.is_featured === true || p.is_featured === 'true'),
+                    isActive: true, variants: variants, price: variants[0].price
+                });
+            }
+            
+            // Transform categories
+            var categories = [];
+            for (var j = 0; j < rawCategories.length; j++) {
+                var c = rawCategories[j];
+                if (c.is_active === false) continue;
+                var emoji = (c.emoji && c.emoji !== '' && c.emoji !== 'null') ? c.emoji : (EMOJIS[c.id] || '🫙');
+                categories.push({ id: c.id, name: c.name, emoji: emoji });
+            }
+            
+            console.log('[App-Direct] Transformed:', products.length, 'products,', categories.length, 'categories');
+            
+            if (products.length > 0 && categories.length > 0) {
+                Store.setProducts(products);
+                Store.setCategories(categories);
+                console.log('[App-Direct] ✅ SUCCESS - Data loaded directly from Supabase!');
+                return true;
+            }
+            return false;
+        } catch(e) {
+            console.error('[App-Direct] ❌ Error:', e);
+            return false;
         }
     }
     
