@@ -1,435 +1,234 @@
 /**
- * SeaSalt Pickles - API Service
- * ==============================
- * Handles all communication with Netlify Functions backend.
- * Provides methods for products, orders, users, and payments.
+ * SeaSalt Pickles - API Module (Supabase Connected)
+ * ===================================================
+ * Fetches products, categories, orders from Supabase.
+ * Admin changes reflect LIVE on the store instantly.
  */
 
 const API = (function() {
+    'use strict';
+
     // ============================================
-    // PRIVATE VARIABLES
+    // SUPABASE CONFIG
     // ============================================
-    const baseUrl = CONFIG.API_BASE_URL;
-    
+    const SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
+
+    const HEADERS = {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY
+    };
+
+    // Cache for performance
+    let cache = {
+        products: null,
+        categories: null,
+        config: null,
+        timestamp: 0
+    };
+    const CACHE_TTL = 60000; // 1 minute cache
+
     // ============================================
-    // PRIVATE METHODS
+    // CORE FETCH HELPER
     // ============================================
-    
-    /**
-     * Make HTTP request to API
-     */
-    async function _request(endpoint, options = {}) {
-        const url = `${baseUrl}${endpoint}`;
-        
-        const defaultOptions = {
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        };
-        
-        // Add auth token if available
-        const token = localStorage.getItem(CONFIG.STORAGE_KEYS.AUTH_TOKEN);
-        if (token) {
-            defaultOptions.headers['Authorization'] = `Bearer ${token}`;
-        }
-        
-        const mergedOptions = {
-            ...defaultOptions,
-            ...options,
-            headers: {
-                ...defaultOptions.headers,
-                ...options.headers
-            }
-        };
-        
+
+    async function supabaseQuery(table, params) {
+        const url = SUPABASE_URL + '/rest/v1/' + table + (params ? '?' + params : '');
         try {
-            const response = await fetch(url, mergedOptions);
-            
-            // Check if response is JSON
-            const contentType = response.headers.get('content-type');
-            let data;
-            
-            if (contentType && contentType.includes('application/json')) {
-                data = await response.json();
-            } else {
-                data = await response.text();
-            }
-            
+            const response = await fetch(url, { headers: HEADERS });
             if (!response.ok) {
-                throw new Error(data.message || data || `HTTP error ${response.status}`);
+                console.error('Supabase error [' + table + ']:', response.status, response.statusText);
+                throw new Error('Supabase Error: ' + response.status);
             }
-            
-            return data;
+            return await response.json();
         } catch (error) {
-            console.error(`API Error [${endpoint}]:`, error);
+            console.error('API Error [' + table + ']:', error);
             throw error;
         }
     }
-    
+
     // ============================================
-    // PUBLIC API
+    // DATA TRANSFORMATION
     // ============================================
-    
-    return {
-        // ============================================
-        // PRODUCTS API
-        // ============================================
-        
-        /**
-         * Get all products
-         */
-        async getProducts() {
-            return _request(CONFIG.API.PRODUCTS);
-        },
-        
-        /**
-         * Get single product by ID
-         */
-        async getProduct(id) {
-            return _request(`${CONFIG.API.PRODUCTS}?id=${id}`);
-        },
-        
-        /**
-         * Get products by category
-         */
-        async getProductsByCategory(category) {
-            return _request(`${CONFIG.API.PRODUCTS}?category=${encodeURIComponent(category)}`);
-        },
-        
-        /**
-         * Search products
-         */
-        async searchProducts(query) {
-            return _request(`${CONFIG.API.PRODUCTS}?search=${encodeURIComponent(query)}`);
-        },
-        
-        // ============================================
-        // CATEGORIES API
-        // ============================================
-        
-        /**
-         * Get all categories
-         */
-        async getCategories() {
-            return _request(CONFIG.API.CATEGORIES);
-        },
-        
-        // ============================================
-        // ORDERS API
-        // ============================================
-        
-        /**
-         * Create new order
-         */
-        async createOrder(orderData) {
-            return _request(CONFIG.API.ORDERS, {
-                method: 'POST',
-                body: JSON.stringify(orderData)
-            });
-        },
-        
-        /**
-         * Get user orders
-         */
-        async getOrders(phone) {
-            return _request(`${CONFIG.API.ORDERS}?phone=${encodeURIComponent(phone)}`);
-        },
-        
-        /**
-         * Get single order
-         */
-        async getOrder(orderId) {
-            return _request(`${CONFIG.API.ORDERS}?id=${orderId}`);
-        },
-        
-        // ============================================
-        // USER API
-        // ============================================
-        
-        /**
-         * Create or update user
-         */
-        async upsertUser(userData) {
-            return _request(CONFIG.API.USERS, {
-                method: 'POST',
-                body: JSON.stringify(userData)
-            });
-        },
-        
-        /**
-         * Get user by phone
-         */
-        async getUser(phone) {
-            return _request(`${CONFIG.API.USERS}?phone=${encodeURIComponent(phone)}`);
-        },
-        
-        // ============================================
-        // WALLET API
-        // ============================================
-        
-        /**
-         * Get wallet balance
-         */
-        async getWalletBalance(phone) {
-            return _request(`${CONFIG.API.WALLET}?phone=${encodeURIComponent(phone)}`);
-        },
-        
-        /**
-         * Add to wallet (credit)
-         */
-        async creditWallet(phone, amount, description) {
-            return _request(CONFIG.API.WALLET, {
-                method: 'POST',
-                body: JSON.stringify({
-                    phone,
-                    amount,
-                    type: 'credit',
-                    description
-                })
-            });
-        },
-        
-        /**
-         * Deduct from wallet (debit)
-         */
-        async debitWallet(phone, amount, description) {
-            return _request(CONFIG.API.WALLET, {
-                method: 'POST',
-                body: JSON.stringify({
-                    phone,
-                    amount,
-                    type: 'debit',
-                    description
-                })
-            });
-        },
-        
-        // ============================================
-        // SPIN WHEEL API
-        // ============================================
-        
-        /**
-         * Check spin eligibility
-         */
-        async checkSpinEligibility(phone) {
-            return _request(`${CONFIG.API.SPIN}?phone=${encodeURIComponent(phone)}`);
-        },
-        
-        /**
-         * Record spin result
-         */
-        async recordSpin(phone, result, amount = 0) {
-            return _request(CONFIG.API.SPIN, {
-                method: 'POST',
-                body: JSON.stringify({
-                    phone,
-                    result, // 'win' or 'lose'
-                    amount
-                })
-            });
-        },
-        
-        // ============================================
-        // CONFIG API
-        // ============================================
-        
-        /**
-         * Get site configuration
-         */
-        async getSiteConfig() {
-            return _request(CONFIG.API.CONFIG);
-        },
-        
-        // ============================================
-        // PAYMENT API (Razorpay)
-        // ============================================
-        
-        /**
-         * Create Razorpay order
-         */
-        async createPaymentOrder(amount, orderId) {
-            return _request('/create-payment', {
-                method: 'POST',
-                body: JSON.stringify({
-                    amount,
-                    orderId,
-                    currency: CONFIG.RAZORPAY.CURRENCY
-                })
-            });
-        },
-        
-        /**
-         * Verify payment
-         */
-        async verifyPayment(paymentData) {
-            return _request('/verify-payment', {
-                method: 'POST',
-                body: JSON.stringify(paymentData)
-            });
-        },
-        
-        // ============================================
-        // ADMIN API
-        // ============================================
-        
-        admin: {
-            /**
-             * Admin login
-             */
-            async login(credentials) {
-                return _request(`${CONFIG.API.ADMIN}/login`, {
-                    method: 'POST',
-                    body: JSON.stringify(credentials)
-                });
-            },
-            
-            /**
-             * Get all products (including inactive)
-             */
-            async getProducts() {
-                return _request(`${CONFIG.API.ADMIN}/products`);
-            },
-            
-            /**
-             * Update product
-             */
-            async updateProduct(productId, data) {
-                return _request(`${CONFIG.API.ADMIN}/products`, {
-                    method: 'PUT',
-                    body: JSON.stringify({ id: productId, ...data })
-                });
-            },
-            
-            /**
-             * Create product
-             */
-            async createProduct(data) {
-                return _request(`${CONFIG.API.ADMIN}/products`, {
-                    method: 'POST',
-                    body: JSON.stringify(data)
-                });
-            },
-            
-            /**
-             * Delete product
-             */
-            async deleteProduct(productId) {
-                return _request(`${CONFIG.API.ADMIN}/products?id=${productId}`, {
-                    method: 'DELETE'
-                });
-            },
-            
-            /**
-             * Get site config
-             */
-            async getConfig() {
-                return _request(`${CONFIG.API.ADMIN}/config`);
-            },
-            
-            /**
-             * Update site config
-             */
-            async updateConfig(config) {
-                return _request(`${CONFIG.API.ADMIN}/config`, {
-                    method: 'PUT',
-                    body: JSON.stringify(config)
-                });
-            },
-            
-            /**
-             * Get all orders
-             */
-            async getOrders(filters = {}) {
-                const params = new URLSearchParams(filters).toString();
-                return _request(`${CONFIG.API.ADMIN}/orders${params ? '?' + params : ''}`);
-            },
-            
-            /**
-             * Update order status
-             */
-            async updateOrderStatus(orderId, status) {
-                return _request(`${CONFIG.API.ADMIN}/orders`, {
-                    method: 'PUT',
-                    body: JSON.stringify({ id: orderId, status })
-                });
-            },
-            
-            /**
-             * Get all users
-             */
-            async getUsers() {
-                return _request(`${CONFIG.API.ADMIN}/users`);
-            },
-            
-            /**
-             * Reset user spin
-             */
-            async resetUserSpin(phone) {
-                return _request(`${CONFIG.API.ADMIN}/reset-spin`, {
-                    method: 'POST',
-                    body: JSON.stringify({ phone })
-                });
-            },
-            
-            /**
-             * Get dashboard stats
-             */
-            async getDashboardStats() {
-                return _request(`${CONFIG.API.ADMIN}/dashboard`);
+
+    // Supabase uses snake_case, Store uses camelCase
+    function transformProduct(p) {
+        var variants = [];
+        try {
+            if (typeof p.variants === 'string') {
+                variants = JSON.parse(p.variants);
+            } else if (Array.isArray(p.variants)) {
+                variants = p.variants;
             }
+        } catch (e) {
+            console.warn('Failed to parse variants for', p.id, e);
+            variants = [{ weight: '250g', price: 199 }];
         }
+
+        return {
+            id: p.id,
+            name: p.name,
+            description: p.description || '',
+            category: p.category,
+            image: p.image || 'https://placehold.co/400x400/D4451A/fff?text=SeaSalt',
+            badge: p.badge || null,
+            isFeatured: p.is_featured === true,
+            isActive: p.is_active === true,
+            variants: variants,
+            createdAt: p.created_at
+        };
+    }
+
+    function transformCategory(c) {
+        return {
+            id: c.id,
+            name: c.name,
+            emoji: c.emoji || '🫙',
+            sortOrder: c.sort_order || 0,
+            isActive: c.is_active !== false
+        };
+    }
+
+    // ============================================
+    // PUBLIC API METHODS
+    // ============================================
+
+    async function getProducts() {
+        // Check cache
+        if (cache.products && (Date.now() - cache.timestamp) < CACHE_TTL) {
+            return { data: cache.products };
+        }
+
+        try {
+            var raw = await supabaseQuery('products', 'select=*&is_active=eq.true&order=created_at.asc');
+            var products = raw.map(transformProduct);
+
+            // Update cache
+            cache.products = products;
+            cache.timestamp = Date.now();
+
+            console.log('✅ Loaded ' + products.length + ' products from Supabase');
+            return { data: products };
+        } catch (error) {
+            console.warn('⚠️ Supabase fetch failed, using fallback data');
+            return { data: null }; // Will trigger seed data fallback
+        }
+    }
+
+    async function getCategories() {
+        // Check cache
+        if (cache.categories && (Date.now() - cache.timestamp) < CACHE_TTL) {
+            return { data: cache.categories };
+        }
+
+        try {
+            var raw = await supabaseQuery('categories', 'select=*&is_active=eq.true&order=sort_order.asc');
+            var categories = raw.map(transformCategory);
+
+            cache.categories = categories;
+
+            console.log('✅ Loaded ' + categories.length + ' categories from Supabase');
+            return { data: categories };
+        } catch (error) {
+            console.warn('⚠️ Categories fetch failed');
+            return { data: null };
+        }
+    }
+
+    async function getSiteConfig() {
+        try {
+            var raw = await supabaseQuery('settings', 'select=*&limit=1');
+            if (raw && raw.length > 0) {
+                var s = raw[0];
+                return {
+                    data: {
+                        siteName: s.store_name || 'SeaSalt Pickles',
+                        tagline: s.tagline || 'Authentic Andhra Pickles',
+                        phone: s.phone || '+91-9963971447',
+                        email: s.email || 'support@seasaltpickles.com',
+                        minOrderValue: s.min_order_value || 199,
+                        freeDeliveryAbove: s.free_delivery_above || 500,
+                        deliveryCharge: s.delivery_charge || 50
+                    }
+                };
+            }
+            return { data: null };
+        } catch (error) {
+            return { data: null };
+        }
+    }
+
+    async function createOrder(orderData) {
+        try {
+            // Save to Supabase
+            var supabaseOrder = {
+                id: orderData.id,
+                customer_name: orderData.address ? orderData.address.fullName || '' : '',
+                customer_phone: orderData.address ? orderData.address.phone || '' : '',
+                customer_address: JSON.stringify(orderData.address || {}),
+                items: JSON.stringify(orderData.items || []),
+                subtotal: orderData.subtotal || 0,
+                delivery_charge: orderData.delivery || 0,
+                wallet_used: orderData.walletUsed || 0,
+                total: orderData.total || 0,
+                payment_method: orderData.paymentMethod || 'razorpay',
+                payment_id: orderData.paymentId || '',
+                status: 'confirmed',
+                created_at: new Date().toISOString()
+            };
+
+            var response = await fetch(SUPABASE_URL + '/rest/v1/orders', {
+                method: 'POST',
+                headers: Object.assign({}, HEADERS, { 'Prefer': 'return=representation' }),
+                body: JSON.stringify(supabaseOrder)
+            });
+
+            if (response.ok) {
+                console.log('✅ Order saved to Supabase:', orderData.id);
+            }
+        } catch (error) {
+            console.error('Order save to Supabase error:', error);
+        }
+
+        // Also save locally for backward compatibility
+        var orders = JSON.parse(localStorage.getItem('seasalt_orders') || '[]');
+        orders.unshift(orderData);
+        localStorage.setItem('seasalt_orders', JSON.stringify(orders));
+
+        return { success: true, orderId: orderData.id };
+    }
+
+    async function getOrders(userId) {
+        // Try Supabase first
+        try {
+            var raw = await supabaseQuery('orders', 'select=*&order=created_at.desc');
+            if (raw && raw.length > 0) {
+                return { data: raw };
+            }
+        } catch (e) {
+            // Fallback below
+        }
+
+        // Fallback to localStorage
+        var orders = JSON.parse(localStorage.getItem('seasalt_orders') || '[]');
+        return { data: orders };
+    }
+
+    // Force refresh (clear cache)
+    function clearCache() {
+        cache = { products: null, categories: null, config: null, timestamp: 0 };
+        console.log('🔄 API cache cleared');
+    }
+
+    return {
+        getProducts: getProducts,
+        getCategories: getCategories,
+        getSiteConfig: getSiteConfig,
+        createOrder: createOrder,
+        getOrders: getOrders,
+        clearCache: clearCache
     };
 })();
 
-// ============================================
-// MOCK DATA (Used when API is not available)
-// ============================================
-
-const MockAPI = {
-    products: null,
-    categories: null,
-    
-    async loadSeedData() {
-        if (this.products) return;
-        
-        try {
-            // Try to load from seed file
-            const response = await fetch('/data/products-seed.json');
-            const data = await response.json();
-            this.products = data.products;
-            this.categories = data.categories;
-        } catch (error) {
-            console.warn('Could not load seed data, using embedded data');
-            // Fallback to hardcoded minimal data
-            this.products = [];
-            this.categories = [];
-        }
-    },
-    
-    async getProducts() {
-        await this.loadSeedData();
-        return { success: true, data: this.products };
-    },
-    
-    async getCategories() {
-        await this.loadSeedData();
-        return { success: true, data: this.categories };
-    },
-    
-    async getSiteConfig() {
-        return {
-            success: true,
-            data: {
-                spinWheelEnabled: CONFIG.SPIN_WHEEL.ENABLED,
-                deliveryCharges: {
-                    standard: CONFIG.DELIVERY.STANDARD_CHARGE,
-                    freeAbove: CONFIG.DELIVERY.FREE_DELIVERY_ABOVE
-                }
-            }
-        };
-    }
-};
-
-// Export for use in other modules
 window.API = API;
-window.MockAPI = MockAPI;
