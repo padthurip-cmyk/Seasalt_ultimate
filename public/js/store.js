@@ -1,547 +1,228 @@
 /**
- * SeaSalt Pickles - State Management Store
- * =========================================
- * Centralized state management with reactive updates.
- * Implements observer pattern for UI updates.
+ * SeaSalt Pickles - Store Module
+ * ================================
+ * Centralized state management
  */
 
 const Store = (function() {
-    // ============================================
-    // PRIVATE STATE
-    // ============================================
-    let _state = {
-        // User state
-        user: null,
-        isAuthenticated: false,
-        phone: null,
-        
-        // Wallet state
-        wallet: {
-            balance: 0,
-            transactions: []
-        },
-        
-        // Cart state
-        cart: {
-            items: [],
-            subtotal: 0,
-            deliveryCharge: 0,
-            walletDiscount: 0,
-            total: 0,
-            useWallet: false
-        },
-        
-        // Products state
+    let state = {
         products: [],
         categories: [],
-        featuredProducts: [],
-        
-        // UI state
-        activeCategory: 'all',
-        searchQuery: '',
-        isLoading: true,
-        currentPage: 'home',
-        
-        // Spin wheel state
-        spinWheelEnabled: true,
-        hasSpun: false,
-        
-        // Selected product for modal
+        cart: [],
+        user: null,
+        wallet: { balance: 0, transactions: [] },
+        siteConfig: {},
         selectedProduct: null,
         selectedVariant: null,
         quantity: 1,
-        
-        // Site config (from backend)
-        siteConfig: {
-            spinWheelEnabled: true,
-            deliveryCharges: {
-                standard: 50,
-                freeAbove: 500
-            }
-        }
+        activeCategory: 'all',
+        useWallet: false,
+        currentPage: 'home'
     };
     
-    // Subscribers for state changes
-    const _subscribers = new Map();
+    const subscribers = { cart: [], wallet: [], user: [], products: [] };
     
-    // ============================================
-    // PRIVATE METHODS
-    // ============================================
-    
-    /**
-     * Notify subscribers of state changes
-     */
-    function _notify(key) {
-        const callbacks = _subscribers.get(key) || [];
-        callbacks.forEach(callback => {
-            try {
-                callback(_state[key]);
-            } catch (error) {
-                console.error(`Error in subscriber for ${key}:`, error);
-            }
-        });
-        
-        // Also notify 'all' subscribers
-        const allCallbacks = _subscribers.get('*') || [];
-        allCallbacks.forEach(callback => {
-            try {
-                callback(_state);
-            } catch (error) {
-                console.error('Error in global subscriber:', error);
-            }
-        });
+    function init() {
+        loadFromStorage();
+        console.log('Store initialized');
     }
     
-    /**
-     * Deep clone an object
-     */
-    function _deepClone(obj) {
-        return JSON.parse(JSON.stringify(obj));
+    function loadFromStorage() {
+        try {
+            var savedCart = localStorage.getItem('seasalt_cart');
+            if (savedCart) state.cart = JSON.parse(savedCart);
+            var savedUser = localStorage.getItem('seasalt_user');
+            if (savedUser) state.user = JSON.parse(savedUser);
+            var savedWallet = localStorage.getItem('seasalt_wallet');
+            if (savedWallet) state.wallet = JSON.parse(savedWallet);
+        } catch (e) { console.error('Storage error:', e); }
     }
     
-    /**
-     * Calculate cart totals
-     */
-    function _recalculateCart() {
-        const items = _state.cart.items;
-        
-        // Calculate subtotal
-        const subtotal = items.reduce((sum, item) => {
-            return sum + (item.price * item.quantity);
-        }, 0);
-        
-        // Calculate delivery charge
-        const deliveryCharge = subtotal >= CONFIG.DELIVERY.FREE_DELIVERY_ABOVE ? 0 : CONFIG.DELIVERY.STANDARD_CHARGE;
-        
-        // Calculate wallet discount
-        let walletDiscount = 0;
-        if (_state.cart.useWallet && _state.wallet.balance > 0) {
-            const maxDiscount = subtotal + deliveryCharge;
-            walletDiscount = Math.min(_state.wallet.balance, maxDiscount);
+    function saveToStorage() {
+        try {
+            localStorage.setItem('seasalt_cart', JSON.stringify(state.cart));
+            localStorage.setItem('seasalt_user', JSON.stringify(state.user));
+            localStorage.setItem('seasalt_wallet', JSON.stringify(state.wallet));
+        } catch (e) { console.error('Storage error:', e); }
+    }
+    
+    function subscribe(key, callback) {
+        if (subscribers[key]) subscribers[key].push(callback);
+    }
+    
+    function notify(key) {
+        if (subscribers[key]) subscribers[key].forEach(function(cb) { cb(state[key]); });
+    }
+    
+    function getState() { return state; }
+    function getProducts() { return state.products; }
+    function getCategories() { return state.categories; }
+    
+    // FIXED: Accept ALL products unless explicitly marked inactive
+    function getActiveProducts() {
+        var all = state.products;
+        // Only exclude if isActive is literally false or string "false"
+        var active = all.filter(function(p) {
+            if (p.isActive === false || p.isActive === 'false') return false;
+            if (p.is_active === false || p.is_active === 'false') return false;
+            return true;
+        });
+        if (state.activeCategory === 'all') {
+            return active;
         }
-        
-        // Calculate total
-        const total = Math.max(0, subtotal + deliveryCharge - walletDiscount);
-        
-        _state.cart = {
-            ..._state.cart,
-            subtotal,
-            deliveryCharge,
-            walletDiscount,
-            total
+        return active.filter(function(p) { return p.category === state.activeCategory; });
+    }
+    
+    function getProductsByCategory(category) {
+        if (category === 'all') return getActiveProducts();
+        return state.products.filter(function(p) {
+            var isActive = (p.isActive !== false && p.isActive !== 'false' && p.is_active !== false && p.is_active !== 'false');
+            return isActive && p.category === category;
+        });
+    }
+    
+    function getCart() {
+        var items = state.cart;
+        var subtotal = items.reduce(function(sum, item) { return sum + (item.price * item.quantity); }, 0);
+        var deliveryCharge = subtotal >= 500 ? 0 : 50;
+        var walletDiscount = 0;
+        if (state.useWallet && state.wallet.balance > 0) {
+            walletDiscount = Math.min(state.wallet.balance, subtotal + deliveryCharge);
+        }
+        var total = Math.max(0, subtotal + deliveryCharge - walletDiscount);
+        return { items: items, subtotal: subtotal, deliveryCharge: deliveryCharge, walletDiscount: walletDiscount, total: total, useWallet: state.useWallet };
+    }
+    
+    function getCartItemCount() {
+        return state.cart.reduce(function(sum, item) { return sum + item.quantity; }, 0);
+    }
+    
+    function getWalletBalance() { return state.wallet.balance; }
+    
+    function searchProducts(query) {
+        var q = query.toLowerCase();
+        return state.products.filter(function(p) {
+            if (p.isActive === false || p.is_active === false) return false;
+            var nameMatch = p.name && p.name.toLowerCase().indexOf(q) >= 0;
+            var descMatch = p.description && p.description.toLowerCase().indexOf(q) >= 0;
+            var catMatch = p.category && p.category.toLowerCase().indexOf(q) >= 0;
+            return nameMatch || descMatch || catMatch;
+        });
+    }
+    
+    function setProducts(products) { state.products = products; notify('products'); }
+    function setCategories(categories) { state.categories = categories; }
+    function setSiteConfig(config) { state.siteConfig = config; }
+    function setActiveCategory(cat) { state.activeCategory = cat; }
+    function setSelectedProduct(product) {
+        state.selectedProduct = product;
+        state.selectedVariant = (product && product.variants && product.variants[0]) ? product.variants[0] : null;
+        state.quantity = 1;
+    }
+    function setSelectedVariant(variant) { state.selectedVariant = variant; }
+    function setQuantity(qty) { state.quantity = qty; }
+    function setUseWallet(use) { state.useWallet = use; }
+    function setCurrentPage(page) { state.currentPage = page; }
+    function setUser(user) { state.user = user; saveToStorage(); notify('user'); }
+    
+    function addToCart(product, variant, quantity) {
+        quantity = quantity || 1;
+        var weight = variant.weight || variant.size || '250g';
+        var cartItem = {
+            id: product.id + '-' + weight,
+            productId: product.id,
+            name: product.name,
+            image: product.image || (product.images && product.images[0]) || '',
+            category: product.category,
+            weight: weight,
+            size: weight,
+            price: variant.price,
+            quantity: quantity
         };
-        
-        // Persist cart to localStorage
-        _persistCart();
+        var existingIndex = state.cart.findIndex(function(item) { return item.id === cartItem.id; });
+        if (existingIndex >= 0) {
+            state.cart[existingIndex].quantity += quantity;
+        } else {
+            state.cart.push(cartItem);
+        }
+        saveToStorage();
+        notify('cart');
+        if (typeof Analytics !== 'undefined' && Analytics.trackAddToCart) Analytics.trackAddToCart(product, quantity, variant);
     }
     
-    /**
-     * Persist cart to localStorage
-     */
-    function _persistCart() {
-        try {
-            localStorage.setItem(CONFIG.STORAGE_KEYS.CART, JSON.stringify(_state.cart.items));
-        } catch (error) {
-            console.error('Failed to persist cart:', error);
+    function updateCartItem(itemId, quantity) {
+        var index = state.cart.findIndex(function(item) { return item.id === itemId; });
+        if (index >= 0) {
+            if (quantity <= 0) state.cart.splice(index, 1);
+            else state.cart[index].quantity = quantity;
+            saveToStorage();
+            notify('cart');
         }
     }
     
-    /**
-     * Load cart from localStorage
-     */
-    function _loadCart() {
-        try {
-            const savedCart = localStorage.getItem(CONFIG.STORAGE_KEYS.CART);
-            if (savedCart) {
-                _state.cart.items = JSON.parse(savedCart);
-                _recalculateCart();
-            }
-        } catch (error) {
-            console.error('Failed to load cart:', error);
-        }
+    // Alias for compatibility
+    function updateCartQuantity(itemId, quantity) { updateCartItem(itemId, quantity); }
+    
+    function removeFromCart(itemId) {
+        state.cart = state.cart.filter(function(item) { return item.id !== itemId; });
+        saveToStorage();
+        notify('cart');
     }
     
-    /**
-     * Persist wallet to localStorage
-     */
-    function _persistWallet() {
-        try {
-            localStorage.setItem(CONFIG.STORAGE_KEYS.WALLET, JSON.stringify(_state.wallet));
-        } catch (error) {
-            console.error('Failed to persist wallet:', error);
-        }
+    function clearCart() {
+        state.cart = [];
+        state.useWallet = false;
+        saveToStorage();
+        notify('cart');
     }
     
-    /**
-     * Load wallet from localStorage
-     */
-    function _loadWallet() {
-        try {
-            const savedWallet = localStorage.getItem(CONFIG.STORAGE_KEYS.WALLET);
-            if (savedWallet) {
-                _state.wallet = JSON.parse(savedWallet);
-            }
-        } catch (error) {
-            console.error('Failed to load wallet:', error);
-        }
+    function addToWallet(amount, description) {
+        description = description || 'Credit';
+        state.wallet.balance += amount;
+        state.wallet.transactions.push({ type: 'credit', amount: amount, description: description, date: new Date().toISOString() });
+        saveToStorage();
+        notify('wallet');
     }
     
-    /**
-     * Check spin status from localStorage
-     */
-    function _loadSpinStatus() {
-        try {
-            const hasSpun = localStorage.getItem(CONFIG.STORAGE_KEYS.SPIN_COMPLETED);
-            _state.hasSpun = hasSpun === 'true';
-        } catch (error) {
-            console.error('Failed to load spin status:', error);
+    function deductFromWallet(amount, description) {
+        description = description || 'Debit';
+        if (amount <= state.wallet.balance) {
+            state.wallet.balance -= amount;
+            state.wallet.transactions.push({ type: 'debit', amount: amount, description: description, date: new Date().toISOString() });
+            saveToStorage();
+            notify('wallet');
+            return true;
         }
+        return false;
     }
     
-    // ============================================
-    // PUBLIC API
-    // ============================================
+    function logout() { state.user = null; saveToStorage(); notify('user'); }
+    
+    // SpinWheel compatibility
+    function hasUserSpun() {
+        return localStorage.getItem('seasalt_spun') === 'true';
+    }
+    function markSpinCompleted() {
+        localStorage.setItem('seasalt_spun', 'true');
+    }
+    
+    init();
     
     return {
-        /**
-         * Initialize the store
-         */
-        init() {
-            _loadCart();
-            _loadWallet();
-            _loadSpinStatus();
-            console.log('Store initialized');
-        },
-        
-        /**
-         * Get current state (returns a clone to prevent mutations)
-         */
-        getState(key) {
-            if (key) {
-                return _deepClone(_state[key]);
-            }
-            return _deepClone(_state);
-        },
-        
-        /**
-         * Subscribe to state changes
-         */
-        subscribe(key, callback) {
-            if (!_subscribers.has(key)) {
-                _subscribers.set(key, []);
-            }
-            _subscribers.get(key).push(callback);
-            
-            // Return unsubscribe function
-            return () => {
-                const callbacks = _subscribers.get(key);
-                const index = callbacks.indexOf(callback);
-                if (index > -1) {
-                    callbacks.splice(index, 1);
-                }
-            };
-        },
-        
-        // ============================================
-        // USER ACTIONS
-        // ============================================
-        
-        setUser(user) {
-            _state.user = user;
-            _state.isAuthenticated = !!user;
-            _state.phone = user?.phone || null;
-            _notify('user');
-        },
-        
-        logout() {
-            _state.user = null;
-            _state.isAuthenticated = false;
-            _state.phone = null;
-            localStorage.removeItem(CONFIG.STORAGE_KEYS.USER);
-            localStorage.removeItem(CONFIG.STORAGE_KEYS.AUTH_TOKEN);
-            _notify('user');
-        },
-        
-        // ============================================
-        // WALLET ACTIONS
-        // ============================================
-        
-        getWalletBalance() {
-            return _state.wallet.balance;
-        },
-        
-        addToWallet(amount, description = 'Credit') {
-            _state.wallet.balance += amount;
-            _state.wallet.transactions.push({
-                id: Date.now(),
-                type: 'credit',
-                amount,
-                description,
-                timestamp: new Date().toISOString()
-            });
-            _persistWallet();
-            _recalculateCart();
-            _notify('wallet');
-        },
-        
-        deductFromWallet(amount, description = 'Debit') {
-            if (_state.wallet.balance >= amount) {
-                _state.wallet.balance -= amount;
-                _state.wallet.transactions.push({
-                    id: Date.now(),
-                    type: 'debit',
-                    amount,
-                    description,
-                    timestamp: new Date().toISOString()
-                });
-                _persistWallet();
-                _recalculateCart();
-                _notify('wallet');
-                return true;
-            }
-            return false;
-        },
-        
-        // ============================================
-        // CART ACTIONS
-        // ============================================
-        
-        getCart() {
-            return _deepClone(_state.cart);
-        },
-        
-        getCartItemCount() {
-            return _state.cart.items.reduce((sum, item) => sum + item.quantity, 0);
-        },
-        
-        addToCart(product, variant, quantity = 1) {
-            const cartItem = {
-                id: `${product.id}_${variant.size}`,
-                productId: product.id,
-                name: product.name,
-                image: product.images[0],
-                size: variant.size,
-                price: variant.price,
-                quantity,
-                maxQuantity: CONFIG.CART.MAX_QUANTITY_PER_ITEM
-            };
-            
-            // Check if item already exists
-            const existingIndex = _state.cart.items.findIndex(
-                item => item.id === cartItem.id
-            );
-            
-            if (existingIndex > -1) {
-                // Update quantity
-                const newQty = Math.min(
-                    _state.cart.items[existingIndex].quantity + quantity,
-                    CONFIG.CART.MAX_QUANTITY_PER_ITEM
-                );
-                _state.cart.items[existingIndex].quantity = newQty;
-            } else {
-                // Add new item
-                _state.cart.items.push(cartItem);
-            }
-            
-            _recalculateCart();
-            _notify('cart');
-            
-            return true;
-        },
-        
-        updateCartQuantity(itemId, quantity) {
-            const index = _state.cart.items.findIndex(item => item.id === itemId);
-            
-            if (index > -1) {
-                if (quantity <= 0) {
-                    // Remove item
-                    _state.cart.items.splice(index, 1);
-                } else {
-                    // Update quantity
-                    _state.cart.items[index].quantity = Math.min(
-                        quantity,
-                        CONFIG.CART.MAX_QUANTITY_PER_ITEM
-                    );
-                }
-                
-                _recalculateCart();
-                _notify('cart');
-                return true;
-            }
-            
-            return false;
-        },
-        
-        removeFromCart(itemId) {
-            const index = _state.cart.items.findIndex(item => item.id === itemId);
-            
-            if (index > -1) {
-                _state.cart.items.splice(index, 1);
-                _recalculateCart();
-                _notify('cart');
-                return true;
-            }
-            
-            return false;
-        },
-        
-        clearCart() {
-            _state.cart.items = [];
-            _state.cart.useWallet = false;
-            _recalculateCart();
-            _notify('cart');
-        },
-        
-        setUseWallet(useWallet) {
-            _state.cart.useWallet = useWallet;
-            _recalculateCart();
-            _notify('cart');
-        },
-        
-        // ============================================
-        // PRODUCTS ACTIONS
-        // ============================================
-        
-        setProducts(products) {
-            _state.products = products;
-            
-            // Set featured products (first 6 active products)
-            _state.featuredProducts = products
-                .filter(p => p.active)
-                .slice(0, 6);
-            
-            _notify('products');
-        },
-        
-        getProducts() {
-            return _deepClone(_state.products);
-        },
-        
-        getActiveProducts() {
-            return _state.products.filter(p => p.active);
-        },
-        
-        getProductById(id) {
-            return _state.products.find(p => p.id === id);
-        },
-        
-        getProductsByCategory(category) {
-            if (category === 'all') {
-                return _state.products.filter(p => p.active);
-            }
-            return _state.products.filter(p => 
-                p.active && p.primaryCategory === category
-            );
-        },
-        
-        searchProducts(query) {
-            const searchTerm = query.toLowerCase().trim();
-            if (!searchTerm) return _state.products.filter(p => p.active);
-            
-            return _state.products.filter(p => 
-                p.active && (
-                    p.name.toLowerCase().includes(searchTerm) ||
-                    p.description.toLowerCase().includes(searchTerm) ||
-                    p.primaryCategory.toLowerCase().includes(searchTerm) ||
-                    (p.subCategory && p.subCategory.toLowerCase().includes(searchTerm))
-                )
-            );
-        },
-        
-        // ============================================
-        // CATEGORIES ACTIONS
-        // ============================================
-        
-        setCategories(categories) {
-            _state.categories = categories;
-            _notify('categories');
-        },
-        
-        getCategories() {
-            return _deepClone(_state.categories);
-        },
-        
-        setActiveCategory(category) {
-            _state.activeCategory = category;
-            _notify('activeCategory');
-        },
-        
-        // ============================================
-        // UI ACTIONS
-        // ============================================
-        
-        setLoading(isLoading) {
-            _state.isLoading = isLoading;
-            _notify('isLoading');
-        },
-        
-        setCurrentPage(page) {
-            _state.currentPage = page;
-            _notify('currentPage');
-        },
-        
-        setSearchQuery(query) {
-            _state.searchQuery = query;
-            _notify('searchQuery');
-        },
-        
-        // ============================================
-        // PRODUCT MODAL ACTIONS
-        // ============================================
-        
-        setSelectedProduct(product) {
-            _state.selectedProduct = product;
-            _state.selectedVariant = product?.variants?.[0] || null;
-            _state.quantity = 1;
-            _notify('selectedProduct');
-        },
-        
-        setSelectedVariant(variant) {
-            _state.selectedVariant = variant;
-            _notify('selectedVariant');
-        },
-        
-        setQuantity(qty) {
-            _state.quantity = Math.max(1, Math.min(qty, CONFIG.CART.MAX_QUANTITY_PER_ITEM));
-            _notify('quantity');
-        },
-        
-        // ============================================
-        // SPIN WHEEL ACTIONS
-        // ============================================
-        
-        setSpinWheelEnabled(enabled) {
-            _state.spinWheelEnabled = enabled;
-            _notify('spinWheelEnabled');
-        },
-        
-        markSpinCompleted() {
-            _state.hasSpun = true;
-            localStorage.setItem(CONFIG.STORAGE_KEYS.SPIN_COMPLETED, 'true');
-            _notify('hasSpun');
-        },
-        
-        hasUserSpun() {
-            return _state.hasSpun;
-        },
-        
-        isSpinWheelEnabled() {
-            return _state.spinWheelEnabled && !_state.hasSpun;
-        },
-        
-        // ============================================
-        // SITE CONFIG ACTIONS
-        // ============================================
-        
-        setSiteConfig(config) {
-            _state.siteConfig = { ..._state.siteConfig, ...config };
-            _state.spinWheelEnabled = config.spinWheelEnabled ?? true;
-            _notify('siteConfig');
-        }
+        getState: getState, getProducts: getProducts, getActiveProducts: getActiveProducts,
+        getProductsByCategory: getProductsByCategory,
+        getCategories: getCategories, getCart: getCart, getCartItemCount: getCartItemCount,
+        getWalletBalance: getWalletBalance, searchProducts: searchProducts,
+        setProducts: setProducts, setCategories: setCategories, setSiteConfig: setSiteConfig,
+        setActiveCategory: setActiveCategory, setSelectedProduct: setSelectedProduct,
+        setSelectedVariant: setSelectedVariant, setQuantity: setQuantity, setUseWallet: setUseWallet,
+        setCurrentPage: setCurrentPage, setUser: setUser,
+        addToCart: addToCart, updateCartItem: updateCartItem, updateCartQuantity: updateCartQuantity,
+        removeFromCart: removeFromCart, clearCart: clearCart,
+        addToWallet: addToWallet, deductFromWallet: deductFromWallet,
+        logout: logout, subscribe: subscribe,
+        hasUserSpun: hasUserSpun, markSpinCompleted: markSpinCompleted
     };
 })();
 
-// Initialize store on load
-document.addEventListener('DOMContentLoaded', () => {
-    Store.init();
-});
+window.Store = Store;
