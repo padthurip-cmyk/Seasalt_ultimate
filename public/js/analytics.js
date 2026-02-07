@@ -1,6 +1,6 @@
 // =============================================
-// SeaSalt Pickles — Analytics Tracker v2
-// Sends ALL user behavior to Supabase
+// SeaSalt Pickles — Analytics Tracker v3
+// With Location Tracking, Repeat Visitor Detection, Wallet Integration
 // Deploy to: Seasalt_ultimate → public/js/analytics.js
 // =============================================
 
@@ -18,6 +18,7 @@ const Analytics = (function () {
     let maxScrollDepth = 0;
     let isIdle = false;
     let idleTimer = null;
+    let userLocation = { city: null, country: null, region: null };
 
     // ── Device Detection ──
     function getDeviceType() {
@@ -72,6 +73,43 @@ const Analytics = (function () {
         return id;
     }
 
+    // ── Get User Location via IP ──
+    function fetchUserLocation() {
+        // Use free IP geolocation API
+        fetch('https://ipapi.co/json/')
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                userLocation = {
+                    city: data.city || null,
+                    country: data.country_name || null,
+                    region: data.region || null
+                };
+                // Save to localStorage for future use
+                localStorage.setItem('seasalt_location', JSON.stringify(userLocation));
+                console.log('[Analytics] Location detected:', userLocation.city + ', ' + userLocation.country);
+            })
+            .catch(function(err) {
+                console.warn('[Analytics] Location fetch failed:', err.message);
+                // Try to load from localStorage
+                try {
+                    var saved = localStorage.getItem('seasalt_location');
+                    if (saved) userLocation = JSON.parse(saved);
+                } catch(e) {}
+            });
+    }
+
+    // ── Get User Phone ──
+    function getUserPhone() {
+        try {
+            var user = localStorage.getItem('seasalt_user');
+            if (user) {
+                var parsed = JSON.parse(user);
+                return parsed.phone || null;
+            }
+        } catch (e) { }
+        return null;
+    }
+
     // ── Send Event to Supabase ──
     function sendEvent(eventType, extraData) {
         const payload = {
@@ -87,7 +125,10 @@ const Analytics = (function () {
             referrer: getReferrer(),
             user_phone: getUserPhone(),
             time_on_page: Math.round((Date.now() - pageEnterTime) / 1000),
-            scroll_depth: maxScrollDepth
+            scroll_depth: maxScrollDepth,
+            city: userLocation.city,
+            country: userLocation.country,
+            region: userLocation.region
         };
 
         // Fire and forget — don't block the UI
@@ -107,17 +148,188 @@ const Analytics = (function () {
         }).catch(function (err) {
             console.warn('[Analytics] Network error:', err.message);
         });
+
+        // Check for repeat visitor (4+ visits in 24h) and notify admin
+        if (eventType === 'page_view') {
+            checkRepeatVisitor();
+        }
     }
 
-    function getUserPhone() {
-        try {
-            var user = localStorage.getItem('seasalt_user');
-            if (user) {
-                var parsed = JSON.parse(user);
-                return parsed.phone || null;
+    // ── Check for Repeat Visitor (4+ visits in 24h) ──
+    function checkRepeatVisitor() {
+        var phone = getUserPhone();
+        if (!phone) return; // Only track logged-in users
+
+        // Count visits in last 24 hours
+        var visits = JSON.parse(localStorage.getItem('seasalt_visits_24h') || '[]');
+        var now = Date.now();
+        var twentyFourHoursAgo = now - (24 * 60 * 60 * 1000);
+        
+        // Filter to last 24 hours and add current visit
+        visits = visits.filter(function(v) { return v > twentyFourHoursAgo; });
+        visits.push(now);
+        localStorage.setItem('seasalt_visits_24h', JSON.stringify(visits));
+
+        // If 4+ visits, create admin notification
+        if (visits.length === 4) {
+            createAdminNotification(phone, visits.length);
+        }
+    }
+
+    // ── Create Admin Notification for Repeat Visitor ──
+    function createAdminNotification(phone, visitCount) {
+        var notification = {
+            type: 'high_activity',
+            user_phone: phone,
+            message: 'User ' + phone + ' has visited ' + visitCount + ' times in the last 24 hours without purchasing!',
+            data: JSON.stringify({
+                visitCount: visitCount,
+                city: userLocation.city,
+                country: userLocation.country,
+                device: getDeviceType()
+            }),
+            is_read: false,
+            email_sent: false,
+            sms_sent: false
+        };
+
+        fetch(SUPABASE_URL + '/rest/v1/admin_notifications', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_KEY,
+                'Authorization': 'Bearer ' + SUPABASE_KEY,
+                'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify(notification)
+        }).then(function(res) {
+            if (res.ok) {
+                console.log('[Analytics] Admin notified about repeat visitor');
             }
-        } catch (e) { }
-        return null;
+        }).catch(function(err) {
+            console.warn('[Analytics] Notification failed:', err.message);
+        });
+    }
+
+    // ── Update/Create User Profile ──
+    function updateUserProfile() {
+        var phone = getUserPhone();
+        if (!phone) return;
+
+        // First check if user exists
+        fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone), {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': 'Bearer ' + SUPABASE_KEY
+            }
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(users) {
+            if (users && users.length > 0) {
+                // Update existing user
+                var user = users[0];
+                fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone), {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': 'Bearer ' + SUPABASE_KEY,
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({
+                        total_visits: (user.total_visits || 0) + 1,
+                        last_seen: new Date().toISOString(),
+                        city: userLocation.city || user.city,
+                        country: userLocation.country || user.country,
+                        device_type: getDeviceType(),
+                        is_repeat_visitor: (user.total_visits || 0) >= 2
+                    })
+                });
+            } else {
+                // Create new user
+                fetch(SUPABASE_URL + '/rest/v1/users', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': 'Bearer ' + SUPABASE_KEY,
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({
+                        phone: phone,
+                        wallet_balance: 0,
+                        total_visits: 1,
+                        city: userLocation.city,
+                        country: userLocation.country,
+                        device_type: getDeviceType()
+                    })
+                });
+            }
+        })
+        .catch(function(err) {
+            console.warn('[Analytics] User profile update failed:', err.message);
+        });
+    }
+
+    // ── Check for Wallet Messages ──
+    function checkWalletMessages() {
+        var phone = getUserPhone();
+        if (!phone) return;
+
+        fetch(SUPABASE_URL + '/rest/v1/user_messages?user_phone=eq.' + encodeURIComponent(phone) + '&is_read=eq.false', {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': 'Bearer ' + SUPABASE_KEY
+            }
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(messages) {
+            if (messages && messages.length > 0) {
+                messages.forEach(function(msg) {
+                    // Show message to user
+                    if (msg.wallet_amount > 0) {
+                        showWalletNotification(msg.message, msg.wallet_amount);
+                    }
+                    // Mark as read
+                    fetch(SUPABASE_URL + '/rest/v1/user_messages?id=eq.' + msg.id, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey': SUPABASE_KEY,
+                            'Authorization': 'Bearer ' + SUPABASE_KEY,
+                            'Prefer': 'return=minimal'
+                        },
+                        body: JSON.stringify({ is_read: true })
+                    });
+                });
+            }
+        })
+        .catch(function(err) {
+            console.warn('[Analytics] Message check failed:', err.message);
+        });
+    }
+
+    // ── Show Wallet Notification to User ──
+    function showWalletNotification(message, amount) {
+        // Create toast notification
+        var toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#10b981,#059669);color:#fff;padding:16px 24px;border-radius:12px;z-index:10000;box-shadow:0 4px 20px rgba(0,0,0,0.3);text-align:center;animation:slideDown 0.5s ease;max-width:90vw;';
+        toast.innerHTML = '<div style="font-size:1.5rem;margin-bottom:4px;">🎉 You received ₹' + amount + '!</div><div style="font-size:0.9rem;opacity:0.9;">' + message + '</div>';
+        document.body.appendChild(toast);
+
+        // Update local wallet
+        try {
+            var wallet = parseFloat(localStorage.getItem('seasalt_wallet') || '0');
+            localStorage.setItem('seasalt_wallet', (wallet + amount).toString());
+            // Trigger wallet update event
+            window.dispatchEvent(new CustomEvent('walletUpdated', { detail: { balance: wallet + amount } }));
+        } catch(e) {}
+
+        // Remove after 5 seconds
+        setTimeout(function() {
+            toast.style.animation = 'slideUp 0.5s ease';
+            setTimeout(function() { toast.remove(); }, 500);
+        }, 5000);
     }
 
     // ── Scroll Tracking ──
@@ -162,7 +374,7 @@ const Analytics = (function () {
     // ── Send page exit data ──
     function sendPageExit() {
         var timeSpent = Math.round((Date.now() - pageEnterTime) / 1000);
-        if (timeSpent > 1) { // only track if user spent more than 1 second
+        if (timeSpent > 1) {
             sendEvent('page_exit', {
                 timeOnPage: timeSpent,
                 scrollDepth: maxScrollDepth,
@@ -178,11 +390,20 @@ const Analytics = (function () {
         pageEnterTime = Date.now();
         maxScrollDepth = 0;
 
+        // Fetch user location
+        fetchUserLocation();
+
         setupScrollTracking();
         setupIdleDetection();
 
         // Track initial page view
         sendEvent('page_view', { page: 'home' });
+
+        // Update user profile if logged in
+        setTimeout(updateUserProfile, 1000);
+
+        // Check for wallet messages
+        setTimeout(checkWalletMessages, 2000);
 
         // Track page exit on unload
         window.addEventListener('beforeunload', sendPageExit);
@@ -193,22 +414,19 @@ const Analytics = (function () {
                 sendPageExit();
             } else {
                 pageEnterTime = Date.now();
+                checkWalletMessages(); // Check messages when user returns
             }
         });
 
-        console.log('[Analytics] Tracker initialized — session:', sessionId);
+        console.log('[Analytics] Tracker v3 initialized — session:', sessionId);
     }
 
     function trackPageView(page) {
-        // Send exit for previous page
         sendPageExit();
-
-        // Reset for new page
         currentPage = page || 'unknown';
         pageEnterTime = Date.now();
         maxScrollDepth = 0;
         isIdle = false;
-
         sendEvent('page_view', { page: currentPage });
     }
 
@@ -242,9 +460,7 @@ const Analytics = (function () {
     }
 
     function trackCheckoutStart(cartTotal) {
-        sendEvent('checkout_start', {
-            cartTotal: cartTotal || 0
-        });
+        sendEvent('checkout_start', { cartTotal: cartTotal || 0 });
     }
 
     function trackPurchase(order) {
@@ -256,8 +472,43 @@ const Analytics = (function () {
             paymentMethod: order.paymentMethod || 'razorpay'
         });
 
-        // Also update daily stats
-        updateDailyStats(order.total || 0);
+        // Clear repeat visitor counter on purchase
+        localStorage.removeItem('seasalt_visits_24h');
+
+        // Update user purchase stats
+        updateUserPurchaseStats(order.total || 0);
+    }
+
+    function updateUserPurchaseStats(amount) {
+        var phone = getUserPhone();
+        if (!phone) return;
+
+        fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone), {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': 'Bearer ' + SUPABASE_KEY
+            }
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(users) {
+            if (users && users.length > 0) {
+                var user = users[0];
+                fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone), {
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': 'Bearer ' + SUPABASE_KEY,
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({
+                        total_purchases: (user.total_purchases || 0) + 1,
+                        total_spent: parseFloat(user.total_spent || 0) + amount,
+                        is_repeat_visitor: false // They purchased!
+                    })
+                });
+            }
+        });
     }
 
     function trackSearch(query) {
@@ -268,56 +519,27 @@ const Analytics = (function () {
         sendEvent('spin_wheel', { result: result });
     }
 
-    // ── Update Daily Aggregates ──
-    function updateDailyStats(purchaseAmount) {
-        var today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    // ── Get User's Wallet Balance ──
+    function getWalletBalance(callback) {
+        var phone = getUserPhone();
+        if (!phone) {
+            callback(0);
+            return;
+        }
 
-        // Try to upsert daily stats
-        fetch(SUPABASE_URL + '/rest/v1/analytics_daily?date=eq.' + today, {
-            method: 'GET',
+        fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone) + '&select=wallet_balance', {
             headers: {
                 'apikey': SUPABASE_KEY,
                 'Authorization': 'Bearer ' + SUPABASE_KEY
             }
-        }).then(function (res) { return res.json(); })
-          .then(function (rows) {
-            if (rows && rows.length > 0) {
-                // Update existing row
-                var row = rows[0];
-                fetch(SUPABASE_URL + '/rest/v1/analytics_daily?date=eq.' + today, {
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': SUPABASE_KEY,
-                        'Authorization': 'Bearer ' + SUPABASE_KEY,
-                        'Prefer': 'return=minimal'
-                    },
-                    body: JSON.stringify({
-                        purchases: (row.purchases || 0) + 1,
-                        revenue: parseFloat(row.revenue || 0) + purchaseAmount
-                    })
-                });
-            } else {
-                // Insert new row for today
-                fetch(SUPABASE_URL + '/rest/v1/analytics_daily', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': SUPABASE_KEY,
-                        'Authorization': 'Bearer ' + SUPABASE_KEY,
-                        'Prefer': 'return=minimal'
-                    },
-                    body: JSON.stringify({
-                        date: today,
-                        total_sessions: 1,
-                        page_views: 1,
-                        purchases: purchaseAmount > 0 ? 1 : 0,
-                        revenue: purchaseAmount || 0
-                    })
-                });
-            }
-        }).catch(function (err) {
-            console.warn('[Analytics] Daily stats update failed:', err.message);
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(users) {
+            var balance = (users && users.length > 0) ? parseFloat(users[0].wallet_balance || 0) : 0;
+            callback(balance);
+        })
+        .catch(function() {
+            callback(0);
         });
     }
 
@@ -330,7 +552,8 @@ const Analytics = (function () {
         trackCheckoutStart: trackCheckoutStart,
         trackPurchase: trackPurchase,
         trackSearch: trackSearch,
-        trackSpinWheel: trackSpinWheel
+        trackSpinWheel: trackSpinWheel,
+        getWalletBalance: getWalletBalance
     };
 
 })();
@@ -343,3 +566,10 @@ if (document.readyState === 'loading') {
 } else {
     Analytics.init();
 }
+
+// ── Add CSS animation for wallet notification ──
+(function() {
+    var style = document.createElement('style');
+    style.textContent = '@keyframes slideDown{from{transform:translateX(-50%) translateY(-100px);opacity:0;}to{transform:translateX(-50%) translateY(0);opacity:1;}}@keyframes slideUp{from{transform:translateX(-50%) translateY(0);opacity:1;}to{transform:translateX(-50%) translateY(-100px);opacity:0;}}';
+    document.head.appendChild(style);
+})();
