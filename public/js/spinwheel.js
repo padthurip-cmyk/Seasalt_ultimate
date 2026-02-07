@@ -1,198 +1,19 @@
 /**
- * SeaSalt Pickles - Spin Wheel v12
+ * SeaSalt Pickles - Spin Wheel v13
  * =================================
- * FIXED: Protects wallet display from being overwritten
- * Uses MutationObserver to maintain wallet timer
+ * Works with UI.js v5 for wallet timer display
+ * After OTP verification:
+ * 1. Saves wallet to localStorage
+ * 2. Calls UI.updateCartUI() to show the timer
+ * 3. Calls UI.startWalletTimer() to keep it updating
+ * 
  * TEST OTP: 123456
  */
 
 (function() {
     'use strict';
     
-    // ════════════════════════════════════════════════════════════
-    // WALLET TIMER DISPLAY - Protected from overwrites
-    // ════════════════════════════════════════════════════════════
-    
-    var walletTimerInterval = null;
-    var walletObserver = null;
-    var isUpdatingWallet = false;
-    
-    function getWalletData() {
-        try {
-            var data = JSON.parse(localStorage.getItem('seasalt_wallet') || '{}');
-            if (!data.amount || data.amount <= 0) return null;
-            var expiresAt = new Date(data.expiresAt);
-            var now = new Date();
-            if (now > expiresAt) {
-                localStorage.removeItem('seasalt_wallet');
-                return null;
-            }
-            return { amount: data.amount, timeLeft: expiresAt - now };
-        } catch (e) { 
-            return null; 
-        }
-    }
-    
-    function formatWalletTime(ms) {
-        if (ms <= 0) return '00:00:00';
-        var h = Math.floor(ms / 3600000);
-        var m = Math.floor((ms % 3600000) / 60000);
-        var s = Math.floor((ms % 60000) / 1000);
-        return h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-    }
-    
-    function injectWalletStyles() {
-        if (document.getElementById('wallet-timer-styles')) return;
-        var style = document.createElement('style');
-        style.id = 'wallet-timer-styles';
-        style.textContent = '\
-            #wallet-btn.has-wallet-balance { \
-                background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important; \
-                color: white !important; \
-                padding: 6px 12px !important; \
-                min-height: 44px !important; \
-                box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4) !important; \
-                animation: walletGlow 2s ease-in-out infinite; \
-                transition: transform 0.2s ease !important; \
-            } \
-            #wallet-btn.has-wallet-balance:hover { \
-                transform: scale(1.05); \
-            } \
-            #wallet-btn.has-wallet-balance svg, \
-            #wallet-btn.has-wallet-balance path { \
-                color: white !important; \
-                stroke: white !important; \
-                fill: none !important; \
-            } \
-            .sw-wallet-wrap { \
-                display: flex !important; \
-                flex-direction: column !important; \
-                align-items: center !important; \
-                line-height: 1.15 !important; \
-                gap: 2px !important; \
-            } \
-            .sw-wallet-amount { \
-                font-size: 14px !important; \
-                font-weight: 800 !important; \
-                color: white !important; \
-            } \
-            .sw-wallet-timer { \
-                font-size: 9px !important; \
-                font-weight: 600 !important; \
-                color: rgba(255,255,255,0.95) !important; \
-                font-family: "SF Mono", "Courier New", monospace !important; \
-                background: rgba(0,0,0,0.25) !important; \
-                padding: 2px 6px !important; \
-                border-radius: 4px !important; \
-                letter-spacing: 0.5px !important; \
-            } \
-            @keyframes walletGlow { \
-                0%, 100% { box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4); } \
-                50% { box-shadow: 0 4px 20px rgba(249, 115, 22, 0.6); } \
-            } \
-        ';
-        document.head.appendChild(style);
-    }
-    
-    function updateWalletDisplay() {
-        if (isUpdatingWallet) return;
-        isUpdatingWallet = true;
-        
-        var wallet = getWalletData();
-        var walletBtn = document.getElementById('wallet-btn');
-        var balanceEl = document.getElementById('wallet-balance');
-        
-        if (!balanceEl || !walletBtn) {
-            isUpdatingWallet = false;
-            return;
-        }
-        
-        if (!wallet) {
-            walletBtn.classList.remove('has-wallet-balance');
-            balanceEl.innerHTML = '₹0';
-            isUpdatingWallet = false;
-            return;
-        }
-        
-        injectWalletStyles();
-        walletBtn.classList.add('has-wallet-balance');
-        
-        // Build the HTML
-        var html = '<span class="sw-wallet-wrap">' +
-            '<span class="sw-wallet-amount">₹' + wallet.amount + '</span>' +
-            '<span class="sw-wallet-timer">⏱ ' + formatWalletTime(wallet.timeLeft) + '</span>' +
-        '</span>';
-        
-        balanceEl.innerHTML = html;
-        
-        isUpdatingWallet = false;
-    }
-    
-    function setupWalletProtection() {
-        // Use MutationObserver to detect when other scripts overwrite the wallet display
-        var balanceEl = document.getElementById('wallet-balance');
-        if (!balanceEl || walletObserver) return;
-        
-        walletObserver = new MutationObserver(function(mutations) {
-            var wallet = getWalletData();
-            if (!wallet) return;
-            
-            // Check if our custom HTML was removed
-            var hasOurFormat = balanceEl.querySelector('.sw-wallet-wrap');
-            if (!hasOurFormat && !isUpdatingWallet) {
-                console.log('[Wallet] Display was overwritten, restoring...');
-                setTimeout(updateWalletDisplay, 10);
-            }
-        });
-        
-        walletObserver.observe(balanceEl, {
-            childList: true,
-            subtree: true,
-            characterData: true
-        });
-        
-        console.log('[Wallet] Protection enabled');
-    }
-    
-    function startWalletTimer() {
-        console.log('[Wallet] Starting timer');
-        
-        if (walletTimerInterval) clearInterval(walletTimerInterval);
-        
-        updateWalletDisplay();
-        setupWalletProtection();
-        
-        walletTimerInterval = setInterval(function() {
-            var wallet = getWalletData();
-            if (!wallet) {
-                clearInterval(walletTimerInterval);
-                walletTimerInterval = null;
-                if (walletObserver) {
-                    walletObserver.disconnect();
-                    walletObserver = null;
-                }
-                updateWalletDisplay();
-                return;
-            }
-            updateWalletDisplay();
-        }, 1000);
-    }
-    
-    function initWalletDisplay() {
-        console.log('[Wallet] Initializing...');
-        var wallet = getWalletData();
-        if (wallet) {
-            console.log('[Wallet] Found: ₹' + wallet.amount);
-            startWalletTimer();
-        } else {
-            console.log('[Wallet] No wallet');
-            updateWalletDisplay();
-        }
-    }
-    
-    // ════════════════════════════════════════════════════════════
-    // SPIN WHEEL
-    // ════════════════════════════════════════════════════════════
+    console.log('[SpinWheel] v13 loaded');
     
     var SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
     var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
@@ -513,6 +334,7 @@
         var userData = { name: userName, phone: userPhone, country: userCountry };
         localStorage.setItem('seasalt_user', JSON.stringify(userData));
         
+        // Save wallet in the format UI.js v5 expects
         var walletData = { amount: wonAmount, addedAt: now.toISOString(), expiresAt: expiresAt.toISOString() };
         localStorage.setItem('seasalt_wallet', JSON.stringify(walletData));
         localStorage.setItem('seasalt_spin_done', 'true');
@@ -550,9 +372,21 @@
             });
         }).catch(function(e) { console.warn('Supabase error:', e); });
         
-        // Update wallet display and start timer with protection
-        updateWalletDisplay();
-        startWalletTimer();
+        // ════════════════════════════════════════════════════════════
+        // KEY CHANGE: Update UI.js wallet display and start timer
+        // ════════════════════════════════════════════════════════════
+        if (typeof UI !== 'undefined') {
+            console.log('[SpinWheel] Updating UI wallet display...');
+            UI.updateCartUI();  // This will now show the timer
+            if (typeof UI.startWalletTimer === 'function') {
+                UI.startWalletTimer();  // Start the live countdown
+            }
+        }
+        
+        // Dispatch event for any other listeners
+        window.dispatchEvent(new CustomEvent('walletUpdated', {
+            detail: { amount: wonAmount, expiresAt: expiresAt.toISOString() }
+        }));
         
         hide();
         toast('🎊 ₹' + wonAmount + ' added to wallet! Use within 48 hours.', 'success');
@@ -584,8 +418,20 @@
     }
     
     function init() {
-        console.log('[SpinWheel] v12 Initializing...');
-        initWalletDisplay();
+        console.log('[SpinWheel] v13 Initializing...');
+        
+        // Check if user already has wallet, start timer
+        if (typeof UI !== 'undefined' && typeof UI.getSpinWheelWallet === 'function') {
+            var wallet = UI.getSpinWheelWallet();
+            if (wallet) {
+                console.log('[SpinWheel] Found existing wallet, starting timer');
+                UI.updateCartUI();
+                if (typeof UI.startWalletTimer === 'function') {
+                    UI.startWalletTimer();
+                }
+            }
+        }
+        
         if (shouldShow()) {
             setTimeout(show, 1000);
         }
@@ -598,6 +444,5 @@
     }
     
     window.SpinWheel = { init: init, show: show, hide: hide };
-    console.log('[SpinWheel] v12 loaded');
     
 })();
