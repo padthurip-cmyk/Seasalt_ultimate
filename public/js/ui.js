@@ -1,8 +1,13 @@
 /**
- * SeaSalt Pickles - UI Module v4 (Supabase-Compatible)
- * =====================================================
+ * SeaSalt Pickles - UI Module v5 (Wallet Timer Compatible)
+ * =========================================================
  * All DOM rendering. Handles loading overlay, #app visibility,
  * product cards, modals, cart, and category filtering.
+ * 
+ * v5 CHANGES:
+ * - updateCartUI() now preserves the spin wheel wallet timer
+ * - Uses seasalt_wallet from localStorage (spin wheel format)
+ * - Shows live countdown timer beside wallet balance
  */
 
 const UI = (function() {
@@ -53,6 +58,36 @@ const UI = (function() {
     function fmt(amount) {
         if (typeof CONFIG !== 'undefined' && CONFIG.formatPrice) return CONFIG.formatPrice(amount);
         return '₹' + amount;
+    }
+
+    // ============================================
+    // SPIN WHEEL WALLET HELPERS (NEW in v5)
+    // ============================================
+    function getSpinWheelWallet() {
+        try {
+            var data = JSON.parse(localStorage.getItem('seasalt_wallet') || '{}');
+            if (!data.amount || data.amount <= 0) return null;
+            var expiresAt = new Date(data.expiresAt);
+            var now = new Date();
+            if (now > expiresAt) {
+                // Wallet expired
+                return null;
+            }
+            return {
+                amount: data.amount,
+                timeLeft: expiresAt - now
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+    
+    function formatWalletTime(ms) {
+        if (ms <= 0) return '00:00:00';
+        var h = Math.floor(ms / 3600000);
+        var m = Math.floor((ms % 3600000) / 60000);
+        var s = Math.floor((ms % 60000) / 1000);
+        return h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
     }
 
     // ============================================
@@ -368,14 +403,100 @@ const UI = (function() {
         }
     }
     
+    // ============================================
+    // UPDATED: updateCartUI with wallet timer support
+    // ============================================
     function updateCartUI() {
         var count = Store.getCartItemCount();
         if (elements.cartCount) {
             elements.cartCount.textContent = count;
             elements.cartCount.classList.toggle('hidden', count === 0);
         }
-        var walletBalance = Store.getWalletBalance();
-        if (elements.walletBalance) elements.walletBalance.textContent = fmt(walletBalance);
+        
+        // v5: Check for spin wheel wallet first (has timer)
+        var spinWallet = getSpinWheelWallet();
+        
+        if (spinWallet && spinWallet.amount > 0) {
+            // Use spin wheel wallet with timer display
+            updateWalletWithTimer(spinWallet);
+        } else {
+            // Fallback to Store wallet (no timer)
+            var walletBalance = Store.getWalletBalance();
+            if (elements.walletBalance) {
+                elements.walletBalance.textContent = fmt(walletBalance);
+            }
+            // Remove timer styling if no spin wallet
+            if (elements.walletBtn) {
+                elements.walletBtn.classList.remove('has-wallet-timer');
+            }
+        }
+    }
+    
+    // ============================================
+    // NEW: Update wallet display with timer
+    // ============================================
+    function updateWalletWithTimer(wallet) {
+        if (!elements.walletBalance) return;
+        
+        // Inject styles if not present
+        if (!document.getElementById('wallet-timer-styles')) {
+            var style = document.createElement('style');
+            style.id = 'wallet-timer-styles';
+            style.textContent = '\
+                #wallet-btn.has-wallet-timer { \
+                    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important; \
+                    color: white !important; \
+                    padding: 6px 12px !important; \
+                    min-height: 44px !important; \
+                    box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4) !important; \
+                    animation: walletPulse 2s ease-in-out infinite; \
+                } \
+                #wallet-btn.has-wallet-timer:hover { \
+                    transform: scale(1.05); \
+                } \
+                #wallet-btn.has-wallet-timer svg { \
+                    color: white !important; \
+                    stroke: white !important; \
+                } \
+                .wallet-timer-wrap { \
+                    display: flex !important; \
+                    flex-direction: column !important; \
+                    align-items: center !important; \
+                    line-height: 1.15 !important; \
+                    gap: 2px !important; \
+                } \
+                .wallet-timer-amount { \
+                    font-size: 14px !important; \
+                    font-weight: 800 !important; \
+                    color: white !important; \
+                } \
+                .wallet-timer-countdown { \
+                    font-size: 9px !important; \
+                    font-weight: 600 !important; \
+                    color: rgba(255,255,255,0.95) !important; \
+                    font-family: "SF Mono", "Courier New", monospace !important; \
+                    background: rgba(0,0,0,0.25) !important; \
+                    padding: 2px 6px !important; \
+                    border-radius: 4px !important; \
+                } \
+                @keyframes walletPulse { \
+                    0%, 100% { box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4); } \
+                    50% { box-shadow: 0 4px 20px rgba(249, 115, 22, 0.6); } \
+                } \
+            ';
+            document.head.appendChild(style);
+        }
+        
+        // Add timer class to wallet button
+        if (elements.walletBtn) {
+            elements.walletBtn.classList.add('has-wallet-timer');
+        }
+        
+        // Update the wallet balance element with amount + timer
+        elements.walletBalance.innerHTML = '<span class="wallet-timer-wrap">' +
+            '<span class="wallet-timer-amount">₹' + wallet.amount + '</span>' +
+            '<span class="wallet-timer-countdown">⏱ ' + formatWalletTime(wallet.timeLeft) + '</span>' +
+        '</span>';
     }
     
     function renderCartItems() {
@@ -433,7 +554,10 @@ const UI = (function() {
     
     function updateCartTotals() {
         var cart = Store.getCart();
-        var walletBalance = Store.getWalletBalance();
+        
+        // v5: Get wallet balance from spin wheel wallet
+        var spinWallet = getSpinWheelWallet();
+        var walletBalance = spinWallet ? spinWallet.amount : Store.getWalletBalance();
         
         if (elements.cartSubtotal) elements.cartSubtotal.textContent = fmt(cart.subtotal);
         if (elements.deliveryCharge) {
@@ -465,6 +589,31 @@ const UI = (function() {
     }
     
     // ============================================
+    // START WALLET TIMER (called from spinwheel)
+    // ============================================
+    var walletTimerInterval = null;
+    
+    function startWalletTimer() {
+        if (walletTimerInterval) clearInterval(walletTimerInterval);
+        
+        walletTimerInterval = setInterval(function() {
+            var wallet = getSpinWheelWallet();
+            if (!wallet) {
+                clearInterval(walletTimerInterval);
+                walletTimerInterval = null;
+                updateCartUI(); // Reset to ₹0
+                return;
+            }
+            
+            // Update timer display
+            var timerEl = document.querySelector('.wallet-timer-countdown');
+            if (timerEl) {
+                timerEl.textContent = '⏱ ' + formatWalletTime(wallet.timeLeft);
+            }
+        }, 1000);
+    }
+    
+    // ============================================
     // PUBLIC API - every function other modules need
     // ============================================
     return {
@@ -487,7 +636,9 @@ const UI = (function() {
         updateCartUI: updateCartUI,
         renderCartItems: renderCartItems,
         updateCartTotals: updateCartTotals,
-        updateBottomNav: updateBottomNav
+        updateBottomNav: updateBottomNav,
+        startWalletTimer: startWalletTimer,
+        getSpinWheelWallet: getSpinWheelWallet
     };
 })();
 
