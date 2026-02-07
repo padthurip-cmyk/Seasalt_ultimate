@@ -1,13 +1,15 @@
 /**
- * SeaSalt Pickles - Wallet UI v6
+ * SeaSalt Pickles - Wallet UI v7
  * ==============================
- * Fixed: Always initializes and checks wallet on every update
+ * FIXED: Continuously monitors for wallet changes
+ * FIXED: Immediately updates when walletUpdated event fires
  */
 
 (function() {
     'use strict';
     
     var timerInterval = null;
+    var checkInterval = null;
     
     function getWallet() {
         try {
@@ -38,29 +40,26 @@
         var balanceEl = document.getElementById('wallet-balance');
         
         if (!balanceEl) {
-            console.log('[WalletUI] wallet-balance element not found');
             return false;
         }
         
         if (!wallet) {
             balanceEl.innerHTML = '₹0';
-            console.log('[WalletUI] No wallet, showing ₹0');
             return true;
         }
         
-        // Update with amount and timer
+        // Update with amount and timer on two lines
         balanceEl.innerHTML = '₹' + wallet.amount + '<br><span style="font-size:8px;color:#c9a227;font-family:monospace;letter-spacing:-0.5px;">' + formatTime(wallet.timeLeft) + '</span>';
         
-        console.log('[WalletUI] Updated: ₹' + wallet.amount + ' - ' + formatTime(wallet.timeLeft));
         return true;
     }
     
     function startTimer() {
-        console.log('[WalletUI] Starting timer...');
+        console.log('[WalletUI] Starting live timer');
         
-        if (timerInterval) {
-            clearInterval(timerInterval);
-        }
+        // Clear any existing intervals
+        if (timerInterval) clearInterval(timerInterval);
+        if (checkInterval) clearInterval(checkInterval);
         
         // Update immediately
         updateDisplay();
@@ -69,50 +68,77 @@
         timerInterval = setInterval(function() {
             var wallet = getWallet();
             if (!wallet) {
-                console.log('[WalletUI] Wallet empty/expired, stopping timer');
+                console.log('[WalletUI] Wallet expired, stopping timer');
                 clearInterval(timerInterval);
                 timerInterval = null;
                 updateDisplay();
+                // Restart the check interval to wait for new wallet
+                startCheckingForWallet();
                 return;
             }
             updateDisplay();
         }, 1000);
     }
     
-    function init() {
-        console.log('[WalletUI] v6 Initializing...');
+    function startCheckingForWallet() {
+        console.log('[WalletUI] Checking for wallet every 500ms...');
         
-        // Try to update immediately
-        var success = updateDisplay();
-        console.log('[WalletUI] Initial update:', success ? 'success' : 'waiting for DOM');
+        if (checkInterval) clearInterval(checkInterval);
         
-        // If wallet exists, start timer
-        if (getWallet()) {
-            startTimer();
-        }
-        
-        // Also try after delays in case DOM isn't ready
-        setTimeout(function() {
-            if (getWallet() && !timerInterval) {
-                console.log('[WalletUI] Delayed start');
+        checkInterval = setInterval(function() {
+            var wallet = getWallet();
+            if (wallet) {
+                console.log('[WalletUI] Wallet found! ₹' + wallet.amount);
+                clearInterval(checkInterval);
+                checkInterval = null;
                 startTimer();
             }
-        }, 1000);
-        
-        setTimeout(function() {
-            if (getWallet() && !timerInterval) {
-                console.log('[WalletUI] Second delayed start');
-                startTimer();
-            }
-        }, 2000);
+        }, 500);
     }
     
-    // Listen for wallet updates from spin wheel
-    window.addEventListener('walletUpdated', function(e) {
-        console.log('[WalletUI] walletUpdated event received', e.detail);
-        setTimeout(function() {
+    function init() {
+        console.log('[WalletUI] v7 Initializing...');
+        
+        var wallet = getWallet();
+        
+        if (wallet) {
+            console.log('[WalletUI] Wallet exists: ₹' + wallet.amount);
             startTimer();
-        }, 100);
+        } else {
+            console.log('[WalletUI] No wallet yet, will check periodically');
+            updateDisplay(); // Show ₹0
+            startCheckingForWallet();
+        }
+    }
+    
+    // Listen for wallet updates from spin wheel - THIS IS KEY!
+    window.addEventListener('walletUpdated', function(e) {
+        console.log('[WalletUI] 🎉 walletUpdated event received!', e.detail);
+        
+        // Clear check interval since we got the wallet
+        if (checkInterval) {
+            clearInterval(checkInterval);
+            checkInterval = null;
+        }
+        
+        // Update display immediately
+        updateDisplay();
+        
+        // Start the timer
+        startTimer();
+    });
+    
+    // Also listen for storage changes (in case updated from another tab)
+    window.addEventListener('storage', function(e) {
+        if (e.key === 'seasalt_wallet') {
+            console.log('[WalletUI] localStorage changed');
+            var wallet = getWallet();
+            if (wallet && !timerInterval) {
+                startTimer();
+            } else {
+                updateDisplay();
+            }
+        }
     });
     
     // Initialize when DOM is ready
@@ -129,6 +155,6 @@
         getWallet: getWallet
     };
     
-    console.log('[WalletUI] v6 Script loaded');
+    console.log('[WalletUI] v7 Script loaded');
     
 })();
