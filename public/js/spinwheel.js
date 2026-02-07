@@ -1,15 +1,11 @@
 /**
- * SeaSalt Pickles - Spin Wheel v7
+ * SeaSalt Pickles - Spin Wheel v8
  * ================================
+ * FIXED: Demo OTP (123456) + Wallet display
+ * 
  * FLOW: Wheel First → Spin → Claim with OTP → Wallet with 48hr expiry
  * 
- * Features:
- * - Wheel shows first (no login required to spin)
- * - After spin, enter details + OTP to claim prize
- * - Weighted odds: 20% ₹99, 50% ₹199, 20% ₹399, 10% ₹599
- * - Wallet with 48-hour expiry timer
- * - One spin per phone per month
- * - Matches original SeaSalt design
+ * TEST OTP: 123456 (works when Firebase is not configured)
  */
 
 const SpinWheel = (function() {
@@ -21,6 +17,9 @@ const SpinWheel = (function() {
     const SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
     
+    // Demo OTP for testing
+    const DEMO_OTP = '123456';
+    
     // ============================================
     // STATE
     // ============================================
@@ -31,6 +30,7 @@ const SpinWheel = (function() {
     let selectedCountryCode = '+91';
     let userCountry = 'India';
     let isSpinning = false;
+    let isDemoMode = true; // Start in demo mode
     let auth = null;
     let recaptchaVerifier = null;
     let wonAmount = 0;
@@ -58,7 +58,7 @@ const SpinWheel = (function() {
     ];
     
     // ============================================
-    // STYLES (matching original design)
+    // STYLES
     // ============================================
     const STYLES = `
         .sw-overlay {
@@ -144,7 +144,7 @@ const SpinWheel = (function() {
         }
         .sw-hidden { display: none !important; }
         
-        /* WHEEL SECTION */
+        /* WHEEL */
         .sw-wheel-section {
             display: flex;
             flex-direction: column;
@@ -212,7 +212,7 @@ const SpinWheel = (function() {
             cursor: not-allowed;
         }
         
-        /* CLAIM SECTION */
+        /* CLAIM */
         .sw-claim {
             display: flex;
             flex-direction: column;
@@ -242,13 +242,12 @@ const SpinWheel = (function() {
         .sw-input-group {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 4px;
         }
         .sw-label {
             font-size: 13px;
             font-weight: 600;
             color: rgba(255,255,255,0.9);
-            margin-bottom: 2px;
         }
         .sw-select, .sw-input {
             width: 100%;
@@ -319,6 +318,16 @@ const SpinWheel = (function() {
             font-size: 13px;
             margin-top: 4px;
         }
+        .sw-demo-note {
+            background: rgba(251,191,36,0.2);
+            border: 1px solid rgba(251,191,36,0.5);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            color: #FCD34D;
+            font-size: 13px;
+            font-weight: 600;
+        }
         .sw-error {
             background: #FEE2E2;
             color: #DC2626;
@@ -328,7 +337,7 @@ const SpinWheel = (function() {
             text-align: center;
         }
         
-        /* OTP SECTION */
+        /* OTP */
         .sw-otp {
             display: flex;
             flex-direction: column;
@@ -390,7 +399,7 @@ const SpinWheel = (function() {
             margin-top: 8px;
         }
         
-        /* RESULT SECTION */
+        /* RESULT */
         .sw-result {
             text-align: center;
             padding: 20px 0;
@@ -417,7 +426,6 @@ const SpinWheel = (function() {
             margin-bottom: 16px;
         }
         
-        /* TIMER & WALLET */
         .sw-timer-box {
             background: rgba(0,0,0,0.25);
             border-radius: 12px;
@@ -528,7 +536,6 @@ const SpinWheel = (function() {
     // CREATE MODAL
     // ============================================
     function createModal() {
-        // Inject styles
         if (!document.getElementById('sw-styles')) {
             const style = document.createElement('style');
             style.id = 'sw-styles';
@@ -541,7 +548,7 @@ const SpinWheel = (function() {
                 <div class="sw-modal">
                     <button class="sw-close" id="sw-close">✕</button>
                     
-                    <!-- STEP 1: WHEEL (shows first!) -->
+                    <!-- STEP 1: WHEEL -->
                     <div id="sw-step-wheel">
                         <div class="sw-header">
                             <div class="sw-badge">🎁 Limited Time Offer</div>
@@ -560,7 +567,7 @@ const SpinWheel = (function() {
                         </div>
                     </div>
                     
-                    <!-- STEP 2: CLAIM (after spin) -->
+                    <!-- STEP 2: CLAIM -->
                     <div id="sw-step-claim" class="sw-hidden">
                         <div class="sw-header" style="padding-bottom: 10px;">
                             <h2 class="sw-title">🎉 You Won!</h2>
@@ -589,8 +596,6 @@ const SpinWheel = (function() {
                                         <option value="+971" data-country="UAE">🇦🇪 UAE (+971)</option>
                                         <option value="+65" data-country="Singapore">🇸🇬 Singapore (+65)</option>
                                         <option value="+61" data-country="Australia">🇦🇺 Australia (+61)</option>
-                                        <option value="+966" data-country="Saudi Arabia">🇸🇦 Saudi Arabia (+966)</option>
-                                        <option value="+60" data-country="Malaysia">🇲🇾 Malaysia (+60)</option>
                                     </select>
                                 </div>
                                 
@@ -622,6 +627,11 @@ const SpinWheel = (function() {
                             
                             <div class="sw-otp">
                                 <p class="sw-otp-label">Enter the 6-digit code sent to <span class="sw-otp-phone" id="sw-otp-phone"></span></p>
+                                
+                                <div id="sw-demo-hint" class="sw-demo-note">
+                                    🔑 Test OTP: <strong>123456</strong>
+                                </div>
+                                
                                 <div class="sw-otp-boxes">
                                     <input type="tel" class="sw-otp-input" maxlength="1" data-i="0">
                                     <input type="tel" class="sw-otp-input" maxlength="1" data-i="1">
@@ -692,7 +702,8 @@ const SpinWheel = (function() {
     // ============================================
     function initFirebase() {
         if (typeof firebase === 'undefined') {
-            console.warn('Firebase SDK not loaded - OTP will work in demo mode');
+            console.log('SpinWheel: Firebase not loaded - using demo mode (OTP: 123456)');
+            isDemoMode = true;
             return;
         }
         try {
@@ -705,8 +716,11 @@ const SpinWheel = (function() {
             }
             auth = firebase.auth();
             auth.languageCode = 'en';
+            isDemoMode = false;
+            console.log('SpinWheel: Firebase initialized');
         } catch (e) {
-            console.error('Firebase init error:', e);
+            console.log('SpinWheel: Firebase error - using demo mode (OTP: 123456)');
+            isDemoMode = true;
         }
     }
     
@@ -714,16 +728,10 @@ const SpinWheel = (function() {
     // BIND EVENTS
     // ============================================
     function bindEvents() {
-        // Close
         document.getElementById('sw-close').onclick = hide;
-        
-        // Spin
         document.getElementById('sw-spin').onclick = handleSpin;
-        
-        // Name input
         document.getElementById('sw-name').oninput = validateClaimForm;
         
-        // Country select
         document.getElementById('sw-country').onchange = function(e) {
             selectedCountryCode = e.target.value;
             userCountry = e.target.options[e.target.selectedIndex].dataset.country;
@@ -731,16 +739,13 @@ const SpinWheel = (function() {
             validateClaimForm();
         };
         
-        // Phone input
         document.getElementById('sw-phone').oninput = function(e) {
             e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
             validateClaimForm();
         };
         
-        // Send OTP
         document.getElementById('sw-send-otp').onclick = handleSendOtp;
         
-        // OTP inputs
         const otpInputs = document.querySelectorAll('.sw-otp-input');
         otpInputs.forEach((inp, i) => {
             inp.oninput = function(e) {
@@ -761,19 +766,13 @@ const SpinWheel = (function() {
             };
         });
         
-        // Verify
         document.getElementById('sw-verify').onclick = handleVerify;
-        
-        // Resend
         document.getElementById('sw-resend').onclick = handleResend;
-        
-        // Change number
         document.getElementById('sw-change-num').onclick = function() {
             goToStep('claim');
             clearOtpInputs();
         };
         
-        // Continue
         document.getElementById('sw-continue').onclick = hide;
         document.getElementById('sw-close-already').onclick = hide;
     }
@@ -838,7 +837,6 @@ const SpinWheel = (function() {
         const segmentIndex = selectedPrize.segments[Math.floor(Math.random() * selectedPrize.segments.length)];
         wonAmount = selectedPrize.value;
         
-        // Calculate rotation
         const segAngle = 360 / SEGMENTS.length;
         const targetAngle = 360 - (segmentIndex * segAngle + segAngle / 2);
         const spins = 5 + Math.floor(Math.random() * 3);
@@ -849,12 +847,11 @@ const SpinWheel = (function() {
         
         setTimeout(() => {
             isSpinning = false;
-            // Show claim form
             document.getElementById('sw-claim-amount').textContent = '₹' + wonAmount;
             document.getElementById('sw-otp-amount').textContent = '₹' + wonAmount;
             goToStep('claim');
             document.getElementById('sw-name').focus();
-            toast('🎉 You won ₹' + wonAmount + '! Verify to claim.', 'success');
+            toast('🎉 You won ₹' + wonAmount + '! Enter details to claim.', 'success');
         }, 4200);
     }
     
@@ -881,28 +878,34 @@ const SpinWheel = (function() {
         
         btn.textContent = 'Sending OTP...';
         
-        try {
-            if (auth) {
+        // Show/hide demo hint
+        document.getElementById('sw-demo-hint').classList.toggle('sw-hidden', !isDemoMode);
+        
+        if (isDemoMode) {
+            // Demo mode - just show OTP screen
+            showOtpStep();
+            toast('Test mode: Use OTP 123456', 'info');
+        } else {
+            // Real Firebase OTP
+            try {
                 if (!recaptchaVerifier) {
                     recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sw-recaptcha', { size: 'invisible' });
                 }
                 confirmationResult = await auth.signInWithPhoneNumber(userPhone, recaptchaVerifier);
                 showOtpStep();
-                toast('OTP sent!', 'success');
-            } else {
-                // Demo mode
+                toast('OTP sent to ' + userPhone, 'success');
+            } catch (err) {
+                console.error('OTP error:', err);
+                if (recaptchaVerifier) {
+                    recaptchaVerifier.clear();
+                    recaptchaVerifier = null;
+                }
+                // Fallback to demo mode
+                isDemoMode = true;
+                document.getElementById('sw-demo-hint').classList.remove('sw-hidden');
                 showOtpStep();
-                toast('Demo mode: Enter any 6 digits', 'info');
+                toast('Using test mode: OTP is 123456', 'info');
             }
-        } catch (err) {
-            console.error('OTP error:', err);
-            if (recaptchaVerifier) {
-                recaptchaVerifier.clear();
-                recaptchaVerifier = null;
-            }
-            // Fallback to demo mode
-            showOtpStep();
-            toast('Demo mode: Enter any 6 digits', 'info');
         }
     }
     
@@ -954,23 +957,37 @@ const SpinWheel = (function() {
         btn.disabled = true;
         btn.textContent = 'Verifying...';
         
-        try {
-            if (confirmationResult) {
-                await confirmationResult.confirm(otp);
-            }
-            // Success - save to wallet
-            await saveToWallet();
-        } catch (err) {
-            if (!confirmationResult) {
-                // Demo mode - accept any OTP
-                await saveToWallet();
-            } else {
-                toast('Invalid OTP. Try again.', 'error');
+        // Check OTP
+        let verified = false;
+        
+        if (isDemoMode) {
+            // Demo mode - accept 123456
+            verified = (otp === DEMO_OTP);
+            if (!verified) {
+                toast('Invalid OTP. Use 123456 for testing.', 'error');
                 clearOtpInputs();
                 document.querySelector('.sw-otp-input').focus();
                 btn.disabled = true;
                 btn.textContent = 'Verify & Claim 🎉';
+                return;
             }
+        } else {
+            // Real Firebase verification
+            try {
+                await confirmationResult.confirm(otp);
+                verified = true;
+            } catch (err) {
+                toast('Invalid OTP. Please try again.', 'error');
+                clearOtpInputs();
+                document.querySelector('.sw-otp-input').focus();
+                btn.disabled = true;
+                btn.textContent = 'Verify & Claim 🎉';
+                return;
+            }
+        }
+        
+        if (verified) {
+            await saveToWallet();
         }
     }
     
@@ -1006,19 +1023,22 @@ const SpinWheel = (function() {
         const expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000);
         
         // Save locally
-        localStorage.setItem('seasalt_user', JSON.stringify({
+        const userData = {
             name: userName,
             phone: userPhone,
             country: userCountry
-        }));
+        };
+        localStorage.setItem('seasalt_user', JSON.stringify(userData));
         
-        localStorage.setItem('seasalt_wallet', JSON.stringify({
+        const walletData = {
             amount: wonAmount,
             addedAt: now.toISOString(),
             expiresAt: expiresAt.toISOString()
-        }));
-        
+        };
+        localStorage.setItem('seasalt_wallet', JSON.stringify(walletData));
         localStorage.setItem('seasalt_spin_done', 'true');
+        
+        console.log('SpinWheel: Wallet saved', walletData);
         
         // Save to Supabase
         try {
@@ -1028,7 +1048,7 @@ const SpinWheel = (function() {
             );
             const existing = await checkRes.json();
             
-            const userData = {
+            const dbData = {
                 name: userName,
                 selected_country: userCountry,
                 wallet_balance: wonAmount,
@@ -1040,13 +1060,13 @@ const SpinWheel = (function() {
                 await fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(userPhone), {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-                    body: JSON.stringify(userData)
+                    body: JSON.stringify(dbData)
                 });
             } else {
                 await fetch(SUPABASE_URL + '/rest/v1/users', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-                    body: JSON.stringify({ phone: userPhone, total_visits: 1, ...userData })
+                    body: JSON.stringify({ phone: userPhone, total_visits: 1, ...dbData })
                 });
             }
             
@@ -1061,23 +1081,30 @@ const SpinWheel = (function() {
                     balance_after: wonAmount
                 })
             });
+            
+            console.log('SpinWheel: Saved to Supabase');
         } catch (e) {
-            console.warn('Supabase save error:', e);
+            console.warn('SpinWheel: Supabase save error', e);
         }
         
         // Update Store if available
         if (typeof Store !== 'undefined') {
-            if (Store.setUser) Store.setUser({ name: userName, phone: userPhone });
+            if (Store.setUser) Store.setUser(userData);
             if (Store.markSpinCompleted) Store.markSpinCompleted();
             if (Store.addToWallet) Store.addToWallet(wonAmount, 'Spin Wheel Reward');
         }
         
-        // Show success
+        // Dispatch event for other components
+        window.dispatchEvent(new CustomEvent('walletUpdated', { 
+            detail: { amount: wonAmount, expiresAt: expiresAt.toISOString() } 
+        }));
+        
+        // Show success screen
         document.getElementById('sw-final-amount').textContent = '₹' + wonAmount;
         document.getElementById('sw-wallet-balance').textContent = '₹' + wonAmount;
         goToStep('success');
         startCountdownTimer(expiresAt);
-        toast('🎊 ₹' + wonAmount + ' added to wallet!', 'success');
+        toast('🎊 ₹' + wonAmount + ' added to your wallet!', 'success');
     }
     
     function startCountdownTimer(expiresAt) {
@@ -1101,7 +1128,7 @@ const SpinWheel = (function() {
     }
     
     // ============================================
-    // WALLET HELPERS
+    // WALLET HELPERS (for checkout integration)
     // ============================================
     function getWalletBalance() {
         try {
@@ -1131,7 +1158,12 @@ const SpinWheel = (function() {
             const data = JSON.parse(localStorage.getItem('seasalt_wallet') || '{}');
             if (data.amount) {
                 data.amount = Math.max(0, data.amount - amountUsed);
-                data.amount === 0 ? localStorage.removeItem('seasalt_wallet') : localStorage.setItem('seasalt_wallet', JSON.stringify(data));
+                if (data.amount === 0) {
+                    localStorage.removeItem('seasalt_wallet');
+                } else {
+                    localStorage.setItem('seasalt_wallet', JSON.stringify(data));
+                }
+                window.dispatchEvent(new CustomEvent('walletUpdated', { detail: { amount: data.amount } }));
             }
         } catch (e) {}
     }
@@ -1164,22 +1196,27 @@ const SpinWheel = (function() {
             return;
         }
         const t = document.createElement('div');
-        t.style.cssText = `position:fixed;bottom:100px;left:50%;transform:translateX(-50%);padding:12px 24px;border-radius:12px;color:#fff;font-weight:600;z-index:99999;background:${type === 'success' ? '#10B981' : type === 'error' ? '#EF4444' : '#6B7280'}`;
+        t.style.cssText = `position:fixed;bottom:100px;left:50%;transform:translateX(-50%);padding:12px 24px;border-radius:12px;color:#fff;font-weight:600;z-index:99999;background:${type === 'success' ? '#10B981' : type === 'error' ? '#EF4444' : '#F59E0B'}`;
         t.textContent = msg;
         document.body.appendChild(t);
         setTimeout(() => t.remove(), 3000);
     }
     
-    // ============================================
-    // INIT
-    // ============================================
     function init() {
         if (shouldShow()) {
             setTimeout(show, 1000);
         }
     }
     
-    return { init, show, hide, shouldShow, getWalletBalance, getWalletExpiry, useWallet };
+    return { 
+        init, 
+        show, 
+        hide, 
+        shouldShow, 
+        getWalletBalance, 
+        getWalletExpiry, 
+        useWallet 
+    };
 })();
 
 window.SpinWheel = SpinWheel;
