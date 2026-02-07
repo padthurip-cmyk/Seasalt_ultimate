@@ -1,19 +1,15 @@
 /**
- * SeaSalt Pickles - Wallet UI Component v3
- * =========================================
- * Shows wallet balance with LIVE TIMER in header
- * Targets: #wallet-btn and #wallet-balance
+ * SeaSalt Pickles - Wallet UI v4
+ * ==============================
+ * Targets: #wallet-btn button and #wallet-balance span
+ * Shows live countdown timer below the balance
  */
 
 const WalletUI = (function() {
     'use strict';
     
     let timerInterval = null;
-    let timerElement = null;
     
-    // ============================================
-    // GET WALLET DATA
-    // ============================================
     function getWalletData() {
         try {
             const data = JSON.parse(localStorage.getItem('seasalt_wallet') || '{}');
@@ -23,26 +19,17 @@ const WalletUI = (function() {
             const now = new Date();
             const isExpired = now > expiresAt;
             
-            if (isExpired) {
-                // Clear expired wallet
-                localStorage.removeItem('seasalt_wallet');
-                return null;
-            }
-            
             return {
                 amount: data.amount,
                 expiresAt: expiresAt,
-                isExpired: false,
-                timeLeft: expiresAt - now
+                isExpired: isExpired,
+                timeLeft: isExpired ? 0 : expiresAt - now
             };
         } catch (e) {
             return null;
         }
     }
     
-    // ============================================
-    // FORMAT TIME
-    // ============================================
     function formatTime(ms) {
         if (ms <= 0) return '00:00:00';
         const h = Math.floor(ms / 3600000);
@@ -51,79 +38,75 @@ const WalletUI = (function() {
         return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
     }
     
-    // ============================================
-    // UPDATE WALLET DISPLAY
-    // ============================================
     function updateWalletDisplay() {
         const wallet = getWalletData();
         
-        // Target the exact elements from SeaSalt's HTML
+        // Target the exact elements from your HTML
         const walletBtn = document.getElementById('wallet-btn');
-        const walletBalance = document.getElementById('wallet-balance');
+        const balanceSpan = document.getElementById('wallet-balance');
         
-        if (!walletBtn || !walletBalance) {
-            console.log('[WalletUI] Wallet elements not found, retrying...');
-            setTimeout(updateWalletDisplay, 1000);
-            return;
+        if (!walletBtn || !balanceSpan) {
+            console.log('[WalletUI] Elements not found, retrying...');
+            return false;
         }
         
-        if (!wallet) {
-            // No wallet - show ₹0
-            walletBalance.textContent = '₹0';
+        if (!wallet || wallet.isExpired) {
+            // No wallet or expired - show ₹0
+            balanceSpan.textContent = '₹0';
             // Remove timer if exists
-            if (timerElement && timerElement.parentElement) {
-                timerElement.remove();
-                timerElement = null;
-            }
-            return;
+            const timerEl = walletBtn.querySelector('.wallet-timer');
+            if (timerEl) timerEl.remove();
+            // Reset button style
+            walletBtn.style.flexDirection = '';
+            return true;
         }
         
-        // Update balance amount
-        walletBalance.textContent = '₹' + wallet.amount;
+        // Update balance
+        balanceSpan.textContent = '₹' + wallet.amount;
         
-        // Add or update timer below the balance
-        if (!timerElement) {
+        // Add or update timer element
+        let timerEl = walletBtn.querySelector('.wallet-timer');
+        
+        if (!timerEl) {
             // Create timer element
-            timerElement = document.createElement('div');
-            timerElement.id = 'wallet-timer';
-            timerElement.style.cssText = `
-                font-size: 8px;
-                font-family: 'Courier New', monospace;
-                color: #b45309;
-                background: #fef3c7;
-                padding: 1px 4px;
-                border-radius: 4px;
-                margin-top: 2px;
-                font-weight: 600;
-                line-height: 1;
-            `;
+            timerEl = document.createElement('span');
+            timerEl.className = 'wallet-timer';
+            timerEl.style.cssText = 'font-size:9px;opacity:0.85;font-family:monospace;display:block;line-height:1;margin-top:1px;';
             
-            // Insert timer after the balance span
-            walletBalance.parentElement.appendChild(timerElement);
+            // Wrap balance and timer in a container
+            const wrapper = document.createElement('div');
+            wrapper.className = 'wallet-content';
+            wrapper.style.cssText = 'display:flex;flex-direction:column;align-items:center;line-height:1.1;';
             
-            // Adjust button to stack vertically
-            walletBtn.style.flexDirection = 'column';
-            walletBtn.style.alignItems = 'center';
-            walletBtn.style.paddingTop = '4px';
-            walletBtn.style.paddingBottom = '4px';
-            walletBtn.style.height = 'auto';
-            walletBtn.style.minHeight = '44px';
+            // Move balance span into wrapper
+            balanceSpan.parentNode.insertBefore(wrapper, balanceSpan);
+            wrapper.appendChild(balanceSpan);
+            wrapper.appendChild(timerEl);
+            
+            // Adjust button styling
+            walletBtn.style.cssText += 'padding:6px 10px;min-height:44px;';
         }
         
         // Update timer text
-        timerElement.textContent = '⏱ ' + formatTime(wallet.timeLeft);
+        timerEl.textContent = formatTime(wallet.timeLeft);
         
-        // Make wallet button clickable to show popup
-        walletBtn.onclick = showWalletPopup;
-        walletBtn.style.cursor = 'pointer';
+        // Add click handler for popup (once)
+        if (!walletBtn.hasAttribute('data-wallet-popup')) {
+            walletBtn.setAttribute('data-wallet-popup', 'true');
+            walletBtn.addEventListener('click', (e) => {
+                const w = getWalletData();
+                if (w && w.amount > 0) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showWalletPopup();
+                }
+            });
+        }
+        
+        return true;
     }
     
-    // ============================================
-    // SHOW WALLET POPUP
-    // ============================================
-    function showWalletPopup(e) {
-        if (e) e.preventDefault();
-        
+    function showWalletPopup() {
         const wallet = getWalletData();
         if (!wallet) return;
         
@@ -150,135 +133,119 @@ const WalletUI = (function() {
         
         popup.innerHTML = `
             <div style="background:white;border-radius:20px;padding:28px;max-width:320px;width:100%;text-align:center;position:relative;box-shadow:0 20px 60px rgba(0,0,0,0.3);animation:walletPopIn 0.3s ease;">
-                <button onclick="document.getElementById('wallet-popup-modal').remove()" style="position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:#f3f4f6;border:none;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+                <button onclick="this.closest('#wallet-popup-modal').remove()" style="position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:#f3f4f6;border:none;font-size:18px;cursor:pointer;line-height:1;">✕</button>
                 <div style="font-size:50px;margin-bottom:12px;">💰</div>
-                <h3 style="font-size:20px;font-weight:700;color:#1f2937;margin-bottom:4px;">Your Wallet</h3>
-                <p style="color:#6b7280;font-size:14px;margin-bottom:20px;">Spin wheel reward</p>
-                <div style="font-size:48px;font-weight:900;color:#10b981;margin-bottom:16px;">₹${wallet.amount}</div>
+                <h3 style="font-size:20px;font-weight:700;color:#1f2937;margin:0 0 4px 0;">Your Wallet</h3>
+                <p style="color:#6b7280;font-size:14px;margin:0 0 16px 0;">Spin wheel reward</p>
+                <div style="font-size:48px;font-weight:900;color:#10b981;margin-bottom:12px;">₹${wallet.amount}</div>
                 <div style="background:#fef3c7;border-radius:12px;padding:14px;margin-bottom:20px;">
-                    <div style="font-size:12px;color:#92400e;margin-bottom:4px;">⏰ Time remaining</div>
+                    <div style="font-size:12px;color:#92400e;margin-bottom:4px;">⏰ Expires in</div>
                     <div id="wallet-popup-timer" style="font-size:28px;font-weight:800;color:#d97706;font-family:'Courier New',monospace;">${formatTime(wallet.timeLeft)}</div>
                     <div style="font-size:11px;color:#b45309;margin-top:4px;">Use before it expires!</div>
                 </div>
-                <button onclick="document.getElementById('wallet-popup-modal').remove()" style="width:100%;padding:14px;background:linear-gradient(135deg,#ea580c,#dc2626);color:white;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;">
+                <button onclick="this.closest('#wallet-popup-modal').remove()" style="width:100%;padding:14px;background:linear-gradient(135deg,#ea580c,#dc2626);color:white;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;">
                     🛒 Shop Now
                 </button>
             </div>
+            <style>@keyframes walletPopIn{from{transform:scale(0.9);opacity:0}to{transform:scale(1);opacity:1}}</style>
         `;
-        
-        // Add animation styles
-        const style = document.createElement('style');
-        style.textContent = '@keyframes walletPopIn{from{transform:scale(0.9);opacity:0;}to{transform:scale(1);opacity:1;}}';
-        popup.appendChild(style);
         
         document.body.appendChild(popup);
         
         // Close on background click
-        popup.addEventListener('click', function(e) {
+        popup.addEventListener('click', (e) => {
             if (e.target === popup) popup.remove();
         });
         
-        // Update timer in popup every second
+        // Live update popup timer
         const popupTimerInterval = setInterval(() => {
             const w = getWalletData();
             const timerEl = document.getElementById('wallet-popup-timer');
-            if (!timerEl || !document.getElementById('wallet-popup-modal')) {
+            if (!timerEl || !popup.parentElement) {
                 clearInterval(popupTimerInterval);
                 return;
             }
-            if (w) {
-                timerEl.textContent = formatTime(w.timeLeft);
-            } else {
-                timerEl.textContent = 'EXPIRED';
-                clearInterval(popupTimerInterval);
-            }
+            if (w) timerEl.textContent = formatTime(w.timeLeft);
         }, 1000);
     }
     
-    // ============================================
-    // START LIVE TIMER
-    // ============================================
     function startTimer() {
         if (timerInterval) clearInterval(timerInterval);
         
-        // Update every second
+        // Update immediately
+        updateWalletDisplay();
+        
+        // Then every second
         timerInterval = setInterval(() => {
             const wallet = getWalletData();
             
-            if (!wallet) {
-                // Wallet expired or doesn't exist
+            if (!wallet || wallet.isExpired) {
+                if (wallet && wallet.isExpired) {
+                    localStorage.removeItem('seasalt_wallet');
+                    console.log('[WalletUI] Wallet expired, cleared');
+                }
                 clearInterval(timerInterval);
                 timerInterval = null;
                 updateWalletDisplay();
                 return;
             }
             
-            // Update timer element
-            if (timerElement) {
-                timerElement.textContent = '⏱ ' + formatTime(wallet.timeLeft);
-            }
-            
+            updateWalletDisplay();
         }, 1000);
     }
     
-    // ============================================
-    // INIT
-    // ============================================
     function init() {
-        console.log('[WalletUI v3] Initializing...');
+        console.log('[WalletUI] Initializing v4...');
         
         const wallet = getWalletData();
-        console.log('[WalletUI v3] Wallet data:', wallet);
+        console.log('[WalletUI] Current wallet:', wallet);
         
-        // Wait for DOM to be ready
-        function tryInit() {
-            const walletBtn = document.getElementById('wallet-btn');
-            if (!walletBtn) {
-                console.log('[WalletUI v3] Waiting for wallet-btn...');
-                setTimeout(tryInit, 500);
-                return;
-            }
-            
-            console.log('[WalletUI v3] Found wallet-btn, updating display...');
-            updateWalletDisplay();
-            
+        const startWallet = () => {
             if (wallet && !wallet.isExpired) {
-                startTimer();
+                // Try multiple times in case DOM loads late
+                const tryUpdate = () => {
+                    if (updateWalletDisplay()) {
+                        console.log('[WalletUI] ✅ Wallet display updated');
+                        startTimer();
+                    } else {
+                        console.log('[WalletUI] Waiting for DOM...');
+                    }
+                };
+                
+                tryUpdate();
+                setTimeout(tryUpdate, 300);
+                setTimeout(tryUpdate, 600);
+                setTimeout(tryUpdate, 1000);
+                setTimeout(tryUpdate, 2000);
             }
-        }
+        };
         
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => setTimeout(tryInit, 300));
+            document.addEventListener('DOMContentLoaded', startWallet);
         } else {
-            setTimeout(tryInit, 300);
+            startWallet();
         }
         
         // Listen for wallet updates (from spin wheel)
         window.addEventListener('walletUpdated', (e) => {
-            console.log('[WalletUI v3] Wallet updated event:', e.detail);
+            console.log('[WalletUI] walletUpdated event:', e.detail);
             setTimeout(() => {
                 updateWalletDisplay();
-                const wallet = getWalletData();
-                if (wallet && !timerInterval) {
-                    startTimer();
-                }
+                if (!timerInterval) startTimer();
             }, 100);
         });
         
-        // Update when page becomes visible
+        // Re-check when page becomes visible
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden) {
+            if (!document.hidden && getWalletData()) {
                 updateWalletDisplay();
             }
         });
     }
     
-    // ============================================
-    // PUBLIC API
-    // ============================================
     return {
-        init: init,
-        getWalletData: getWalletData,
+        init,
+        getWalletData,
         showPopup: showWalletPopup,
         update: updateWalletDisplay
     };
@@ -286,8 +253,6 @@ const WalletUI = (function() {
 
 // Auto-init
 WalletUI.init();
-
-// Expose globally
 window.WalletUI = WalletUI;
 
-console.log('[WalletUI v3] Script loaded');
+console.log('[WalletUI] v4 loaded - Targets #wallet-btn');
