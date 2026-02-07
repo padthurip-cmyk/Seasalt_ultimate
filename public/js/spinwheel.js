@@ -1,7 +1,8 @@
 /**
- * SeaSalt Pickles - Spin Wheel v11
+ * SeaSalt Pickles - Spin Wheel v12
  * =================================
- * Beautiful wallet timer design
+ * FIXED: Protects wallet display from being overwritten
+ * Uses MutationObserver to maintain wallet timer
  * TEST OTP: 123456
  */
 
@@ -9,10 +10,12 @@
     'use strict';
     
     // ════════════════════════════════════════════════════════════
-    // WALLET TIMER DISPLAY
+    // WALLET TIMER DISPLAY - Protected from overwrites
     // ════════════════════════════════════════════════════════════
     
     var walletTimerInterval = null;
+    var walletObserver = null;
+    var isUpdatingWallet = false;
     
     function getWalletData() {
         try {
@@ -43,95 +46,131 @@
         var style = document.createElement('style');
         style.id = 'wallet-timer-styles';
         style.textContent = '\
-            #wallet-btn.has-balance { \
+            #wallet-btn.has-wallet-balance { \
                 background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important; \
                 color: white !important; \
-                padding: 8px 14px !important; \
-                min-height: 48px !important; \
+                padding: 6px 12px !important; \
+                min-height: 44px !important; \
                 box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4) !important; \
-                animation: walletPulse 2s ease-in-out infinite; \
+                animation: walletGlow 2s ease-in-out infinite; \
+                transition: transform 0.2s ease !important; \
             } \
-            #wallet-btn.has-balance:hover { \
+            #wallet-btn.has-wallet-balance:hover { \
                 transform: scale(1.05); \
-                box-shadow: 0 6px 20px rgba(249, 115, 22, 0.5) !important; \
             } \
-            #wallet-btn.has-balance svg { \
+            #wallet-btn.has-wallet-balance svg, \
+            #wallet-btn.has-wallet-balance path { \
                 color: white !important; \
                 stroke: white !important; \
+                fill: none !important; \
             } \
-            .wallet-display-wrap { \
-                display: flex; \
-                flex-direction: column; \
-                align-items: center; \
-                line-height: 1.2; \
+            .sw-wallet-wrap { \
+                display: flex !important; \
+                flex-direction: column !important; \
+                align-items: center !important; \
+                line-height: 1.15 !important; \
+                gap: 2px !important; \
             } \
-            .wallet-amount-text { \
-                font-size: 15px; \
-                font-weight: 800; \
-                color: white; \
+            .sw-wallet-amount { \
+                font-size: 14px !important; \
+                font-weight: 800 !important; \
+                color: white !important; \
             } \
-            .wallet-timer-text { \
-                font-size: 10px; \
-                font-weight: 600; \
-                color: rgba(255,255,255,0.9); \
-                font-family: "Courier New", monospace; \
-                background: rgba(0,0,0,0.2); \
-                padding: 2px 6px; \
-                border-radius: 4px; \
-                margin-top: 2px; \
+            .sw-wallet-timer { \
+                font-size: 9px !important; \
+                font-weight: 600 !important; \
+                color: rgba(255,255,255,0.95) !important; \
+                font-family: "SF Mono", "Courier New", monospace !important; \
+                background: rgba(0,0,0,0.25) !important; \
+                padding: 2px 6px !important; \
+                border-radius: 4px !important; \
+                letter-spacing: 0.5px !important; \
             } \
-            @keyframes walletPulse { \
+            @keyframes walletGlow { \
                 0%, 100% { box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4); } \
-                50% { box-shadow: 0 4px 25px rgba(249, 115, 22, 0.6); } \
+                50% { box-shadow: 0 4px 20px rgba(249, 115, 22, 0.6); } \
             } \
         ';
         document.head.appendChild(style);
     }
     
     function updateWalletDisplay() {
+        if (isUpdatingWallet) return;
+        isUpdatingWallet = true;
+        
         var wallet = getWalletData();
         var walletBtn = document.getElementById('wallet-btn');
         var balanceEl = document.getElementById('wallet-balance');
         
         if (!balanceEl || !walletBtn) {
-            console.log('[Wallet] Elements not found');
+            isUpdatingWallet = false;
             return;
         }
         
         if (!wallet) {
-            // No wallet - reset to default
-            walletBtn.classList.remove('has-balance');
+            walletBtn.classList.remove('has-wallet-balance');
             balanceEl.innerHTML = '₹0';
+            isUpdatingWallet = false;
             return;
         }
         
-        // Inject styles
         injectWalletStyles();
+        walletBtn.classList.add('has-wallet-balance');
         
-        // Add special class to button
-        walletBtn.classList.add('has-balance');
-        
-        // Create beautiful display
-        var html = '<div class="wallet-display-wrap">' +
-            '<span class="wallet-amount-text">₹' + wallet.amount + '</span>' +
-            '<span class="wallet-timer-text">⏱ ' + formatWalletTime(wallet.timeLeft) + '</span>' +
-        '</div>';
+        // Build the HTML
+        var html = '<span class="sw-wallet-wrap">' +
+            '<span class="sw-wallet-amount">₹' + wallet.amount + '</span>' +
+            '<span class="sw-wallet-timer">⏱ ' + formatWalletTime(wallet.timeLeft) + '</span>' +
+        '</span>';
         
         balanceEl.innerHTML = html;
+        
+        isUpdatingWallet = false;
+    }
+    
+    function setupWalletProtection() {
+        // Use MutationObserver to detect when other scripts overwrite the wallet display
+        var balanceEl = document.getElementById('wallet-balance');
+        if (!balanceEl || walletObserver) return;
+        
+        walletObserver = new MutationObserver(function(mutations) {
+            var wallet = getWalletData();
+            if (!wallet) return;
+            
+            // Check if our custom HTML was removed
+            var hasOurFormat = balanceEl.querySelector('.sw-wallet-wrap');
+            if (!hasOurFormat && !isUpdatingWallet) {
+                console.log('[Wallet] Display was overwritten, restoring...');
+                setTimeout(updateWalletDisplay, 10);
+            }
+        });
+        
+        walletObserver.observe(balanceEl, {
+            childList: true,
+            subtree: true,
+            characterData: true
+        });
+        
+        console.log('[Wallet] Protection enabled');
     }
     
     function startWalletTimer() {
-        console.log('[Wallet] Starting timer display');
+        console.log('[Wallet] Starting timer');
         
         if (walletTimerInterval) clearInterval(walletTimerInterval);
         
         updateWalletDisplay();
+        setupWalletProtection();
         
         walletTimerInterval = setInterval(function() {
             var wallet = getWalletData();
             if (!wallet) {
                 clearInterval(walletTimerInterval);
                 walletTimerInterval = null;
+                if (walletObserver) {
+                    walletObserver.disconnect();
+                    walletObserver = null;
+                }
                 updateWalletDisplay();
                 return;
             }
@@ -140,13 +179,13 @@
     }
     
     function initWalletDisplay() {
-        console.log('[Wallet] Initializing display...');
+        console.log('[Wallet] Initializing...');
         var wallet = getWalletData();
         if (wallet) {
-            console.log('[Wallet] Found wallet: ₹' + wallet.amount);
+            console.log('[Wallet] Found: ₹' + wallet.amount);
             startWalletTimer();
         } else {
-            console.log('[Wallet] No wallet found');
+            console.log('[Wallet] No wallet');
             updateWalletDisplay();
         }
     }
@@ -511,7 +550,7 @@
             });
         }).catch(function(e) { console.warn('Supabase error:', e); });
         
-        // Update wallet display immediately
+        // Update wallet display and start timer with protection
         updateWalletDisplay();
         startWalletTimer();
         
@@ -545,7 +584,7 @@
     }
     
     function init() {
-        console.log('[SpinWheel] v11 Initializing...');
+        console.log('[SpinWheel] v12 Initializing...');
         initWalletDisplay();
         if (shouldShow()) {
             setTimeout(show, 1000);
@@ -559,6 +598,6 @@
     }
     
     window.SpinWheel = { init: init, show: show, hide: hide };
-    console.log('[SpinWheel] v11 loaded');
+    console.log('[SpinWheel] v12 loaded');
     
 })();
