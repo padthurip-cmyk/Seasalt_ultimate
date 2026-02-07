@@ -1,17 +1,18 @@
 /**
- * SeaSalt Pickles - UI Module v5 (Wallet Timer Compatible)
- * =========================================================
- * All DOM rendering. Handles loading overlay, #app visibility,
- * product cards, modals, cart, and category filtering.
+ * SeaSalt Pickles - UI Module v6 (Wallet Timer Fix)
+ * ==================================================
+ * FIXED: updateCartUI() now properly shows wallet timer
  * 
- * v5 CHANGES:
- * - updateCartUI() now preserves the spin wheel wallet timer
- * - Uses seasalt_wallet from localStorage (spin wheel format)
- * - Shows live countdown timer beside wallet balance
+ * The wallet button structure:
+ * <button id="wallet-btn">
+ *   <svg>...</svg>
+ *   <span id="wallet-balance">₹0</span>  <-- We update this
+ * </button>
  */
 
 const UI = (function() {
     var elements = {};
+    var walletTimerInterval = null;
     
     function cacheElements() {
         elements.loadingOverlay = document.getElementById('loading-overlay');
@@ -49,30 +50,86 @@ const UI = (function() {
         elements.modalTotalPrice = document.getElementById('modal-total-price');
     }
     
-    function init() { cacheElements(); }
+    function init() { 
+        cacheElements(); 
+        injectWalletStyles();
+        
+        // Check for existing wallet on init
+        setTimeout(function() {
+            var wallet = getSpinWallet();
+            if (wallet) {
+                console.log('[UI] Found existing spin wallet:', wallet.amount);
+                updateWalletDisplay(wallet);
+                startWalletTimer();
+            }
+        }, 100);
+    }
+    
     function getElements() { return elements; }
     
     // ============================================
-    // PRICE FORMATTER
+    // INJECT WALLET TIMER STYLES
     // ============================================
-    function fmt(amount) {
-        if (typeof CONFIG !== 'undefined' && CONFIG.formatPrice) return CONFIG.formatPrice(amount);
-        return '₹' + amount;
+    function injectWalletStyles() {
+        if (document.getElementById('wallet-timer-css')) return;
+        
+        var style = document.createElement('style');
+        style.id = 'wallet-timer-css';
+        style.textContent = '\
+            #wallet-btn.has-timer {\
+                background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important;\
+                color: white !important;\
+                padding: 6px 12px !important;\
+                animation: walletGlow 2s ease-in-out infinite;\
+            }\
+            #wallet-btn.has-timer svg {\
+                stroke: white !important;\
+            }\
+            #wallet-btn.has-timer #wallet-balance {\
+                display: flex !important;\
+                flex-direction: column !important;\
+                align-items: center !important;\
+                line-height: 1.1 !important;\
+                gap: 1px !important;\
+            }\
+            .wallet-amount {\
+                font-size: 14px !important;\
+                font-weight: 700 !important;\
+                color: white !important;\
+            }\
+            .wallet-timer {\
+                font-size: 9px !important;\
+                font-weight: 600 !important;\
+                color: rgba(255,255,255,0.9) !important;\
+                font-family: monospace !important;\
+                background: rgba(0,0,0,0.2) !important;\
+                padding: 1px 6px !important;\
+                border-radius: 4px !important;\
+            }\
+            @keyframes walletGlow {\
+                0%, 100% { box-shadow: 0 2px 10px rgba(249, 115, 22, 0.4); }\
+                50% { box-shadow: 0 2px 20px rgba(249, 115, 22, 0.6); }\
+            }\
+        ';
+        document.head.appendChild(style);
     }
-
+    
     // ============================================
-    // SPIN WHEEL WALLET HELPERS (NEW in v5)
+    // SPIN WALLET HELPERS
     // ============================================
-    function getSpinWheelWallet() {
+    function getSpinWallet() {
         try {
             var data = JSON.parse(localStorage.getItem('seasalt_wallet') || '{}');
             if (!data.amount || data.amount <= 0) return null;
+            
             var expiresAt = new Date(data.expiresAt);
             var now = new Date();
-            if (now > expiresAt) {
-                // Wallet expired
+            
+            if (now >= expiresAt) {
+                localStorage.removeItem('seasalt_wallet');
                 return null;
             }
+            
             return {
                 amount: data.amount,
                 timeLeft: expiresAt - now
@@ -82,16 +139,86 @@ const UI = (function() {
         }
     }
     
-    function formatWalletTime(ms) {
+    function formatTime(ms) {
         if (ms <= 0) return '00:00:00';
         var h = Math.floor(ms / 3600000);
         var m = Math.floor((ms % 3600000) / 60000);
         var s = Math.floor((ms % 60000) / 1000);
         return h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
     }
+    
+    // ============================================
+    // UPDATE WALLET DISPLAY (THE KEY FIX!)
+    // ============================================
+    function updateWalletDisplay(wallet) {
+        if (!elements.walletBalance) {
+            elements.walletBalance = document.getElementById('wallet-balance');
+        }
+        if (!elements.walletBtn) {
+            elements.walletBtn = document.getElementById('wallet-btn');
+        }
+        if (!elements.walletBalance) return;
+        
+        console.log('[UI] updateWalletDisplay called with:', wallet);
+        
+        if (wallet && wallet.amount > 0) {
+            // Show wallet with timer
+            if (elements.walletBtn) elements.walletBtn.classList.add('has-timer');
+            elements.walletBalance.innerHTML = 
+                '<span class="wallet-amount">₹' + wallet.amount + '</span>' +
+                '<span class="wallet-timer">⏱ ' + formatTime(wallet.timeLeft) + '</span>';
+        } else {
+            // Show default ₹0
+            if (elements.walletBtn) elements.walletBtn.classList.remove('has-timer');
+            elements.walletBalance.textContent = '₹0';
+        }
+    }
+    
+    // ============================================
+    // START WALLET TIMER
+    // ============================================
+    function startWalletTimer() {
+        console.log('[UI] Starting wallet timer...');
+        
+        // Clear existing
+        if (walletTimerInterval) {
+            clearInterval(walletTimerInterval);
+            walletTimerInterval = null;
+        }
+        
+        walletTimerInterval = setInterval(function() {
+            var wallet = getSpinWallet();
+            
+            if (!wallet) {
+                // Wallet expired
+                console.log('[UI] Wallet expired, stopping timer');
+                clearInterval(walletTimerInterval);
+                walletTimerInterval = null;
+                updateWalletDisplay(null);
+                return;
+            }
+            
+            // Update timer only (not full rebuild)
+            var timerEl = document.querySelector('#wallet-balance .wallet-timer');
+            if (timerEl) {
+                timerEl.textContent = '⏱ ' + formatTime(wallet.timeLeft);
+            } else {
+                // Timer element missing, rebuild
+                updateWalletDisplay(wallet);
+            }
+        }, 1000);
+    }
 
     // ============================================
-    // LOADING - CRITICAL: must toggle #app visibility
+    // PRICE FORMATTER
+    // ============================================
+    function fmt(amount) {
+        if (typeof CONFIG !== 'undefined' && CONFIG.formatPrice) return CONFIG.formatPrice(amount);
+        return '₹' + amount;
+    }
+
+    // ============================================
+    // LOADING
     // ============================================
     function showLoading() {
         if (elements.loadingOverlay) elements.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none', 'hidden');
@@ -209,7 +336,6 @@ const UI = (function() {
     function renderFeaturedProducts(products) {
         if (!elements.featuredProducts) return;
         
-        // Show all products as featured (Supabase data has isFeatured:true from api.js)
         var featured = products.slice(0, 6);
         
         if (featured.length === 0) {
@@ -218,7 +344,6 @@ const UI = (function() {
             return;
         }
         
-        // Make sure section is visible
         var section = document.getElementById('featured-section');
         if (section) section.classList.remove('hidden');
         var parent = elements.featuredProducts.parentElement;
@@ -404,99 +529,39 @@ const UI = (function() {
     }
     
     // ============================================
-    // UPDATED: updateCartUI with wallet timer support
+    // THE KEY FUNCTION - updateCartUI (FIXED!)
     // ============================================
     function updateCartUI() {
+        console.log('[UI] updateCartUI called');
+        
+        // Update cart count
         var count = Store.getCartItemCount();
         if (elements.cartCount) {
             elements.cartCount.textContent = count;
             elements.cartCount.classList.toggle('hidden', count === 0);
         }
         
-        // v5: Check for spin wheel wallet first (has timer)
-        var spinWallet = getSpinWheelWallet();
+        // === THE FIX: Always check for spin wallet first ===
+        var spinWallet = getSpinWallet();
+        console.log('[UI] Spin wallet:', spinWallet);
         
         if (spinWallet && spinWallet.amount > 0) {
-            // Use spin wheel wallet with timer display
-            updateWalletWithTimer(spinWallet);
+            // Has spin wallet - show with timer
+            updateWalletDisplay(spinWallet);
+            
+            // Make sure timer is running
+            if (!walletTimerInterval) {
+                startWalletTimer();
+            }
         } else {
-            // Fallback to Store wallet (no timer)
-            var walletBalance = Store.getWalletBalance();
-            if (elements.walletBalance) {
-                elements.walletBalance.textContent = fmt(walletBalance);
-            }
-            // Remove timer styling if no spin wallet
-            if (elements.walletBtn) {
-                elements.walletBtn.classList.remove('has-wallet-timer');
+            // No spin wallet - check Store balance
+            var storeBalance = Store.getWalletBalance();
+            if (storeBalance > 0) {
+                updateWalletDisplay({ amount: storeBalance, timeLeft: 0 });
+            } else {
+                updateWalletDisplay(null);
             }
         }
-    }
-    
-    // ============================================
-    // NEW: Update wallet display with timer
-    // ============================================
-    function updateWalletWithTimer(wallet) {
-        if (!elements.walletBalance) return;
-        
-        // Inject styles if not present
-        if (!document.getElementById('wallet-timer-styles')) {
-            var style = document.createElement('style');
-            style.id = 'wallet-timer-styles';
-            style.textContent = '\
-                #wallet-btn.has-wallet-timer { \
-                    background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important; \
-                    color: white !important; \
-                    padding: 6px 12px !important; \
-                    min-height: 44px !important; \
-                    box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4) !important; \
-                    animation: walletPulse 2s ease-in-out infinite; \
-                } \
-                #wallet-btn.has-wallet-timer:hover { \
-                    transform: scale(1.05); \
-                } \
-                #wallet-btn.has-wallet-timer svg { \
-                    color: white !important; \
-                    stroke: white !important; \
-                } \
-                .wallet-timer-wrap { \
-                    display: flex !important; \
-                    flex-direction: column !important; \
-                    align-items: center !important; \
-                    line-height: 1.15 !important; \
-                    gap: 2px !important; \
-                } \
-                .wallet-timer-amount { \
-                    font-size: 14px !important; \
-                    font-weight: 800 !important; \
-                    color: white !important; \
-                } \
-                .wallet-timer-countdown { \
-                    font-size: 9px !important; \
-                    font-weight: 600 !important; \
-                    color: rgba(255,255,255,0.95) !important; \
-                    font-family: "SF Mono", "Courier New", monospace !important; \
-                    background: rgba(0,0,0,0.25) !important; \
-                    padding: 2px 6px !important; \
-                    border-radius: 4px !important; \
-                } \
-                @keyframes walletPulse { \
-                    0%, 100% { box-shadow: 0 4px 15px rgba(249, 115, 22, 0.4); } \
-                    50% { box-shadow: 0 4px 20px rgba(249, 115, 22, 0.6); } \
-                } \
-            ';
-            document.head.appendChild(style);
-        }
-        
-        // Add timer class to wallet button
-        if (elements.walletBtn) {
-            elements.walletBtn.classList.add('has-wallet-timer');
-        }
-        
-        // Update the wallet balance element with amount + timer
-        elements.walletBalance.innerHTML = '<span class="wallet-timer-wrap">' +
-            '<span class="wallet-timer-amount">₹' + wallet.amount + '</span>' +
-            '<span class="wallet-timer-countdown">⏱ ' + formatWalletTime(wallet.timeLeft) + '</span>' +
-        '</span>';
     }
     
     function renderCartItems() {
@@ -555,8 +620,8 @@ const UI = (function() {
     function updateCartTotals() {
         var cart = Store.getCart();
         
-        // v5: Get wallet balance from spin wheel wallet
-        var spinWallet = getSpinWheelWallet();
+        // Get wallet balance from spin wallet
+        var spinWallet = getSpinWallet();
         var walletBalance = spinWallet ? spinWallet.amount : Store.getWalletBalance();
         
         if (elements.cartSubtotal) elements.cartSubtotal.textContent = fmt(cart.subtotal);
@@ -589,32 +654,7 @@ const UI = (function() {
     }
     
     // ============================================
-    // START WALLET TIMER (called from spinwheel)
-    // ============================================
-    var walletTimerInterval = null;
-    
-    function startWalletTimer() {
-        if (walletTimerInterval) clearInterval(walletTimerInterval);
-        
-        walletTimerInterval = setInterval(function() {
-            var wallet = getSpinWheelWallet();
-            if (!wallet) {
-                clearInterval(walletTimerInterval);
-                walletTimerInterval = null;
-                updateCartUI(); // Reset to ₹0
-                return;
-            }
-            
-            // Update timer display
-            var timerEl = document.querySelector('.wallet-timer-countdown');
-            if (timerEl) {
-                timerEl.textContent = '⏱ ' + formatWalletTime(wallet.timeLeft);
-            }
-        }, 1000);
-    }
-    
-    // ============================================
-    // PUBLIC API - every function other modules need
+    // PUBLIC API
     // ============================================
     return {
         init: init,
@@ -637,8 +677,10 @@ const UI = (function() {
         renderCartItems: renderCartItems,
         updateCartTotals: updateCartTotals,
         updateBottomNav: updateBottomNav,
+        // Exposed for spinwheel
         startWalletTimer: startWalletTimer,
-        getSpinWheelWallet: getSpinWheelWallet
+        updateWalletDisplay: updateWalletDisplay,
+        getSpinWallet: getSpinWallet
     };
 })();
 
