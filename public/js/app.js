@@ -1,7 +1,8 @@
 /**
- * SeaSalt Pickles - Main Application v4
+ * SeaSalt Pickles - Main Application v5
  * =======================================
  * Entry point. Initializes all modules.
+ * v5: Added product card and add-to-cart event bindings
  */
 
 const App = (function() {
@@ -19,6 +20,7 @@ const App = (function() {
             await loadData();
             Cart.init();
             setupEventListeners();
+            setupProductEvents();
             UI.hideLoading();
             
             setTimeout(function() {
@@ -34,10 +36,6 @@ const App = (function() {
             UI.showToast('Failed to load. Please refresh.', 'error');
         }
     }
-    
-    // ============================================
-    // DATA LOADING
-    // ============================================
     
     async function loadData() {
         try {
@@ -99,10 +97,6 @@ const App = (function() {
         }
     }
     
-    // ============================================
-    // UI RENDERING
-    // ============================================
-    
     function renderInitialUI() {
         var products = Store.getActiveProducts();
         var categories = Store.getCategories();
@@ -116,7 +110,130 @@ const App = (function() {
     }
     
     // ============================================
-    // EVENT LISTENERS
+    // PRODUCT EVENT HANDLERS (v5 NEW)
+    // ============================================
+    
+    function setupProductEvents() {
+        document.addEventListener('click', function(e) {
+            // Product card click
+            var card = e.target.closest('.product-card');
+            if (card) {
+                if (e.target.closest('.product-quick-add')) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    handleQuickAdd(card.dataset.productId);
+                    return;
+                }
+                handleProductClick(card.dataset.productId);
+                return;
+            }
+            
+            // Add to cart button in modal
+            if (e.target.closest('#add-to-cart-btn')) {
+                e.preventDefault();
+                handleAddToCart();
+                return;
+            }
+            
+            // Quantity buttons in modal
+            if (e.target.closest('#qty-decrease')) {
+                e.preventDefault();
+                handleQuantityChange(-1);
+                return;
+            }
+            if (e.target.closest('#qty-increase')) {
+                e.preventDefault();
+                handleQuantityChange(1);
+                return;
+            }
+            
+            // Close product modal
+            if (e.target.closest('#close-product-modal') || (e.target.id === 'product-modal' && e.target === e.currentTarget)) {
+                UI.closeProductModal();
+                return;
+            }
+            
+            // Cart button
+            if (e.target.closest('#cart-btn')) {
+                UI.openCart();
+                return;
+            }
+            
+            // Close cart
+            if (e.target.closest('#close-cart')) {
+                UI.closeCart();
+                return;
+            }
+            
+            // Checkout button
+            if (e.target.closest('#checkout-btn') || e.target.closest('.checkout-btn') || e.target.closest('[data-checkout]')) {
+                e.preventDefault();
+                if (typeof Cart !== 'undefined' && Cart.checkout) {
+                    Cart.checkout();
+                }
+                return;
+            }
+        });
+        
+        console.log('[App] ✅ Product event listeners attached');
+    }
+    
+    function handleProductClick(productId) {
+        var product = Store.getProducts().find(function(p) { return p.id === productId; });
+        if (product) {
+            UI.openProductModal(product);
+        }
+    }
+    
+    function handleQuickAdd(productId) {
+        var product = Store.getProducts().find(function(p) { return p.id === productId; });
+        if (product) {
+            var variant = (product.variants && product.variants[0]) 
+                ? product.variants[0] 
+                : { weight: '250g', price: product.price || 199 };
+            Store.addToCart(product, variant, 1);
+            UI.updateCartUI();
+            UI.showToast(product.name + ' added to cart!', 'success');
+        }
+    }
+    
+    function handleAddToCart() {
+        var state = Store.getState();
+        var product = state.selectedProduct;
+        var variant = state.selectedVariant;
+        var quantity = state.quantity || 1;
+        
+        if (!product) {
+            UI.showToast('Please select a product', 'error');
+            return;
+        }
+        
+        if (!variant) {
+            variant = (product.variants && product.variants[0]) 
+                ? product.variants[0] 
+                : { weight: '250g', price: product.price || 199 };
+        }
+        
+        Store.addToCart(product, variant, quantity);
+        UI.closeProductModal();
+        UI.showToast(product.name + ' added to cart!', 'success');
+        UI.updateCartUI();
+    }
+    
+    function handleQuantityChange(delta) {
+        var state = Store.getState();
+        var currentQty = state.quantity || 1;
+        var newQty = Math.max(1, Math.min(10, currentQty + delta));
+        Store.setQuantity(newQty);
+        
+        var qtyEl = document.getElementById('qty-value');
+        if (qtyEl) qtyEl.textContent = newQty;
+        
+        UI.updateModalPrice();
+    }
+    
+    // ============================================
+    // OTHER EVENT LISTENERS
     // ============================================
     
     function setupEventListeners() {
@@ -195,8 +312,6 @@ const App = (function() {
     }
     
     function showOrdersPage() {
-        var mainContent = document.getElementById('main-content');
-        // Orders module handles this if available
         if (typeof Orders !== 'undefined' && Orders.showOrdersPage) {
             Orders.showOrdersPage();
         }
