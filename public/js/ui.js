@@ -1,18 +1,17 @@
 /**
- * SeaSalt Pickles - UI Module v6 (Wallet Timer Fix)
+ * SeaSalt Pickles - UI Module v7 (Wallet Timer Fix)
  * ==================================================
- * FIXED: updateCartUI() now properly shows wallet timer
- * 
- * The wallet button structure:
- * <button id="wallet-btn">
- *   <svg>...</svg>
- *   <span id="wallet-balance">₹0</span>  <-- We update this
- * </button>
+ * FIXED: Uses 'seasalt_spin_wallet' key to avoid conflict with store.js
+ * store.js uses 'seasalt_wallet' with {balance, transactions} format
+ * spinwheel uses 'seasalt_spin_wallet' with {amount, expiresAt} format
  */
 
 const UI = (function() {
     var elements = {};
     var walletTimerInterval = null;
+    
+    // KEY CHANGE: Use different localStorage key to avoid store.js conflict
+    var SPIN_WALLET_KEY = 'seasalt_spin_wallet';
     
     function cacheElements() {
         elements.loadingOverlay = document.getElementById('loading-overlay');
@@ -54,11 +53,11 @@ const UI = (function() {
         cacheElements(); 
         injectWalletStyles();
         
-        // Check for existing wallet on init
+        // Check for existing spin wallet on init
         setTimeout(function() {
             var wallet = getSpinWallet();
+            console.log('[UI] Init - checking spin wallet:', wallet);
             if (wallet) {
-                console.log('[UI] Found existing spin wallet:', wallet.amount);
                 updateWalletDisplay(wallet);
                 startWalletTimer();
             }
@@ -115,18 +114,21 @@ const UI = (function() {
     }
     
     // ============================================
-    // SPIN WALLET HELPERS
+    // SPIN WALLET HELPERS - Uses separate key!
     // ============================================
     function getSpinWallet() {
         try {
-            var data = JSON.parse(localStorage.getItem('seasalt_wallet') || '{}');
+            var data = JSON.parse(localStorage.getItem(SPIN_WALLET_KEY) || '{}');
+            console.log('[UI] getSpinWallet raw data:', data);
+            
             if (!data.amount || data.amount <= 0) return null;
             
             var expiresAt = new Date(data.expiresAt);
             var now = new Date();
             
             if (now >= expiresAt) {
-                localStorage.removeItem('seasalt_wallet');
+                console.log('[UI] Spin wallet expired, removing');
+                localStorage.removeItem(SPIN_WALLET_KEY);
                 return null;
             }
             
@@ -135,6 +137,7 @@ const UI = (function() {
                 timeLeft: expiresAt - now
             };
         } catch (e) {
+            console.log('[UI] getSpinWallet error:', e);
             return null;
         }
     }
@@ -148,7 +151,7 @@ const UI = (function() {
     }
     
     // ============================================
-    // UPDATE WALLET DISPLAY (THE KEY FIX!)
+    // UPDATE WALLET DISPLAY
     // ============================================
     function updateWalletDisplay(wallet) {
         if (!elements.walletBalance) {
@@ -190,7 +193,6 @@ const UI = (function() {
             var wallet = getSpinWallet();
             
             if (!wallet) {
-                // Wallet expired
                 console.log('[UI] Wallet expired, stopping timer');
                 clearInterval(walletTimerInterval);
                 walletTimerInterval = null;
@@ -198,12 +200,11 @@ const UI = (function() {
                 return;
             }
             
-            // Update timer only (not full rebuild)
+            // Update timer only
             var timerEl = document.querySelector('#wallet-balance .wallet-timer');
             if (timerEl) {
                 timerEl.textContent = '⏱ ' + formatTime(wallet.timeLeft);
             } else {
-                // Timer element missing, rebuild
                 updateWalletDisplay(wallet);
             }
         }, 1000);
@@ -529,7 +530,7 @@ const UI = (function() {
     }
     
     // ============================================
-    // THE KEY FUNCTION - updateCartUI (FIXED!)
+    // THE KEY FUNCTION - updateCartUI
     // ============================================
     function updateCartUI() {
         console.log('[UI] updateCartUI called');
@@ -541,9 +542,9 @@ const UI = (function() {
             elements.cartCount.classList.toggle('hidden', count === 0);
         }
         
-        // === THE FIX: Always check for spin wallet first ===
+        // Check for spin wallet (separate key from store.js)
         var spinWallet = getSpinWallet();
-        console.log('[UI] Spin wallet:', spinWallet);
+        console.log('[UI] Spin wallet check:', spinWallet);
         
         if (spinWallet && spinWallet.amount > 0) {
             // Has spin wallet - show with timer
@@ -554,13 +555,8 @@ const UI = (function() {
                 startWalletTimer();
             }
         } else {
-            // No spin wallet - check Store balance
-            var storeBalance = Store.getWalletBalance();
-            if (storeBalance > 0) {
-                updateWalletDisplay({ amount: storeBalance, timeLeft: 0 });
-            } else {
-                updateWalletDisplay(null);
-            }
+            // No spin wallet - show ₹0
+            updateWalletDisplay(null);
         }
     }
     
@@ -622,7 +618,7 @@ const UI = (function() {
         
         // Get wallet balance from spin wallet
         var spinWallet = getSpinWallet();
-        var walletBalance = spinWallet ? spinWallet.amount : Store.getWalletBalance();
+        var walletBalance = spinWallet ? spinWallet.amount : 0;
         
         if (elements.cartSubtotal) elements.cartSubtotal.textContent = fmt(cart.subtotal);
         if (elements.deliveryCharge) {
@@ -680,7 +676,8 @@ const UI = (function() {
         // Exposed for spinwheel
         startWalletTimer: startWalletTimer,
         updateWalletDisplay: updateWalletDisplay,
-        getSpinWallet: getSpinWallet
+        getSpinWallet: getSpinWallet,
+        SPIN_WALLET_KEY: SPIN_WALLET_KEY
     };
 })();
 
