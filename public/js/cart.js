@@ -1,701 +1,270 @@
 /**
- * SeaSalt Pickles - Cart & Checkout Module v2
- * ============================================
- * Handles cart operations, delivery charges from Supabase, and Razorpay checkout.
+ * SeaSalt Pickles - Cart Module v2
+ * =================================
+ * FIXED: Wallet checkbox now properly deducts from spin wallet
+ * Uses 'seasalt_spin_wallet' localStorage key (same as ui.js v7 and spinwheel.js v14)
  */
 
 const Cart = (function() {
-    // ============================================
-    // STATE
-    // ============================================
-    let checkoutInProgress = false;
-    let deliveryChargesCache = [];
+    // Same localStorage key as ui.js and spinwheel.js
+    const SPIN_WALLET_KEY = 'seasalt_spin_wallet';
     
-    // Razorpay Key (Test Mode)
-    const RAZORPAY_KEY = 'rzp_test_SC97Hjqvf4LjoW';
+    // Cart state
+    let useWalletBalance = false;
     
-    // Supabase Config
-    const SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
-    
-    // ============================================
-    // INITIALIZATION
-    // ============================================
-    
-    function init() {
-        loadDeliveryCharges();
-        bindEvents();
-        subscribeToChanges();
-    }
-    
-    // ============================================
-    // LOAD DELIVERY CHARGES FROM SUPABASE
-    // ============================================
-    
-    async function loadDeliveryCharges() {
+    /**
+     * Get spin wallet data from localStorage
+     */
+    function getSpinWallet() {
         try {
-            const response = await fetch(`${SUPABASE_URL}/rest/v1/delivery_charges?select=*`, {
-                headers: {
-                    'apikey': SUPABASE_KEY,
-                    'Authorization': `Bearer ${SUPABASE_KEY}`
-                }
+            const data = JSON.parse(localStorage.getItem(SPIN_WALLET_KEY) || '{}');
+            if (!data.amount || data.amount <= 0) return null;
+            
+            const expiresAt = new Date(data.expiresAt);
+            const now = new Date();
+            
+            if (now >= expiresAt) {
+                localStorage.removeItem(SPIN_WALLET_KEY);
+                return null;
+            }
+            
+            return {
+                amount: data.amount,
+                expiresAt: data.expiresAt
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+    
+    /**
+     * Calculate cart totals with optional wallet deduction
+     */
+    function calculateTotals(applyWallet = false) {
+        const cart = Store.getCart();
+        const spinWallet = getSpinWallet();
+        const walletBalance = spinWallet ? spinWallet.amount : 0;
+        
+        let subtotal = cart.subtotal || 0;
+        let deliveryCharge = cart.deliveryCharge || 0;
+        let total = subtotal + deliveryCharge;
+        let walletDiscount = 0;
+        
+        // Apply wallet discount if checkbox is checked and wallet has balance
+        if (applyWallet && walletBalance > 0) {
+            // Wallet discount cannot exceed the total
+            walletDiscount = Math.min(walletBalance, total);
+            total = total - walletDiscount;
+        }
+        
+        return {
+            subtotal,
+            deliveryCharge,
+            walletDiscount,
+            total,
+            walletBalance
+        };
+    }
+    
+    /**
+     * Update the cart UI with calculated totals
+     */
+    function updateCartDisplay() {
+        const totals = calculateTotals(useWalletBalance);
+        const fmt = (amount) => '₹' + amount;
+        
+        // Update subtotal
+        const subtotalEl = document.getElementById('cart-subtotal');
+        if (subtotalEl) subtotalEl.textContent = fmt(totals.subtotal);
+        
+        // Update delivery
+        const deliveryEl = document.getElementById('delivery-charge');
+        if (deliveryEl) {
+            deliveryEl.innerHTML = totals.deliveryCharge === 0 
+                ? '<span class="text-spice-leaf font-medium">FREE</span>' 
+                : fmt(totals.deliveryCharge);
+        }
+        
+        // Update wallet discount row
+        const walletDiscountRow = document.getElementById('wallet-discount-row');
+        const walletDiscountEl = document.getElementById('wallet-discount');
+        if (walletDiscountRow && walletDiscountEl) {
+            if (totals.walletDiscount > 0) {
+                walletDiscountRow.style.display = 'flex';
+                walletDiscountEl.textContent = '-' + fmt(totals.walletDiscount);
+            } else {
+                walletDiscountRow.style.display = 'none';
+            }
+        }
+        
+        // Update total
+        const totalEl = document.getElementById('cart-total');
+        if (totalEl) totalEl.textContent = fmt(totals.total);
+        
+        // Update available wallet display
+        const availableWalletEl = document.getElementById('available-wallet');
+        if (availableWalletEl) availableWalletEl.textContent = fmt(totals.walletBalance);
+        
+        console.log('[Cart] Display updated:', totals);
+    }
+    
+    /**
+     * Initialize cart event listeners
+     */
+    function init() {
+        console.log('[Cart] Initializing...');
+        
+        // Listen for wallet checkbox changes
+        const walletCheckbox = document.getElementById('use-wallet');
+        if (walletCheckbox) {
+            walletCheckbox.addEventListener('change', function(e) {
+                useWalletBalance = e.target.checked;
+                console.log('[Cart] Use wallet changed:', useWalletBalance);
+                updateCartDisplay();
             });
-            
-            if (response.ok) {
-                deliveryChargesCache = await response.json();
-                console.log('[Cart] Loaded delivery charges:', deliveryChargesCache);
-            }
-        } catch (err) {
-            console.warn('[Cart] Failed to load delivery charges:', err);
-        }
-    }
-    
-    // ============================================
-    // GET DELIVERY CHARGE FOR USER
-    // ============================================
-    
-    function getDeliveryCharge(subtotal, country, region) {
-        // Default fallback
-        let freeAbove = 500;
-        let flatFee = 50;
-        
-        // Get user's country from localStorage
-        const userData = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
-        const userCountry = country || userData.country || 'India';
-        const userRegion = region || userData.region || null;
-        
-        // Find matching delivery charge
-        if (deliveryChargesCache && deliveryChargesCache.length > 0) {
-            // First try to match country + region
-            let match = deliveryChargesCache.find(dc => 
-                dc.country === userCountry && dc.region && dc.region.toLowerCase() === (userRegion || '').toLowerCase()
-            );
-            
-            // If no region match, try country only
-            if (!match) {
-                match = deliveryChargesCache.find(dc => 
-                    dc.country === userCountry && (!dc.region || dc.region === '')
-                );
-            }
-            
-            // If still no match, use first available for country
-            if (!match) {
-                match = deliveryChargesCache.find(dc => dc.country === userCountry);
-            }
-            
-            if (match) {
-                freeAbove = match.min_order_free || 500;
-                flatFee = match.flat_charge || 50;
-                console.log('[Cart] Using delivery charge:', match);
-            }
         }
         
-        // Calculate delivery
-        if (subtotal >= freeAbove) {
-            return 0; // Free delivery
-        }
-        return flatFee;
-    }
-    
-    function bindEvents() {
-        const elements = UI.getElements();
-        
-        // Cart button
-        elements.cartBtn.addEventListener('click', () => {
-            UI.openCart();
-            UI.renderCartItems();
-        });
-        
-        // Close cart
-        document.getElementById('close-cart').addEventListener('click', UI.closeCart);
-        document.getElementById('cart-overlay').addEventListener('click', UI.closeCart);
-        
-        // Use wallet checkbox
-        elements.useWalletCheckbox.addEventListener('change', (e) => {
-            Store.setUseWallet(e.target.checked);
-            UI.updateCartTotals();
-        });
-        
-        // Checkout button
-        document.getElementById('checkout-btn').addEventListener('click', handleCheckout);
-        
-        // Product modal events
-        bindProductModalEvents();
-    }
-    
-    function bindProductModalEvents() {
-        const elements = UI.getElements();
-        
-        // Close modal
-        document.getElementById('close-product-modal').addEventListener('click', UI.closeProductModal);
-        document.getElementById('product-modal-overlay').addEventListener('click', UI.closeProductModal);
-        
-        // Quantity controls
-        document.getElementById('qty-decrease').addEventListener('click', () => {
-            const current = Store.getState().quantity || 1;
-            if (current > 1) {
-                Store.setQuantity(current - 1);
-                elements.qtyValue.textContent = current - 1;
-                UI.updateModalPrice();
-            }
-        });
-        
-        document.getElementById('qty-increase').addEventListener('click', () => {
-            const current = Store.getState().quantity || 1;
-            if (current < CONFIG.CART.MAX_QUANTITY_PER_ITEM) {
-                Store.setQuantity(current + 1);
-                elements.qtyValue.textContent = current + 1;
-                UI.updateModalPrice();
-            }
-        });
-        
-        // Add to cart
-        document.getElementById('add-to-cart-btn').addEventListener('click', handleAddToCart);
-    }
-    
-    function subscribeToChanges() {
-        Store.subscribe('cart', () => {
-            UI.updateCartUI();
-        });
-        
-        Store.subscribe('wallet', () => {
-            UI.updateCartUI();
-        });
-    }
-    
-    // ============================================
-    // CART OPERATIONS
-    // ============================================
-    
-    function handleAddToCart() {
-        const state = Store.getState();
-        const product = state.selectedProduct;
-        const variant = state.selectedVariant;
-        const quantity = state.quantity || 1;
-        
-        if (!product || !variant) {
-            UI.showToast('Please select a variant', 'error');
-            return;
+        // Subscribe to Store cart changes
+        if (typeof Store !== 'undefined' && Store.subscribe) {
+            Store.subscribe('cart', function() {
+                console.log('[Cart] Store cart changed, updating display');
+                UI.updateCartUI();
+                updateCartDisplay();
+            });
         }
         
-        Store.addToCart(product, variant, quantity);
-        UI.updateCartUI();
-        UI.closeProductModal();
-        
-        UI.showToast(`${product.name} added to cart`, 'success');
+        console.log('[Cart] Initialized');
     }
     
-    // ============================================
-    // CHECKOUT
-    // ============================================
-    
-    async function handleCheckout() {
-        if (checkoutInProgress) return;
-        
+    /**
+     * Get checkout data for Razorpay
+     */
+    function getCheckoutData() {
+        const totals = calculateTotals(useWalletBalance);
         const cart = Store.getCart();
         
-        // Validate cart
-        if (!cart || !cart.items || cart.items.length === 0) {
+        return {
+            items: cart.items,
+            subtotal: totals.subtotal,
+            deliveryCharge: totals.deliveryCharge,
+            walletDiscount: totals.walletDiscount,
+            total: totals.total,
+            useWallet: useWalletBalance
+        };
+    }
+    
+    /**
+     * Clear wallet after successful order
+     */
+    function clearWalletAfterOrder() {
+        if (useWalletBalance) {
+            const spinWallet = getSpinWallet();
+            if (spinWallet) {
+                const totals = calculateTotals(true);
+                const remainingBalance = spinWallet.amount - totals.walletDiscount;
+                
+                if (remainingBalance <= 0) {
+                    // Remove wallet completely
+                    localStorage.removeItem(SPIN_WALLET_KEY);
+                } else {
+                    // Update wallet with remaining balance
+                    localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify({
+                        amount: remainingBalance,
+                        expiresAt: spinWallet.expiresAt
+                    }));
+                }
+                
+                // Update UI
+                if (typeof UI !== 'undefined') {
+                    UI.updateCartUI();
+                }
+            }
+        }
+        
+        // Reset checkbox state
+        useWalletBalance = false;
+        const walletCheckbox = document.getElementById('use-wallet');
+        if (walletCheckbox) walletCheckbox.checked = false;
+    }
+    
+    /**
+     * Handle Razorpay checkout
+     */
+    function initiateCheckout() {
+        const checkoutData = getCheckoutData();
+        
+        if (checkoutData.items.length === 0) {
             UI.showToast('Your cart is empty', 'error');
             return;
         }
         
-        if (cart.subtotal < CONFIG.CART.MIN_ORDER_VALUE) {
-            UI.showToast(`Minimum order value is ${CONFIG.formatPrice(CONFIG.CART.MIN_ORDER_VALUE)}`, 'error');
+        if (checkoutData.total <= 0) {
+            // Free order (fully covered by wallet)
+            handleFreeOrder(checkoutData);
             return;
         }
         
-        // Check if user is authenticated
-        const user = Store.getState().user;
-        if (!user) {
-            // Show phone input for quick checkout
-            showQuickAuth();
-            return;
-        }
-        
-        // Show checkout form
-        showCheckoutForm();
-    }
-    
-    function showQuickAuth() {
-        // Create quick auth modal
-        const modal = document.createElement('div');
-        modal.id = 'quick-auth-modal';
-        modal.className = 'fixed inset-0 z-[95] flex items-center justify-center p-4';
-        modal.innerHTML = `
-            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
-            <div class="relative bg-white rounded-2xl p-6 w-full max-w-sm animate-bounce-in">
-                <button class="absolute top-4 right-4 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center close-modal">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
-                
-                <h3 class="font-display text-xl font-bold text-gray-800 mb-4">Quick Checkout</h3>
-                <p class="text-gray-600 text-sm mb-4">Enter your phone number to continue</p>
-                
-                <div class="space-y-4">
-                    <div class="relative">
-                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">+91</span>
-                        <input type="tel" id="checkout-phone" maxlength="10" placeholder="Enter mobile number"
-                            class="w-full py-4 pl-14 pr-4 bg-gray-100 rounded-xl font-medium focus:outline-none focus:ring-2 focus:ring-pickle-500 focus:bg-white">
-                    </div>
-                    <button id="continue-checkout" class="w-full py-4 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600 transition-all">
-                        Continue to Checkout
-                    </button>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        // Event handlers
-        modal.querySelector('.close-modal').addEventListener('click', () => modal.remove());
-        modal.querySelector('.absolute').addEventListener('click', () => modal.remove());
-        
-        const phoneInput = modal.querySelector('#checkout-phone');
-        phoneInput.focus();
-        phoneInput.addEventListener('input', (e) => {
-            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
-        });
-        
-        modal.querySelector('#continue-checkout').addEventListener('click', () => {
-            const phone = phoneInput.value.trim();
-            if (phone.length !== 10) {
-                UI.showToast('Please enter a valid phone number', 'error');
-                return;
-            }
-            
-            // Save user (simplified auth for checkout)
-            Store.setUser({ phone: `+91${phone}` });
-            modal.remove();
-            showCheckoutForm();
-        });
-    }
-    
-    function showCheckoutForm() {
-        const cart = Store.getCart();
-        const user = Store.getState().user;
-        
-        // Recalculate delivery charge from Supabase data
-        const deliveryCharge = getDeliveryCharge(cart.subtotal);
-        
-        // Get wallet data
-        const walletData = JSON.parse(localStorage.getItem('seasalt_wallet') || '{}');
-        const walletBalance = walletData.amount || 0;
-        const walletExpiry = walletData.expiresAt ? new Date(walletData.expiresAt) : null;
-        const walletValid = walletExpiry && walletExpiry > new Date();
-        const availableWallet = walletValid ? walletBalance : 0;
-        
-        // Calculate wallet discount (already applied in cart or apply now)
-        const walletDiscount = cart.useWallet && availableWallet > 0 
-            ? Math.min(availableWallet, cart.subtotal + deliveryCharge) 
-            : 0;
-        
-        // Final total
-        const finalTotal = Math.max(0, cart.subtotal + deliveryCharge - walletDiscount);
-        
-        // Create checkout modal
-        const modal = document.createElement('div');
-        modal.id = 'checkout-modal';
-        modal.className = 'fixed inset-0 z-[95] overflow-y-auto';
-        modal.innerHTML = `
-            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
-            <div class="relative min-h-full flex items-start justify-center p-4 py-10">
-                <div class="bg-white rounded-2xl w-full max-w-lg animate-slide-up">
-                    <!-- Header -->
-                    <div class="sticky top-0 bg-white p-4 border-b border-gray-100 flex items-center justify-between rounded-t-2xl z-10">
-                        <h3 class="font-display text-xl font-bold text-gray-800">Checkout</h3>
-                        <button class="close-checkout w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                        </button>
-                    </div>
-                    
-                    <!-- Content -->
-                    <div class="p-4 space-y-4">
-                        <!-- Order Summary -->
-                        <div class="bg-gray-50 rounded-xl p-4">
-                            <h4 class="font-semibold text-gray-800 mb-3">Order Summary</h4>
-                            <div class="space-y-2 text-sm">
-                                ${cart.items.map(item => `
-                                    <div class="flex justify-between">
-                                        <span class="text-gray-600">${item.name} (${item.weight}) × ${item.quantity}</span>
-                                        <span class="font-medium">${CONFIG.formatPrice(item.price * item.quantity)}</span>
-                                    </div>
-                                `).join('')}
-                                <div class="border-t pt-2 mt-2">
-                                    <div class="flex justify-between">
-                                        <span class="text-gray-600">Subtotal</span>
-                                        <span class="font-medium">${CONFIG.formatPrice(cart.subtotal)}</span>
-                                    </div>
-                                    <div class="flex justify-between">
-                                        <span class="text-gray-600">Delivery</span>
-                                        <span class="font-medium">${deliveryCharge === 0 ? 'FREE' : CONFIG.formatPrice(deliveryCharge)}</span>
-                                    </div>
-                                    ${walletDiscount > 0 ? `
-                                    <div class="flex justify-between text-green-600">
-                                        <span>Wallet Discount</span>
-                                        <span class="font-medium">-${CONFIG.formatPrice(walletDiscount)}</span>
-                                    </div>
-                                    ` : ''}
-                                    <div class="flex justify-between text-lg font-bold mt-2 pt-2 border-t">
-                                        <span>Total</span>
-                                        <span class="text-pickle-600">${CONFIG.formatPrice(finalTotal)}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Wallet Option -->
-                        ${availableWallet > 0 ? `
-                        <div class="bg-green-50 border border-green-200 rounded-xl p-4">
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-3">
-                                    <span class="text-2xl">💰</span>
-                                    <div>
-                                        <div class="font-semibold text-green-800">Wallet: ₹${availableWallet}</div>
-                                        <div class="text-xs text-green-600" id="checkout-wallet-timer">Expires in ${formatWalletTime(walletExpiry - new Date())}</div>
-                                    </div>
-                                </div>
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    <input type="checkbox" id="checkout-use-wallet" ${cart.useWallet ? 'checked' : ''} class="w-5 h-5 accent-green-600">
-                                    <span class="text-sm font-medium text-green-700">Apply</span>
-                                </label>
-                            </div>
-                        </div>
-                        ` : ''}
-                        
-                        <!-- Delivery Address -->
-                        <div>
-                            <h4 class="font-semibold text-gray-800 mb-3">Delivery Address</h4>
-                            <div class="space-y-3">
-                                <input type="text" id="checkout-name" placeholder="Full Name" 
-                                    class="w-full py-3 px-4 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pickle-500 focus:bg-white">
-                                <input type="text" id="checkout-pincode" maxlength="6" placeholder="Pincode" 
-                                    class="w-full py-3 px-4 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pickle-500 focus:bg-white">
-                                <textarea id="checkout-address" placeholder="Full Address" rows="2"
-                                    class="w-full py-3 px-4 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pickle-500 focus:bg-white resize-none"></textarea>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <input type="text" id="checkout-city" placeholder="City" 
-                                        class="w-full py-3 px-4 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pickle-500 focus:bg-white">
-                                    <input type="text" id="checkout-state" placeholder="State" 
-                                        class="w-full py-3 px-4 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pickle-500 focus:bg-white">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Footer -->
-                    <div class="sticky bottom-0 bg-white p-4 border-t border-gray-100 rounded-b-2xl">
-                        <button id="pay-now-btn" class="w-full py-4 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600 transition-all flex items-center justify-center gap-2">
-                            <span>Pay ${CONFIG.formatPrice(finalTotal)}</span>
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        document.body.style.overflow = 'hidden';
-        
-        // Close cart sidebar
-        UI.closeCart();
-        
-        // Event handlers
-        modal.querySelector('.close-checkout').addEventListener('click', () => {
-            modal.remove();
-            document.body.style.overflow = '';
-        });
-        
-        // Wallet checkbox
-        const walletCheckbox = modal.querySelector('#checkout-use-wallet');
-        if (walletCheckbox) {
-            walletCheckbox.addEventListener('change', (e) => {
-                Store.setUseWallet(e.target.checked);
-                // Refresh checkout form
-                modal.remove();
-                document.body.style.overflow = '';
-                showCheckoutForm();
-            });
-        }
-        
-        // Pincode validation
-        const pincodeInput = modal.querySelector('#checkout-pincode');
-        pincodeInput.addEventListener('input', (e) => {
-            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
-        });
-        
-        // Update timer every second
-        if (availableWallet > 0) {
-            const timerEl = modal.querySelector('#checkout-wallet-timer');
-            const timerInterval = setInterval(() => {
-                const now = new Date();
-                const remaining = walletExpiry - now;
-                if (remaining <= 0) {
-                    timerEl.textContent = 'EXPIRED';
-                    clearInterval(timerInterval);
-                } else {
-                    timerEl.textContent = 'Expires in ' + formatWalletTime(remaining);
-                }
-            }, 1000);
-        }
-        
-        // Store calculated values for payment
-        modal._orderData = {
-            subtotal: cart.subtotal,
-            deliveryCharge: deliveryCharge,
-            walletDiscount: walletDiscount,
-            total: finalTotal,
-            useWallet: cart.useWallet && walletDiscount > 0
-        };
-        
-        // Pay button
-        modal.querySelector('#pay-now-btn').addEventListener('click', () => {
-            processPaymentWithRazorpay(modal);
-        });
-    }
-    
-    function formatWalletTime(ms) {
-        if (ms <= 0) return 'EXPIRED';
-        const h = Math.floor(ms / 3600000);
-        const m = Math.floor((ms % 3600000) / 60000);
-        const s = Math.floor((ms % 60000) / 1000);
-        return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-    }
-    
-    // ============================================
-    // RAZORPAY PAYMENT - MAIN FUNCTION
-    // ============================================
-    
-    async function processPaymentWithRazorpay(modal) {
-        // Validate form
-        const name = modal.querySelector('#checkout-name').value.trim();
-        const pincode = modal.querySelector('#checkout-pincode').value.trim();
-        const address = modal.querySelector('#checkout-address').value.trim();
-        const city = modal.querySelector('#checkout-city').value.trim();
-        const state = modal.querySelector('#checkout-state').value.trim();
-        
-        if (!name || !pincode || !address || !city || !state) {
-            UI.showToast('Please fill all address fields', 'error');
-            return;
-        }
-        
-        if (pincode.length !== 6) {
-            UI.showToast('Please enter a valid 6-digit pincode', 'error');
-            return;
-        }
-        
-        checkoutInProgress = true;
-        const payBtn = modal.querySelector('#pay-now-btn');
-        payBtn.disabled = true;
-        payBtn.innerHTML = '<span class="animate-spin">⏳</span> Processing...';
-        
-        const cart = Store.getCart();
-        const user = Store.getState().user;
-        const orderCalc = modal._orderData || {
-            subtotal: cart.subtotal,
-            deliveryCharge: getDeliveryCharge(cart.subtotal),
-            walletDiscount: 0,
-            total: cart.total
-        };
-        
-        // Generate order ID
-        const orderId = 'SS' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 4).toUpperCase();
-        
-        // Create order data
-        const orderData = {
-            orderId: orderId,
-            user: {
-                phone: user.phone,
-                name: name
+        // Regular Razorpay checkout
+        const options = {
+            key: CONFIG.RAZORPAY_KEY_ID,
+            amount: checkoutData.total * 100, // Razorpay expects paise
+            currency: 'INR',
+            name: 'SeaSalt Pickles',
+            description: 'Order Payment',
+            handler: function(response) {
+                handlePaymentSuccess(response, checkoutData);
             },
-            address: {
-                fullName: name,
-                phone: user.phone,
-                address: address,
-                city: city,
-                state: state,
-                pincode: pincode
+            prefill: {
+                name: '',
+                email: '',
+                contact: ''
             },
-            items: cart.items,
-            subtotal: orderCalc.subtotal,
-            deliveryCharge: orderCalc.deliveryCharge,
-            walletDiscount: orderCalc.walletDiscount,
-            total: orderCalc.total,
-            useWallet: orderCalc.useWallet
+            theme: {
+                color: '#D4451A'
+            }
         };
         
-        // If total is 0 (wallet covers everything), skip Razorpay
-        if (orderCalc.total <= 0) {
-            completeOrder(orderData, modal, 'wallet', 'Paid with Wallet');
-            return;
-        }
-        
-        // Open Razorpay
-        try {
-            const options = {
-                key: RAZORPAY_KEY,
-                amount: orderCalc.total * 100, // Amount in paise
-                currency: 'INR',
-                name: 'SeaSalt Pickles',
-                description: 'Order ' + orderId,
-                image: 'https://seasaltultimate.netlify.app/images/logo.png',
-                prefill: {
-                    name: name,
-                    contact: user.phone ? user.phone.replace(/^\+91/, '') : ''
-                },
-                notes: {
-                    order_id: orderId,
-                    address: address + ', ' + city
-                },
-                theme: {
-                    color: '#D4451A'
-                },
-                handler: function(response) {
-                    // Payment successful!
-                    console.log('✅ Razorpay Payment Success:', response);
-                    completeOrder(orderData, modal, 'razorpay', response.razorpay_payment_id);
-                },
-                modal: {
-                    ondismiss: function() {
-                        console.log('Payment cancelled by user');
-                        payBtn.disabled = false;
-                        payBtn.innerHTML = `<span>Pay ${CONFIG.formatPrice(orderCalc.total)}</span>`;
-                        checkoutInProgress = false;
-                    }
-                }
-            };
-            
-            if (typeof Razorpay === 'undefined') {
-                throw new Error('Razorpay not loaded');
-            }
-            
-            const rzp = new Razorpay(options);
-            
-            rzp.on('payment.failed', function(response) {
-                console.error('❌ Payment Failed:', response.error);
-                UI.showToast('Payment failed: ' + response.error.description, 'error');
-                payBtn.disabled = false;
-                payBtn.innerHTML = `<span>Pay ${CONFIG.formatPrice(orderCalc.total)}</span>`;
-                checkoutInProgress = false;
-            });
-            
-            // Open Razorpay payment modal
-            rzp.open();
-            
-        } catch (error) {
-            console.error('Razorpay Error:', error);
-            UI.showToast('Payment initialization failed. Please try again.', 'error');
-            payBtn.disabled = false;
-            payBtn.innerHTML = `<span>Pay ${CONFIG.formatPrice(orderCalc.total)}</span>`;
-            checkoutInProgress = false;
-        }
+        const rzp = new Razorpay(options);
+        rzp.open();
     }
     
-    // ============================================
-    // COMPLETE ORDER AFTER PAYMENT
-    // ============================================
-    
-    function completeOrder(orderData, modal, paymentMethod, paymentId) {
-        // Save order to localStorage
-        const orders = JSON.parse(localStorage.getItem('seasalt_orders') || '[]');
-        
-        const newOrder = {
-            id: orderData.orderId,
-            items: orderData.items.map(item => ({
-                id: item.id,
-                name: item.name,
-                price: item.price,
-                quantity: item.quantity,
-                weight: item.weight,
-                image: item.image
-            })),
-            address: orderData.address,
-            subtotal: orderData.subtotal,
-            delivery: orderData.deliveryCharge,
-            walletUsed: orderData.walletDiscount,
-            total: orderData.total,
-            paymentMethod: paymentMethod,
-            paymentId: paymentId,
-            status: 'confirmed',
-            createdAt: new Date().toISOString()
-        };
-        
-        orders.unshift(newOrder);
-        localStorage.setItem('seasalt_orders', JSON.stringify(orders));
-        
-        // Deduct wallet if used
-        if (orderData.walletDiscount > 0) {
-            // Update wallet in localStorage
-            const wallet = JSON.parse(localStorage.getItem('seasalt_wallet') || '{}');
-            wallet.amount = Math.max(0, (wallet.amount || 0) - orderData.walletDiscount);
-            localStorage.setItem('seasalt_wallet', JSON.stringify(wallet));
-            
-            // Dispatch event for wallet UI update
-            window.dispatchEvent(new CustomEvent('walletUpdated', {
-                detail: { amount: wallet.amount, expiresAt: wallet.expiresAt }
-            }));
-            
-            // Also update Store if available
-            if (typeof Store !== 'undefined' && Store.deductFromWallet) {
-                Store.deductFromWallet(orderData.walletDiscount, 'Order Payment');
-            }
-        }
-        
-        // Clear cart
+    /**
+     * Handle free orders (wallet covers entire amount)
+     */
+    function handleFreeOrder(checkoutData) {
+        UI.showToast('Order placed successfully with wallet balance!', 'success');
+        clearWalletAfterOrder();
         Store.clearCart();
-        UI.updateCartUI();
         UI.closeCart();
-        
-        // Close checkout modal
-        modal.remove();
-        document.body.style.overflow = '';
-        
-        // Show success
-        showOrderSuccess(orderData, paymentId);
-        
-        checkoutInProgress = false;
     }
     
-    function showOrderSuccess(orderData, paymentId) {
-        const modal = document.createElement('div');
-        modal.className = 'fixed inset-0 z-[100] flex items-center justify-center p-4';
-        modal.innerHTML = `
-            <div class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
-            <div class="relative bg-white rounded-2xl p-8 w-full max-w-sm text-center animate-bounce-in">
-                <div class="text-6xl mb-4">🎉</div>
-                <h3 class="font-display text-2xl font-bold text-gray-800 mb-2">Order Placed!</h3>
-                <p class="text-gray-600 mb-4">Your delicious pickles are on the way!</p>
-                <div class="bg-pickle-50 rounded-xl p-4 mb-4">
-                    <p class="text-sm text-gray-600 mb-1">Order Total</p>
-                    <p class="text-2xl font-bold text-pickle-600">${CONFIG.formatPrice(orderData.total)}</p>
-                </div>
-                ${paymentId ? `<p class="text-xs text-gray-400 mb-4">Payment ID: ${paymentId}</p>` : ''}
-                <button class="w-full py-4 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600 transition-all" id="order-success-close">
-                    Continue Shopping
-                </button>
-            </div>
-        `;
-        
-        document.body.appendChild(modal);
-        
-        modal.querySelector('#order-success-close').addEventListener('click', () => {
-            modal.remove();
-        });
+    /**
+     * Handle successful payment
+     */
+    function handlePaymentSuccess(response, checkoutData) {
+        console.log('[Cart] Payment successful:', response);
+        UI.showToast('Payment successful! Order placed.', 'success');
+        clearWalletAfterOrder();
+        Store.clearCart();
+        UI.closeCart();
     }
     
-    // ============================================
-    // PUBLIC API
-    // ============================================
-    
+    // Public API
     return {
-        init,
-        addToCart: handleAddToCart,
-        checkout: handleCheckout,
-        placeOrder: processPaymentWithRazorpay,
-        getDeliveryCharge: getDeliveryCharge,
-        loadDeliveryCharges: loadDeliveryCharges
+        init: init,
+        updateCartDisplay: updateCartDisplay,
+        getCheckoutData: getCheckoutData,
+        initiateCheckout: initiateCheckout,
+        clearWalletAfterOrder: clearWalletAfterOrder,
+        getSpinWallet: getSpinWallet,
+        SPIN_WALLET_KEY: SPIN_WALLET_KEY
     };
 })();
 
-// Make Cart globally available
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    Cart.init();
+});
+
+// Export for global access
 window.Cart = Cart;
