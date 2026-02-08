@@ -1,11 +1,8 @@
 /**
- * SeaSalt Pickles - Spin Wheel v13
+ * SeaSalt Pickles - Spin Wheel v14
  * =================================
- * Works with UI.js v5 for wallet timer display
- * After OTP verification:
- * 1. Saves wallet to localStorage
- * 2. Calls UI.updateCartUI() to show the timer
- * 3. Calls UI.startWalletTimer() to keep it updating
+ * KEY FIX: Saves wallet to 'seasalt_spin_wallet' (not 'seasalt_wallet')
+ * This avoids conflict with store.js which uses 'seasalt_wallet'
  * 
  * TEST OTP: 123456
  */
@@ -13,11 +10,14 @@
 (function() {
     'use strict';
     
-    console.log('[SpinWheel] v13 loaded');
+    console.log('[SpinWheel] v14 loaded');
     
     var SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
     var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
     var DEMO_OTP = '123456';
+    
+    // KEY: Use different localStorage key to avoid store.js conflict
+    var SPIN_WALLET_KEY = 'seasalt_spin_wallet';
     
     var modal = null;
     var confirmationResult = null;
@@ -328,16 +328,29 @@
     }
     
     function saveToWallet() {
+        console.log('[SpinWheel] Saving wallet with amount:', wonAmount);
+        
         var now = new Date();
         var expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000);
         
+        // Save user data
         var userData = { name: userName, phone: userPhone, country: userCountry };
         localStorage.setItem('seasalt_user', JSON.stringify(userData));
         
-        // Save wallet in the format UI.js v5 expects
-        var walletData = { amount: wonAmount, addedAt: now.toISOString(), expiresAt: expiresAt.toISOString() };
-        localStorage.setItem('seasalt_wallet', JSON.stringify(walletData));
+        // ═══════════════════════════════════════════════════════════════
+        // KEY FIX: Save to 'seasalt_spin_wallet' (NOT 'seasalt_wallet')
+        // This avoids conflict with store.js
+        // ═══════════════════════════════════════════════════════════════
+        var walletData = { 
+            amount: wonAmount, 
+            addedAt: now.toISOString(), 
+            expiresAt: expiresAt.toISOString() 
+        };
+        localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify(walletData));
         localStorage.setItem('seasalt_spin_done', 'true');
+        
+        console.log('[SpinWheel] Saved to localStorage key:', SPIN_WALLET_KEY);
+        console.log('[SpinWheel] Wallet data:', walletData);
         
         // Save to Supabase
         fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(userPhone), {
@@ -372,22 +385,21 @@
             });
         }).catch(function(e) { console.warn('Supabase error:', e); });
         
-        // ════════════════════════════════════════════════════════════
-        // KEY CHANGE: Update UI.js wallet display and start timer
-        // ════════════════════════════════════════════════════════════
+        // Update UI
         if (typeof UI !== 'undefined') {
-            console.log('[SpinWheel] Updating UI wallet display...');
-            UI.updateCartUI();  // This will now show the timer
+            console.log('[SpinWheel] Updating UI...');
+            UI.updateCartUI();
             if (typeof UI.startWalletTimer === 'function') {
-                UI.startWalletTimer();  // Start the live countdown
+                UI.startWalletTimer();
             }
         }
         
-        // Dispatch event for any other listeners
+        // Dispatch event
         window.dispatchEvent(new CustomEvent('walletUpdated', {
             detail: { amount: wonAmount, expiresAt: expiresAt.toISOString() }
         }));
         
+        // Close modal and show toast
         hide();
         toast('🎊 ₹' + wonAmount + ' added to wallet! Use within 48 hours.', 'success');
     }
@@ -418,18 +430,25 @@
     }
     
     function init() {
-        console.log('[SpinWheel] v13 Initializing...');
+        console.log('[SpinWheel] v14 Initializing...');
         
-        // Check if user already has wallet, start timer
-        if (typeof UI !== 'undefined' && typeof UI.getSpinWheelWallet === 'function') {
-            var wallet = UI.getSpinWheelWallet();
-            if (wallet) {
-                console.log('[SpinWheel] Found existing wallet, starting timer');
-                UI.updateCartUI();
-                if (typeof UI.startWalletTimer === 'function') {
-                    UI.startWalletTimer();
+        // Check if user already has spin wallet
+        var existingWallet = localStorage.getItem(SPIN_WALLET_KEY);
+        console.log('[SpinWheel] Existing spin wallet:', existingWallet);
+        
+        if (existingWallet) {
+            try {
+                var data = JSON.parse(existingWallet);
+                if (data.amount > 0 && new Date(data.expiresAt) > new Date()) {
+                    console.log('[SpinWheel] Valid wallet found, updating UI');
+                    if (typeof UI !== 'undefined') {
+                        UI.updateCartUI();
+                        if (typeof UI.startWalletTimer === 'function') {
+                            UI.startWalletTimer();
+                        }
+                    }
                 }
-            }
+            } catch (e) {}
         }
         
         if (shouldShow()) {
