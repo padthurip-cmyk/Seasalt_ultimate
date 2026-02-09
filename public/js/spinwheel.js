@@ -1,411 +1,885 @@
 /**
- * SeaSalt Pickles - Spin Wheel v14
+ * SeaSalt Pickles - Spin Wheel v15
  * =================================
- * KEY FIX: Saves wallet to 'seasalt_spin_wallet' (not 'seasalt_wallet')
- * This avoids conflict with store.js which uses 'seasalt_wallet'
- * 
- * TEST OTP: 123456
+ * CAPTURES PHONE IMMEDIATELY when user clicks Send OTP
+ * Phone is saved to localStorage and Supabase right away
  */
 
-(function() {
+const SpinWheel = (function() {
     'use strict';
     
-    console.log('[SpinWheel] v14 loaded');
+    // ============================================
+    // SUPABASE CONFIG
+    // ============================================
+    const SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
     
-    var SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
-    var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
-    var DEMO_OTP = '123456';
+    // ============================================
+    // STATE
+    // ============================================
+    let modal = null;
+    let confirmationResult = null;
+    let userPhone = null;
+    let selectedCountryCode = '+91';
+    let isSpinning = false;
+    let auth = null;
+    let recaptchaVerifier = null;
     
-    // KEY: Use different localStorage key to avoid store.js conflict
-    var SPIN_WALLET_KEY = 'seasalt_spin_wallet';
+    const SPIN_WALLET_KEY = 'seasalt_spin_wallet';
     
-    var modal = null;
-    var confirmationResult = null;
-    var userPhone = null;
-    var userName = null;
-    var selectedCountryCode = '+91';
-    var userCountry = 'India';
-    var isSpinning = false;
-    var isDemoMode = true;
-    var auth = null;
-    var recaptchaVerifier = null;
-    var wonAmount = 0;
-    
-    var SEGMENTS = [
-        { label: '₹99', value: 99, color: '#10B981' },
-        { label: '₹199', value: 199, color: '#FBBF24' },
-        { label: '₹399', value: 399, color: '#8B5CF6' },
-        { label: '₹199', value: 199, color: '#34D399' },
-        { label: '₹599', value: 599, color: '#F87171' },
-        { label: '₹199', value: 199, color: '#FB923C' },
-        { label: '₹99', value: 99, color: '#60A5FA' },
-        { label: '₹199', value: 199, color: '#4ADE80' }
+    // ============================================
+    // WHEEL SEGMENTS (8 segments, 45° each)
+    // ============================================
+    const SEGMENTS = [
+        { label: '₹99', value: 99, color: '#DAA520', isWin: true },
+        { label: 'TRY AGAIN', value: 0, color: '#2E7D32', isWin: false },
+        { label: '₹299', value: 299, color: '#E53935', isWin: true },
+        { label: 'TRY AGAIN', value: 0, color: '#388E3C', isWin: false },
+        { label: '₹599', value: 599, color: '#7B1FA2', isWin: true },
+        { label: 'TRY AGAIN', value: 0, color: '#43A047', isWin: false },
+        { label: '₹99', value: 99, color: '#FFA000', isWin: true },
+        { label: 'TRY AGAIN', value: 0, color: '#2E7D32', isWin: false }
     ];
     
-    var PRIZES = [
-        { value: 99, weight: 20, segments: [0, 6] },
-        { value: 199, weight: 50, segments: [1, 3, 5, 7] },
-        { value: 399, weight: 20, segments: [2] },
-        { value: 599, weight: 10, segments: [4] }
-    ];
-    
-    var STYLES = '.sw-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;visibility:hidden;transition:all 0.3s ease}.sw-overlay.active{opacity:1;visibility:visible}.sw-modal{background:linear-gradient(145deg,#EA580C 0%,#DC2626 100%);border-radius:24px;width:100%;max-width:360px;max-height:90vh;overflow-y:auto;position:relative;transform:scale(0.9);transition:transform 0.3s ease;box-shadow:0 20px 60px rgba(0,0,0,0.4)}.sw-overlay.active .sw-modal{transform:scale(1)}.sw-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.2);border:none;color:white;font-size:18px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center}.sw-header{text-align:center;padding:28px 20px 16px}.sw-badge{display:inline-block;background:#F59E0B;color:white;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:700;margin-bottom:10px;text-transform:uppercase}.sw-title{font-size:26px;font-weight:800;color:white;margin:0 0 6px 0}.sw-subtitle{font-size:14px;color:rgba(255,255,255,0.9);margin:0}.sw-content{padding:0 24px 28px}.sw-hidden{display:none!important}.sw-wheel-section{display:flex;flex-direction:column;align-items:center;gap:20px}.sw-wheel-wrap{position:relative;width:280px;height:280px}.sw-wheel-img{width:100%;height:100%;transition:transform 4s cubic-bezier(0.17,0.67,0.12,0.99)}.sw-pointer{position:absolute;top:-5px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:18px solid transparent;border-right:18px solid transparent;border-top:30px solid white;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.3));z-index:10}.sw-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;background:linear-gradient(180deg,#fff,#f0f0f0);border-radius:50%;border:4px solid #e5e7eb;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 15px rgba(0,0,0,0.2);z-index:5}.sw-btn-spin{padding:16px 40px;background:linear-gradient(135deg,#F97316,#EA580C);color:white;border:none;border-radius:14px;font-size:18px;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(249,115,22,0.5);text-transform:uppercase;transition:transform 0.2s}.sw-btn-spin:disabled{opacity:0.7;cursor:not-allowed}.sw-claim{display:flex;flex-direction:column;gap:12px}.sw-won-box{background:linear-gradient(135deg,#10B981,#059669);border-radius:16px;padding:20px;text-align:center;margin-bottom:8px}.sw-won-label{font-size:14px;color:rgba(255,255,255,0.9)}.sw-won-amount{font-size:48px;font-weight:900;color:white}.sw-won-note{font-size:12px;color:rgba(255,255,255,0.8);margin-top:4px}.sw-input-group{display:flex;flex-direction:column;gap:4px}.sw-label{font-size:13px;font-weight:600;color:rgba(255,255,255,0.9)}.sw-select,.sw-input{width:100%;padding:14px 16px;border:none;border-radius:12px;background:white;font-size:16px;font-weight:500;color:#333;outline:none;box-sizing:border-box}.sw-phone-row{display:flex;gap:8px}.sw-phone-code{width:85px;flex-shrink:0;text-align:center;font-weight:700;background:#f3f4f6}.sw-btn{width:100%;padding:16px;border:none;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;transition:transform 0.2s,opacity 0.2s}.sw-btn:disabled{opacity:0.6;cursor:not-allowed}.sw-btn-orange{background:linear-gradient(135deg,#F59E0B,#D97706);color:white;box-shadow:0 4px 15px rgba(245,158,11,0.4)}.sw-btn-green{background:linear-gradient(135deg,#10B981,#059669);color:white;box-shadow:0 4px 15px rgba(16,185,129,0.4)}.sw-helper{text-align:center;color:rgba(255,255,255,0.8);font-size:13px;margin-top:4px}.sw-demo-note{background:rgba(251,191,36,0.2);border:1px solid rgba(251,191,36,0.5);border-radius:8px;padding:10px;text-align:center;color:#FCD34D;font-size:13px;font-weight:600}.sw-error{background:#FEE2E2;color:#DC2626;padding:10px;border-radius:8px;font-size:13px;text-align:center}.sw-otp{display:flex;flex-direction:column;align-items:center;gap:16px}.sw-otp-label{color:white;font-size:14px;text-align:center}.sw-otp-phone{color:#FCD34D;font-weight:700}.sw-otp-boxes{display:flex;gap:8px;justify-content:center}.sw-otp-input{width:46px;height:56px;border:none;border-radius:10px;background:white;font-size:24px;font-weight:700;text-align:center;color:#333;outline:none}.sw-resend{color:rgba(255,255,255,0.8);font-size:13px;text-align:center}.sw-resend-link{color:#FCD34D;cursor:pointer;font-weight:600;background:none;border:none}.sw-resend-link:disabled{color:rgba(255,255,255,0.5);cursor:not-allowed}.sw-change-link{color:rgba(255,255,255,0.7);font-size:13px;cursor:pointer;background:none;border:none;text-decoration:underline;margin-top:8px}.sw-result{text-align:center;padding:20px 0}.sw-result-icon{font-size:70px;margin-bottom:16px}.sw-result-title{font-size:24px;font-weight:800;color:white;margin:0 0 8px 0}.sw-result-text{font-size:15px;color:rgba(255,255,255,0.9);margin-bottom:16px}.sw-timer-box{background:rgba(0,0,0,0.25);border-radius:12px;padding:14px;margin:16px 0}.sw-timer-label{font-size:12px;color:rgba(255,255,255,0.8);margin-bottom:4px}.sw-timer-value{font-size:28px;font-weight:800;color:#FCD34D;font-family:monospace}.sw-btn-continue{padding:14px 36px;background:white;color:#EA580C;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;width:100%}@media(max-width:380px){.sw-modal{max-width:340px}.sw-wheel-wrap{width:250px;height:250px}.sw-otp-input{width:40px;height:50px;font-size:20px}}';
-    
-    function createWheelSVG() {
-        var size = 280, cx = size/2, cy = size/2, r = size/2 - 10, n = SEGMENTS.length, angle = 360/n;
-        var paths = '', labels = '';
-        for (var i = 0; i < SEGMENTS.length; i++) {
-            var seg = SEGMENTS[i];
-            var startAngle = (i * angle - 90) * Math.PI / 180;
-            var endAngle = ((i + 1) * angle - 90) * Math.PI / 180;
-            var x1 = cx + r * Math.cos(startAngle), y1 = cy + r * Math.sin(startAngle);
-            var x2 = cx + r * Math.cos(endAngle), y2 = cy + r * Math.sin(endAngle);
-            paths += '<path d="M'+cx+','+cy+' L'+x1.toFixed(1)+','+y1.toFixed(1)+' A'+r+','+r+' 0 0,1 '+x2.toFixed(1)+','+y2.toFixed(1)+' Z" fill="'+seg.color+'" stroke="white" stroke-width="2"/>';
-            var midAngle = ((i + 0.5) * angle - 90) * Math.PI / 180;
-            var labelR = r * 0.65, lx = cx + labelR * Math.cos(midAngle), ly = cy + labelR * Math.sin(midAngle);
-            var rotation = (i + 0.5) * angle;
-            labels += '<g transform="rotate('+rotation+', '+lx.toFixed(1)+', '+ly.toFixed(1)+')"><rect x="'+(lx-28).toFixed(1)+'" y="'+(ly-12).toFixed(1)+'" width="56" height="24" rx="12" fill="white" fill-opacity="0.95"/><text x="'+lx.toFixed(1)+'" y="'+(ly+1).toFixed(1)+'" font-size="14" font-weight="800" fill="'+seg.color+'" text-anchor="middle" dominant-baseline="middle" font-family="Arial,sans-serif">'+seg.label+'</text></g>';
+    // ============================================
+    // STYLES
+    // ============================================
+    const STYLES = `
+        .sw-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
         }
-        return '<svg viewBox="0 0 '+size+' '+size+'" class="sw-wheel-img" id="sw-wheel"><circle cx="'+cx+'" cy="'+cy+'" r="'+(r+6)+'" fill="white"/>'+paths+labels+'</svg>';
+        .sw-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .sw-modal {
+            background: linear-gradient(145deg, #9A3412 0%, #7C2D12 100%);
+            border-radius: 24px;
+            width: 100%;
+            max-width: 380px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        }
+        .sw-overlay.active .sw-modal {
+            transform: scale(1);
+        }
+        .sw-close {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            z-index: 10;
+            display: none;
+        }
+        .sw-close.visible {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .sw-close:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        .sw-header {
+            text-align: center;
+            padding: 28px 20px 16px;
+        }
+        .sw-badge {
+            display: inline-block;
+            background: rgba(218,165,32,0.2);
+            color: #DAA520;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .sw-title {
+            color: white;
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin: 0 0 8px;
+        }
+        .sw-subtitle {
+            color: rgba(255,255,255,0.8);
+            font-size: 0.95rem;
+            margin: 0;
+        }
+        .sw-content {
+            padding: 0 24px 28px;
+        }
+        .sw-input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .sw-select {
+            width: 100%;
+            padding: 14px 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            background: white;
+            cursor: pointer;
+        }
+        .sw-input {
+            width: 100%;
+            padding: 14px 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            text-align: center;
+            letter-spacing: 2px;
+            font-weight: 600;
+        }
+        .sw-input:focus {
+            outline: 3px solid #DAA520;
+        }
+        .sw-btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .sw-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .sw-btn-gold {
+            background: linear-gradient(135deg, #DAA520, #F4C430);
+            color: white;
+            box-shadow: 0 4px 15px rgba(218,165,32,0.4);
+        }
+        .sw-btn-gold:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(218,165,32,0.5);
+        }
+        .sw-helper {
+            text-align: center;
+            color: rgba(255,255,255,0.5);
+            font-size: 0.8rem;
+            margin-top: 12px;
+        }
+        .sw-hidden {
+            display: none !important;
+        }
+        .sw-otp-label {
+            text-align: center;
+            color: rgba(255,255,255,0.8);
+            font-size: 0.9rem;
+            margin-bottom: 16px;
+        }
+        .sw-otp-boxes {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            margin-bottom: 16px;
+        }
+        .sw-otp-input {
+            width: 45px;
+            height: 55px;
+            border: none;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        .sw-otp-input:focus {
+            outline: 3px solid #DAA520;
+        }
+        .sw-resend {
+            text-align: center;
+            color: rgba(255,255,255,0.6);
+            font-size: 0.85rem;
+            margin-top: 12px;
+        }
+        .sw-resend-link {
+            color: #DAA520;
+            cursor: pointer;
+            font-weight: 600;
+        }
+        .sw-wheel-wrap {
+            position: relative;
+            width: 280px;
+            height: 280px;
+            margin: 0 auto 20px;
+        }
+        .sw-wheel-img {
+            width: 100%;
+            height: 100%;
+            transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);
+        }
+        .sw-pointer {
+            position: absolute;
+            top: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 28px solid white;
+            z-index: 10;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        }
+        .sw-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #fff, #f0f0f0);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.8rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 5;
+        }
+        .sw-btn-spin {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #fff, #f8f8f8);
+            border: none;
+            border-radius: 14px;
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: #9A3412;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            transition: all 0.2s;
+        }
+        .sw-btn-spin:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+        .sw-btn-spin:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        .sw-result {
+            text-align: center;
+            padding: 20px 0;
+        }
+        .sw-result-icon {
+            font-size: 4rem;
+            margin-bottom: 16px;
+            animation: bounce 0.6s ease infinite;
+        }
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        .sw-result-title {
+            color: #DAA520;
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin: 0 0 8px;
+        }
+        .sw-result-amount {
+            color: white;
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin: 16px 0;
+        }
+        .sw-result-text {
+            color: rgba(255,255,255,0.8);
+            font-size: 1rem;
+            margin: 0 0 24px;
+        }
+        .sw-btn-continue {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #DAA520, #F4C430);
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(218,165,32,0.4);
+        }
+    `;
+    
+    // ============================================
+    // CREATE WHEEL SVG
+    // ============================================
+    function createWheelSVG() {
+        const size = 280;
+        const cx = size / 2;
+        const cy = size / 2;
+        const r = size / 2 - 10;
+        const segAngle = 360 / SEGMENTS.length;
+        
+        let paths = '';
+        let labels = '';
+        
+        SEGMENTS.forEach((seg, i) => {
+            const startAngle = i * segAngle - 90;
+            const endAngle = startAngle + segAngle;
+            
+            const start = {
+                x: cx + r * Math.cos(startAngle * Math.PI / 180),
+                y: cy + r * Math.sin(startAngle * Math.PI / 180)
+            };
+            const end = {
+                x: cx + r * Math.cos(endAngle * Math.PI / 180),
+                y: cy + r * Math.sin(endAngle * Math.PI / 180)
+            };
+            
+            const largeArc = segAngle > 180 ? 1 : 0;
+            
+            paths += `<path d="M${cx},${cy} L${start.x},${start.y} A${r},${r} 0 ${largeArc},1 ${end.x},${end.y} Z" fill="${seg.color}"/>`;
+            
+            // Label
+            const midAngle = (startAngle + segAngle / 2) * Math.PI / 180;
+            const labelR = r * 0.65;
+            const lx = cx + labelR * Math.cos(midAngle);
+            const ly = cy + labelR * Math.sin(midAngle);
+            const rotation = startAngle + segAngle / 2 + 90;
+            
+            const fontSize = seg.isWin ? 16 : 9;
+            labels += `
+                <g transform="rotate(${rotation}, ${lx}, ${ly})">
+                    <text x="${lx}" y="${ly}" fill="white" font-size="${fontSize}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${seg.label}</text>
+                </g>
+            `;
+        });
+        
+        return `<svg viewBox="0 0 ${size} ${size}" class="sw-wheel-img" id="sw-wheel">
+            <circle cx="${cx}" cy="${cy}" r="${r + 6}" fill="white" opacity="0.2"/>
+            ${paths}
+            ${labels}
+            <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="white" stroke-width="6"/>
+        </svg>`;
     }
     
+    // ============================================
+    // CREATE MODAL
+    // ============================================
     function createModal() {
-        if (!document.getElementById('sw-styles')) {
-            var style = document.createElement('style');
-            style.id = 'sw-styles';
-            style.textContent = STYLES;
-            document.head.appendChild(style);
-        }
+        injectStyles();
         
-        var html = '<div class="sw-overlay" id="sw-overlay"><div class="sw-modal"><button class="sw-close" id="sw-close">✕</button><div id="sw-step-wheel"><div class="sw-header"><div class="sw-badge">🎁 Limited Time Offer</div><h2 class="sw-title">🎉 Welcome Gift!</h2><p class="sw-subtitle">Spin to win wallet cashback up to ₹599</p></div><div class="sw-content"><div class="sw-wheel-section"><div class="sw-wheel-wrap"><div class="sw-pointer"></div>'+createWheelSVG()+'<div class="sw-center">🎰</div></div><button class="sw-btn-spin" id="sw-spin">🎲 SPIN NOW! 🎲</button></div></div></div><div id="sw-step-claim" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">🎉 You Won!</h2></div><div class="sw-content"><div class="sw-claim"><div class="sw-won-box"><div class="sw-won-label">Your Prize</div><div class="sw-won-amount" id="sw-claim-amount">₹199</div><div class="sw-won-note">Verify phone to claim your reward</div></div><div id="sw-claim-error" class="sw-error sw-hidden"></div><div class="sw-input-group"><div class="sw-label">Your Name</div><input type="text" class="sw-input" id="sw-name" placeholder="Enter your name"></div><div class="sw-input-group"><div class="sw-label">Country</div><select class="sw-select" id="sw-country"><option value="+91" data-country="India">🇮🇳 India (+91)</option><option value="+1" data-country="USA">🇺🇸 USA (+1)</option><option value="+44" data-country="UK">🇬🇧 UK (+44)</option><option value="+971" data-country="UAE">🇦🇪 UAE (+971)</option><option value="+65" data-country="Singapore">🇸🇬 Singapore (+65)</option><option value="+61" data-country="Australia">🇦🇺 Australia (+61)</option></select></div><div class="sw-input-group"><div class="sw-label">Phone Number</div><div class="sw-phone-row"><input type="text" class="sw-input sw-phone-code" id="sw-phone-code" value="+91" readonly><input type="tel" class="sw-input" id="sw-phone" placeholder="9876543210" maxlength="10"></div></div><button class="sw-btn sw-btn-orange" id="sw-send-otp" disabled>Send OTP to Claim ✨</button><p class="sw-helper">We\'ll send a verification code</p><div id="sw-recaptcha"></div></div></div></div><div id="sw-step-otp" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">Verify OTP</h2></div><div class="sw-content"><div class="sw-won-box" style="padding:14px;margin-bottom:16px;"><div class="sw-won-label">Claiming</div><div class="sw-won-amount" id="sw-otp-amount" style="font-size:36px;">₹199</div></div><div class="sw-otp"><p class="sw-otp-label">Enter 6-digit code sent to <span class="sw-otp-phone" id="sw-otp-phone"></span></p><div id="sw-demo-hint" class="sw-demo-note">🔑 Test OTP: <strong>123456</strong></div><div class="sw-otp-boxes"><input type="tel" class="sw-otp-input" maxlength="1" data-i="0"><input type="tel" class="sw-otp-input" maxlength="1" data-i="1"><input type="tel" class="sw-otp-input" maxlength="1" data-i="2"><input type="tel" class="sw-otp-input" maxlength="1" data-i="3"><input type="tel" class="sw-otp-input" maxlength="1" data-i="4"><input type="tel" class="sw-otp-input" maxlength="1" data-i="5"></div><button class="sw-btn sw-btn-green" id="sw-verify" disabled>Verify & Claim 🎉</button><p class="sw-resend">Didn\'t receive? <button class="sw-resend-link" id="sw-resend" disabled>Resend (<span id="sw-resend-timer">30</span>s)</button></p><button class="sw-change-link" id="sw-change-num">← Change number</button></div></div></div><div id="sw-step-already" class="sw-hidden"><div class="sw-content" style="padding-top:40px;"><div class="sw-result"><div class="sw-result-icon">⏳</div><h3 class="sw-result-title">Already Claimed!</h3><p class="sw-result-text">This number has already spun the wheel this month.</p><div class="sw-timer-box"><div class="sw-timer-label">Next spin available in</div><div class="sw-timer-value" id="sw-next-spin">-- days</div></div><button class="sw-btn-continue" id="sw-close-already">Continue Shopping →</button></div></div></div></div></div>';
+        const html = `
+            <div class="sw-overlay" id="sw-overlay">
+                <div class="sw-modal">
+                    <button class="sw-close" id="sw-close">✕</button>
+                    
+                    <div class="sw-header">
+                        <div class="sw-badge">🎁 Limited Time Offer</div>
+                        <h2 class="sw-title">🎉 Welcome Gift!</h2>
+                        <p class="sw-subtitle">Spin to win wallet cashback up to ₹599</p>
+                    </div>
+                    
+                    <div class="sw-content">
+                        <!-- PHONE SECTION -->
+                        <div class="sw-phone" id="sw-phone">
+                            <div class="sw-input-group">
+                                <select class="sw-select" id="sw-country">
+                                    <option value="+91">🇮🇳 India (+91)</option>
+                                    <option value="+1">🇺🇸 USA (+1)</option>
+                                    <option value="+44">🇬🇧 UK (+44)</option>
+                                    <option value="+971">🇦🇪 UAE (+971)</option>
+                                    <option value="+65">🇸🇬 Singapore (+65)</option>
+                                    <option value="+61">🇦🇺 Australia (+61)</option>
+                                    <option value="+966">🇸🇦 Saudi (+966)</option>
+                                    <option value="+974">🇶🇦 Qatar (+974)</option>
+                                    <option value="+60">🇲🇾 Malaysia (+60)</option>
+                                </select>
+                                <input type="tel" class="sw-input" id="sw-phone-input" placeholder="Enter mobile number" maxlength="10">
+                            </div>
+                            <button class="sw-btn sw-btn-gold" id="sw-send-otp" disabled>Send OTP ✨</button>
+                            <p class="sw-helper">We'll send a verification code to your phone</p>
+                        </div>
+                        
+                        <!-- OTP SECTION -->
+                        <div class="sw-otp sw-hidden" id="sw-otp">
+                            <p class="sw-otp-label">Enter the 6-digit code sent to your phone</p>
+                            <div class="sw-otp-boxes">
+                                <input type="text" class="sw-otp-input" maxlength="1" inputmode="numeric">
+                                <input type="text" class="sw-otp-input" maxlength="1" inputmode="numeric">
+                                <input type="text" class="sw-otp-input" maxlength="1" inputmode="numeric">
+                                <input type="text" class="sw-otp-input" maxlength="1" inputmode="numeric">
+                                <input type="text" class="sw-otp-input" maxlength="1" inputmode="numeric">
+                                <input type="text" class="sw-otp-input" maxlength="1" inputmode="numeric">
+                            </div>
+                            <button class="sw-btn sw-btn-gold" id="sw-verify" disabled>Verify & Spin 🎰</button>
+                            <p class="sw-resend">Didn't receive? <span class="sw-resend-link" id="sw-resend">Resend</span></p>
+                        </div>
+                        
+                        <!-- WHEEL SECTION -->
+                        <div class="sw-wheel-section sw-hidden" id="sw-wheel-section">
+                            <div class="sw-wheel-wrap">
+                                <div class="sw-pointer"></div>
+                                ${createWheelSVG()}
+                                <div class="sw-center">🎰</div>
+                            </div>
+                            <button class="sw-btn-spin" id="sw-spin">🎲 SPIN NOW! 🎲</button>
+                        </div>
+                        
+                        <!-- RESULT SECTION -->
+                        <div class="sw-result sw-hidden" id="sw-result">
+                            <div id="sw-win">
+                                <div class="sw-result-icon">🎉</div>
+                                <h3 class="sw-result-title">Congratulations!</h3>
+                                <div class="sw-result-amount" id="sw-amount">₹99</div>
+                                <p class="sw-result-text">Added to your wallet! Valid for 48 hours.</p>
+                            </div>
+                            <div id="sw-lose" class="sw-hidden">
+                                <div class="sw-result-icon">😢</div>
+                                <h3 class="sw-result-title" style="color:white;">Better Luck Next Time!</h3>
+                                <p class="sw-result-text">Don't worry, check out our amazing products!</p>
+                            </div>
+                            <button class="sw-btn-continue" id="sw-continue">Start Shopping 🛒</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
         
         document.body.insertAdjacentHTML('beforeend', html);
         modal = document.getElementById('sw-overlay');
         bindEvents();
-        initFirebase();
     }
     
-    function initFirebase() {
-        if (typeof firebase === 'undefined') {
-            isDemoMode = true;
-            return;
-        }
-        try {
-            if (!firebase.apps.length) {
-                firebase.initializeApp({
-                    apiKey: "AIzaSyBxOXkOWqH_l4Moyp9CK5GKWeCDi9N3pWo",
-                    authDomain: "seasaltpickles-c058e.firebaseapp.com",
-                    projectId: "seasaltpickles-c058e"
-                });
-            }
-            auth = firebase.auth();
-            auth.languageCode = 'en';
-            isDemoMode = false;
-        } catch (e) {
-            isDemoMode = true;
-        }
+    function injectStyles() {
+        if (document.getElementById('sw-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'sw-styles';
+        style.textContent = STYLES;
+        document.head.appendChild(style);
     }
     
+    // ============================================
+    // EVENT BINDINGS
+    // ============================================
     function bindEvents() {
-        document.getElementById('sw-close').onclick = hide;
-        document.getElementById('sw-spin').onclick = handleSpin;
-        document.getElementById('sw-name').oninput = validateClaimForm;
+        const phoneInput = document.getElementById('sw-phone-input');
+        const countrySelect = document.getElementById('sw-country');
+        const sendBtn = document.getElementById('sw-send-otp');
+        const closeBtn = document.getElementById('sw-close');
         
-        document.getElementById('sw-country').onchange = function(e) {
+        // Country change
+        countrySelect.onchange = (e) => {
             selectedCountryCode = e.target.value;
-            userCountry = e.target.options[e.target.selectedIndex].dataset.country;
-            document.getElementById('sw-phone-code').value = selectedCountryCode;
-            validateClaimForm();
         };
         
-        document.getElementById('sw-phone').oninput = function(e) {
+        // Phone input validation
+        phoneInput.oninput = (e) => {
             e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
-            validateClaimForm();
+            sendBtn.disabled = e.target.value.length < 10;
         };
         
-        document.getElementById('sw-send-otp').onclick = handleSendOtp;
+        // Send OTP
+        sendBtn.onclick = handleSendOtp;
         
-        var otpInputs = document.querySelectorAll('.sw-otp-input');
-        for (var i = 0; i < otpInputs.length; i++) {
-            (function(idx) {
-                otpInputs[idx].oninput = function(e) {
-                    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 1);
-                    if (e.target.value && idx < 5) otpInputs[idx + 1].focus();
-                    checkOtp();
-                };
-                otpInputs[idx].onkeydown = function(e) {
-                    if (e.key === 'Backspace' && !e.target.value && idx > 0) otpInputs[idx - 1].focus();
-                };
-            })(i);
-        }
+        // OTP inputs
+        const otpInputs = document.querySelectorAll('.sw-otp-input');
+        otpInputs.forEach((input, i) => {
+            input.oninput = (e) => {
+                e.target.value = e.target.value.replace(/\D/g, '').slice(0, 1);
+                if (e.target.value && i < otpInputs.length - 1) {
+                    otpInputs[i + 1].focus();
+                }
+                checkOtp();
+            };
+            input.onkeydown = (e) => {
+                if (e.key === 'Backspace' && !e.target.value && i > 0) {
+                    otpInputs[i - 1].focus();
+                }
+            };
+        });
         
+        // Verify
         document.getElementById('sw-verify').onclick = handleVerify;
-        document.getElementById('sw-resend').onclick = handleResend;
-        document.getElementById('sw-change-num').onclick = function() { goToStep('claim'); clearOtpInputs(); };
-        document.getElementById('sw-close-already').onclick = hide;
-    }
-    
-    function validateClaimForm() {
-        var name = document.getElementById('sw-name').value.trim();
-        var phone = document.getElementById('sw-phone').value;
-        document.getElementById('sw-send-otp').disabled = !(name.length >= 2 && phone.length === 10);
+        
+        // Resend
+        document.getElementById('sw-resend').onclick = () => {
+            document.getElementById('sw-otp').classList.add('sw-hidden');
+            document.getElementById('sw-phone').classList.remove('sw-hidden');
+            sendBtn.textContent = 'Send OTP ✨';
+            sendBtn.disabled = phoneInput.value.length < 10;
+        };
+        
+        // Spin
+        document.getElementById('sw-spin').onclick = handleSpin;
+        
+        // Continue
+        document.getElementById('sw-continue').onclick = hide;
+        
+        // Close
+        closeBtn.onclick = hide;
     }
     
     function checkOtp() {
-        var otp = '';
-        var inputs = document.querySelectorAll('.sw-otp-input');
-        for (var i = 0; i < inputs.length; i++) otp += inputs[i].value;
+        const otp = Array.from(document.querySelectorAll('.sw-otp-input')).map(i => i.value).join('');
         document.getElementById('sw-verify').disabled = otp.length !== 6;
     }
     
-    function clearOtpInputs() {
-        var inputs = document.querySelectorAll('.sw-otp-input');
-        for (var i = 0; i < inputs.length; i++) inputs[i].value = '';
-        document.getElementById('sw-verify').disabled = true;
-    }
-    
-    function goToStep(step) {
-        var steps = ['wheel', 'claim', 'otp', 'already'];
-        for (var i = 0; i < steps.length; i++) {
-            var el = document.getElementById('sw-step-' + steps[i]);
-            if (el) el.classList.toggle('sw-hidden', steps[i] !== step);
+    // ============================================
+    // ⭐ CAPTURE PHONE IMMEDIATELY ON SEND OTP
+    // ============================================
+    async function capturePhoneImmediately(phone) {
+        console.log('[SpinWheel] 📱 CAPTURING PHONE IMMEDIATELY:', phone);
+        
+        // 1. Save to localStorage (multiple keys for compatibility)
+        localStorage.setItem('seasalt_phone', phone);
+        localStorage.setItem('seasalt_user', JSON.stringify({ phone: phone }));
+        
+        // 2. Update Store if available
+        if (typeof Store !== 'undefined' && Store.setUser) {
+            Store.setUser({ phone: phone });
+        }
+        
+        // 3. Track in Analytics immediately
+        if (typeof Analytics !== 'undefined') {
+            if (Analytics.trackEvent) {
+                Analytics.trackEvent('phone_captured', { extra: { phone: phone, stage: 'send_otp_clicked' } });
+            }
+        }
+        
+        // 4. Save to Supabase users table IMMEDIATELY
+        try {
+            // Check if user exists
+            const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/users?phone=eq.${encodeURIComponent(phone)}&select=id,phone,total_visits`, {
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': 'Bearer ' + SUPABASE_KEY
+                }
+            });
+            
+            const existingUsers = await checkRes.json();
+            
+            if (existingUsers && existingUsers.length > 0) {
+                // Update existing user - increment visits
+                console.log('[SpinWheel] User exists, updating...');
+                await fetch(`${SUPABASE_URL}/rest/v1/users?phone=eq.${encodeURIComponent(phone)}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': 'Bearer ' + SUPABASE_KEY,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({
+                        last_seen: new Date().toISOString(),
+                        total_visits: (existingUsers[0].total_visits || 0) + 1
+                    })
+                });
+            } else {
+                // Create new user IMMEDIATELY
+                console.log('[SpinWheel] Creating new user...');
+                await fetch(`${SUPABASE_URL}/rest/v1/users`, {
+                    method: 'POST',
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': 'Bearer ' + SUPABASE_KEY,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({
+                        phone: phone,
+                        name: null,
+                        country: getCountryFromCode(selectedCountryCode),
+                        selected_country: getCountryFromCode(selectedCountryCode),
+                        wallet_balance: 0,
+                        total_visits: 1,
+                        total_purchases: 0,
+                        created_at: new Date().toISOString(),
+                        last_seen: new Date().toISOString()
+                    })
+                });
+            }
+            
+            console.log('[SpinWheel] ✅ User saved to Supabase IMMEDIATELY');
+        } catch (err) {
+            console.warn('[SpinWheel] Could not save to Supabase:', err);
         }
     }
     
+    function getCountryFromCode(code) {
+        const map = {
+            '+91': 'India',
+            '+1': 'United States',
+            '+44': 'United Kingdom',
+            '+971': 'United Arab Emirates',
+            '+65': 'Singapore',
+            '+61': 'Australia',
+            '+966': 'Saudi Arabia',
+            '+974': 'Qatar',
+            '+60': 'Malaysia'
+        };
+        return map[code] || 'India';
+    }
+    
+    // ============================================
+    // OTP HANDLERS
+    // ============================================
+    async function handleSendOtp() {
+        const phone = document.getElementById('sw-phone-input').value;
+        if (phone.length < 10) return;
+        
+        userPhone = selectedCountryCode + phone;
+        const btn = document.getElementById('sw-send-otp');
+        btn.disabled = true;
+        btn.textContent = 'Capturing...';
+        
+        // ⭐⭐⭐ CAPTURE PHONE IMMEDIATELY - BEFORE EVEN SENDING OTP ⭐⭐⭐
+        await capturePhoneImmediately(userPhone);
+        
+        btn.textContent = 'Sending OTP...';
+        
+        try {
+            // Check for demo OTP mode (123456)
+            const DEMO_MODE = true; // Set to false for production Firebase OTP
+            
+            if (!DEMO_MODE && typeof firebase !== 'undefined' && firebase.auth) {
+                if (!auth) auth = firebase.auth();
+                if (!recaptchaVerifier) {
+                    recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sw-send-otp', { size: 'invisible' });
+                }
+                confirmationResult = await auth.signInWithPhoneNumber(userPhone, recaptchaVerifier);
+                showOtpSection();
+                toast('OTP sent to ' + userPhone, 'success');
+            } else {
+                // Demo mode - any 6 digit OTP works (or use 123456)
+                showOtpSection();
+                toast('Demo: Use OTP 123456', 'info');
+            }
+        } catch (err) {
+            console.error('[SpinWheel] OTP error:', err);
+            showOtpSection();
+            toast('Demo: Use OTP 123456', 'info');
+        }
+    }
+    
+    function showOtpSection() {
+        document.getElementById('sw-phone').classList.add('sw-hidden');
+        document.getElementById('sw-otp').classList.remove('sw-hidden');
+        document.querySelector('.sw-otp-input').focus();
+    }
+    
+    async function handleVerify() {
+        const otp = Array.from(document.querySelectorAll('.sw-otp-input')).map(i => i.value).join('');
+        if (otp.length !== 6) return;
+        
+        const btn = document.getElementById('sw-verify');
+        btn.disabled = true;
+        btn.textContent = 'Verifying...';
+        
+        try {
+            // Demo mode: accept 123456 or any 6 digits
+            if (otp === '123456' || !confirmationResult) {
+                onVerified();
+            } else if (confirmationResult) {
+                await confirmationResult.confirm(otp);
+                onVerified();
+            }
+        } catch (err) {
+            console.error('[SpinWheel] Verify error:', err);
+            toast('Invalid OTP. Try 123456', 'error');
+            btn.disabled = false;
+            btn.textContent = 'Verify & Spin 🎰';
+            document.querySelectorAll('.sw-otp-input').forEach(i => i.value = '');
+            document.querySelector('.sw-otp-input').focus();
+        }
+    }
+    
+    function onVerified() {
+        console.log('[SpinWheel] ✅ User verified:', userPhone);
+        
+        // Track verification
+        if (typeof Analytics !== 'undefined' && Analytics.trackEvent) {
+            Analytics.trackEvent('user_verified', { extra: { phone: userPhone } });
+        }
+        
+        // Show wheel
+        document.getElementById('sw-otp').classList.add('sw-hidden');
+        document.getElementById('sw-wheel-section').classList.remove('sw-hidden');
+        document.getElementById('sw-close').classList.add('visible');
+        toast('Verified! Spin the wheel!', 'success');
+    }
+    
+    // ============================================
+    // SPIN HANDLER
+    // ============================================
     function handleSpin() {
         if (isSpinning) return;
         isSpinning = true;
         
-        var btn = document.getElementById('sw-spin');
+        const btn = document.getElementById('sw-spin');
         btn.disabled = true;
-        btn.textContent = '🎲 Spinning...';
+        btn.textContent = 'Spinning...';
         
-        var totalWeight = 0;
-        for (var i = 0; i < PRIZES.length; i++) totalWeight += PRIZES[i].weight;
-        var random = Math.random() * totalWeight;
-        var selectedPrize = PRIZES[0];
-        
-        for (var i = 0; i < PRIZES.length; i++) {
-            random -= PRIZES[i].weight;
-            if (random <= 0) { selectedPrize = PRIZES[i]; break; }
+        // Track spin
+        if (typeof Analytics !== 'undefined' && Analytics.trackEvent) {
+            Analytics.trackEvent('spin_started', { extra: { phone: userPhone } });
         }
         
-        var segmentIndex = selectedPrize.segments[Math.floor(Math.random() * selectedPrize.segments.length)];
-        wonAmount = selectedPrize.value;
+        // Calculate result (weighted - more likely to win small amounts)
+        const rand = Math.random();
+        let segmentIndex, amount = 0, won = false;
         
-        var segAngle = 360 / SEGMENTS.length;
-        var targetAngle = 360 - (segmentIndex * segAngle + segAngle / 2);
-        var spins = 5 + Math.floor(Math.random() * 3);
-        var totalRotation = spins * 360 + targetAngle;
-        
-        document.getElementById('sw-wheel').style.transform = 'rotate(' + totalRotation + 'deg)';
-        
-        setTimeout(function() {
-            isSpinning = false;
-            document.getElementById('sw-claim-amount').textContent = '₹' + wonAmount;
-            document.getElementById('sw-otp-amount').textContent = '₹' + wonAmount;
-            goToStep('claim');
-            document.getElementById('sw-name').focus();
-            toast('🎉 You won ₹' + wonAmount + '!', 'success');
-        }, 4200);
-    }
-    
-    function handleSendOtp() {
-        userName = document.getElementById('sw-name').value.trim();
-        var phone = document.getElementById('sw-phone').value;
-        userPhone = selectedCountryCode + phone;
-        
-        var btn = document.getElementById('sw-send-otp');
-        btn.disabled = true;
-        btn.textContent = 'Checking...';
-        
-        checkCanSpin(userPhone).then(function(result) {
-            if (!result.canSpin) {
-                goToStep('already');
-                document.getElementById('sw-next-spin').textContent = result.daysLeft + ' days';
-                return;
-            }
-            
-            btn.textContent = 'Sending OTP...';
-            document.getElementById('sw-demo-hint').classList.toggle('sw-hidden', !isDemoMode);
-            
-            if (isDemoMode) {
-                showOtpStep();
-                toast('Test mode: Use OTP 123456', 'info');
-            } else {
-                if (!recaptchaVerifier) {
-                    recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sw-recaptcha', { size: 'invisible' });
-                }
-                auth.signInWithPhoneNumber(userPhone, recaptchaVerifier).then(function(result) {
-                    confirmationResult = result;
-                    showOtpStep();
-                    toast('OTP sent!', 'success');
-                }).catch(function(err) {
-                    isDemoMode = true;
-                    document.getElementById('sw-demo-hint').classList.remove('sw-hidden');
-                    showOtpStep();
-                    toast('Using test OTP: 123456', 'info');
-                });
-            }
-        });
-    }
-    
-    function showOtpStep() {
-        document.getElementById('sw-otp-phone').textContent = userPhone;
-        goToStep('otp');
-        document.querySelector('.sw-otp-input').focus();
-        startResendTimer();
-    }
-    
-    var resendInterval = null;
-    function startResendTimer() {
-        var countdown = 30;
-        var btn = document.getElementById('sw-resend');
-        var timerSpan = document.getElementById('sw-resend-timer');
-        btn.disabled = true;
-        timerSpan.textContent = countdown;
-        if (resendInterval) clearInterval(resendInterval);
-        resendInterval = setInterval(function() {
-            countdown--;
-            timerSpan.textContent = countdown;
-            if (countdown <= 0) {
-                clearInterval(resendInterval);
-                btn.disabled = false;
-                btn.innerHTML = 'Resend OTP';
-            }
-        }, 1000);
-    }
-    
-    function handleResend() {
-        goToStep('claim');
-        clearOtpInputs();
-        document.getElementById('sw-send-otp').textContent = 'Send OTP to Claim ✨';
-        validateClaimForm();
-    }
-    
-    function handleVerify() {
-        var otp = '';
-        var inputs = document.querySelectorAll('.sw-otp-input');
-        for (var i = 0; i < inputs.length; i++) otp += inputs[i].value;
-        if (otp.length !== 6) return;
-        
-        var btn = document.getElementById('sw-verify');
-        btn.disabled = true;
-        btn.textContent = 'Verifying...';
-        
-        if (isDemoMode) {
-            if (otp === DEMO_OTP) {
-                saveToWallet();
-            } else {
-                toast('Invalid OTP. Use 123456', 'error');
-                clearOtpInputs();
-                document.querySelector('.sw-otp-input').focus();
-                btn.textContent = 'Verify & Claim 🎉';
-            }
+        if (rand < 0.35) {
+            // 35% chance - win ₹99
+            const idx99 = SEGMENTS.findIndex(s => s.value === 99);
+            segmentIndex = idx99 >= 0 ? idx99 : 0;
+            amount = 99;
+            won = true;
+        } else if (rand < 0.45) {
+            // 10% chance - win ₹299
+            const idx299 = SEGMENTS.findIndex(s => s.value === 299);
+            segmentIndex = idx299 >= 0 ? idx299 : 2;
+            amount = 299;
+            won = true;
+        } else if (rand < 0.48) {
+            // 3% chance - win ₹599
+            const idx599 = SEGMENTS.findIndex(s => s.value === 599);
+            segmentIndex = idx599 >= 0 ? idx599 : 4;
+            amount = 599;
+            won = true;
         } else {
-            confirmationResult.confirm(otp).then(function() {
-                saveToWallet();
-            }).catch(function() {
-                toast('Invalid OTP', 'error');
-                clearOtpInputs();
-                document.querySelector('.sw-otp-input').focus();
-                btn.textContent = 'Verify & Claim 🎉';
+            // 52% chance - lose (try again)
+            const loseSegments = SEGMENTS.map((s, i) => ({ s, i })).filter(x => !x.s.isWin);
+            const pick = loseSegments[Math.floor(Math.random() * loseSegments.length)];
+            segmentIndex = pick.i;
+            won = false;
+        }
+        
+        // Calculate rotation
+        const segAngle = 360 / SEGMENTS.length;
+        const targetAngle = 360 - (segmentIndex * segAngle + segAngle / 2);
+        const spins = 5 + Math.floor(Math.random() * 3);
+        const totalRotation = spins * 360 + targetAngle;
+        
+        // Animate wheel
+        const wheel = document.getElementById('sw-wheel');
+        wheel.style.transform = `rotate(${totalRotation}deg)`;
+        
+        // Show result after animation
+        setTimeout(() => showResult(won, amount), 4200);
+    }
+    
+    function showResult(won, amount) {
+        console.log('[SpinWheel] Result:', won ? 'Won ₹' + amount : 'Lost');
+        
+        // Mark spin completed
+        localStorage.setItem('seasalt_spin_completed', 'true');
+        
+        // Save wallet if won
+        if (won && amount > 0) {
+            saveWallet(amount);
+        }
+        
+        // Track result
+        if (typeof Analytics !== 'undefined' && Analytics.trackEvent) {
+            Analytics.trackEvent('spin_completed', { 
+                extra: { 
+                    phone: userPhone, 
+                    won: won, 
+                    amount: amount 
+                } 
             });
         }
-    }
-    
-    function checkCanSpin(phone) {
-        return fetch(SUPABASE_URL + '/rest/v1/wallet_transactions?user_phone=eq.' + encodeURIComponent(phone) + '&type=eq.spin_reward&order=created_at.desc&limit=1', {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        }).then(function(res) { return res.json(); }).then(function(data) {
-            if (data && data.length > 0) {
-                var lastSpin = new Date(data[0].created_at);
-                var daysSince = (new Date() - lastSpin) / (1000 * 60 * 60 * 24);
-                if (daysSince < 30) return { canSpin: false, daysLeft: Math.ceil(30 - daysSince) };
-            }
-            return { canSpin: true };
-        }).catch(function() { return { canSpin: true }; });
-    }
-    
-    function saveToWallet() {
-        console.log('[SpinWheel] Saving wallet with amount:', wonAmount);
-        
-        var now = new Date();
-        var expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000);
-        
-        // Save user data
-        var userData = { name: userName, phone: userPhone, country: userCountry };
-        localStorage.setItem('seasalt_user', JSON.stringify(userData));
-        
-        // ═══════════════════════════════════════════════════════════════
-        // KEY FIX: Save to 'seasalt_spin_wallet' (NOT 'seasalt_wallet')
-        // This avoids conflict with store.js
-        // ═══════════════════════════════════════════════════════════════
-        var walletData = { 
-            amount: wonAmount, 
-            addedAt: now.toISOString(), 
-            expiresAt: expiresAt.toISOString() 
-        };
-        localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify(walletData));
-        localStorage.setItem('seasalt_spin_done', 'true');
-        
-        console.log('[SpinWheel] Saved to localStorage key:', SPIN_WALLET_KEY);
-        console.log('[SpinWheel] Wallet data:', walletData);
-        
-        // Save to Supabase
-        fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(userPhone), {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        }).then(function(res) { return res.json(); }).then(function(existing) {
-            var dbData = {
-                name: userName,
-                selected_country: userCountry,
-                wallet_balance: wonAmount,
-                wallet_expires_at: expiresAt.toISOString(),
-                last_seen: now.toISOString()
-            };
-            
-            if (existing && existing.length > 0) {
-                return fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(userPhone), {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-                    body: JSON.stringify(dbData)
-                });
-            } else {
-                return fetch(SUPABASE_URL + '/rest/v1/users', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-                    body: JSON.stringify({ phone: userPhone, total_visits: 1, name: userName, selected_country: userCountry, wallet_balance: wonAmount, wallet_expires_at: expiresAt.toISOString(), last_seen: now.toISOString() })
-                });
-            }
-        }).then(function() {
-            return fetch(SUPABASE_URL + '/rest/v1/wallet_transactions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-                body: JSON.stringify({ user_phone: userPhone, amount: wonAmount, type: 'spin_reward', description: 'Spin wheel reward', balance_after: wonAmount })
-            });
-        }).catch(function(e) { console.warn('Supabase error:', e); });
         
         // Update UI
-        if (typeof UI !== 'undefined') {
-            console.log('[SpinWheel] Updating UI...');
+        if (typeof UI !== 'undefined' && UI.updateCartUI) {
             UI.updateCartUI();
-            if (typeof UI.startWalletTimer === 'function') {
-                UI.startWalletTimer();
-            }
         }
         
-        // Dispatch event
-        window.dispatchEvent(new CustomEvent('walletUpdated', {
-            detail: { amount: wonAmount, expiresAt: expiresAt.toISOString() }
-        }));
+        // Show result section
+        document.getElementById('sw-wheel-section').classList.add('sw-hidden');
+        document.getElementById('sw-result').classList.remove('sw-hidden');
         
-        // Close modal and show toast
-        hide();
-        toast('🎊 ₹' + wonAmount + ' added to wallet! Use within 48 hours.', 'success');
+        if (won) {
+            document.getElementById('sw-amount').textContent = '₹' + amount;
+            document.getElementById('sw-win').classList.remove('sw-hidden');
+            document.getElementById('sw-lose').classList.add('sw-hidden');
+            toast('🎉 You won ₹' + amount + '!', 'success');
+        } else {
+            document.getElementById('sw-win').classList.add('sw-hidden');
+            document.getElementById('sw-lose').classList.remove('sw-hidden');
+            toast('Better luck next time!', 'info');
+        }
+        
+        isSpinning = false;
     }
     
+    function saveWallet(amount) {
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+        const walletData = {
+            amount: amount,
+            expiresAt: expiresAt.toISOString(),
+            wonAt: new Date().toISOString(),
+            phone: userPhone
+        };
+        
+        localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify(walletData));
+        console.log('[SpinWheel] 💰 Wallet saved:', walletData);
+        
+        // Also update Supabase user wallet
+        updateUserWallet(userPhone, amount);
+    }
+    
+    async function updateUserWallet(phone, amount) {
+        try {
+            const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+            
+            await fetch(`${SUPABASE_URL}/rest/v1/users?phone=eq.${encodeURIComponent(phone)}`, {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': 'Bearer ' + SUPABASE_KEY,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify({
+                    wallet_balance: amount,
+                    wallet_expires_at: expiresAt
+                })
+            });
+            
+            console.log('[SpinWheel] ✅ Wallet updated in Supabase');
+        } catch (err) {
+            console.warn('[SpinWheel] Could not update wallet in Supabase:', err);
+        }
+    }
+    
+    // ============================================
+    // VISIBILITY
+    // ============================================
     function shouldShow() {
-        if (localStorage.getItem('seasalt_spin_done')) return false;
+        // Don't show if already completed spin
+        if (localStorage.getItem('seasalt_spin_completed') === 'true') {
+            return false;
+        }
         return true;
     }
     
@@ -413,6 +887,7 @@
         if (!modal) createModal();
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
+        setTimeout(() => document.getElementById('sw-phone-input')?.focus(), 300);
     }
     
     function hide() {
@@ -422,46 +897,32 @@
     }
     
     function toast(msg, type) {
-        var t = document.createElement('div');
-        t.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);padding:12px 24px;border-radius:12px;color:#fff;font-weight:600;z-index:99999;max-width:90%;text-align:center;background:' + (type === 'success' ? '#10B981' : type === 'error' ? '#EF4444' : '#F59E0B');
+        if (typeof UI !== 'undefined' && UI.showToast) {
+            UI.showToast(msg, type);
+            return;
+        }
+        const t = document.createElement('div');
+        const bg = type === 'success' ? '#10B981' : type === 'error' ? '#EF4444' : '#6B7280';
+        t.style.cssText = `position:fixed;bottom:100px;left:50%;transform:translateX(-50%);padding:14px 28px;border-radius:12px;color:#fff;font-weight:600;z-index:99999;background:${bg};box-shadow:0 4px 15px rgba(0,0,0,0.2);`;
         t.textContent = msg;
         document.body.appendChild(t);
-        setTimeout(function() { t.remove(); }, 4000);
+        setTimeout(() => t.remove(), 3000);
     }
     
+    // ============================================
+    // INIT
+    // ============================================
     function init() {
-        console.log('[SpinWheel] v14 Initializing...');
-        
-        // Check if user already has spin wallet
-        var existingWallet = localStorage.getItem(SPIN_WALLET_KEY);
-        console.log('[SpinWheel] Existing spin wallet:', existingWallet);
-        
-        if (existingWallet) {
-            try {
-                var data = JSON.parse(existingWallet);
-                if (data.amount > 0 && new Date(data.expiresAt) > new Date()) {
-                    console.log('[SpinWheel] Valid wallet found, updating UI');
-                    if (typeof UI !== 'undefined') {
-                        UI.updateCartUI();
-                        if (typeof UI.startWalletTimer === 'function') {
-                            UI.startWalletTimer();
-                        }
-                    }
-                }
-            } catch (e) {}
-        }
+        console.log('[SpinWheel] v15 Initializing...');
         
         if (shouldShow()) {
-            setTimeout(show, 1000);
+            setTimeout(show, 1500);
+        } else {
+            console.log('[SpinWheel] Already completed, not showing');
         }
     }
     
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
-    
-    window.SpinWheel = { init: init, show: show, hide: hide };
-    
+    return { init, show, hide, shouldShow };
 })();
+
+window.SpinWheel = SpinWheel;
