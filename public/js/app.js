@@ -301,8 +301,7 @@ const App = (function() {
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 break;
             case 'categories':
-                var catSection = document.getElementById('category-sections');
-                if (catSection) catSection.scrollIntoView({ behavior: 'smooth' });
+                showCategoriesModal();
                 break;
             case 'orders':
                 showOrdersPage();
@@ -311,6 +310,101 @@ const App = (function() {
                 showAccountPage();
                 break;
         }
+    }
+    
+    function showCategoriesModal() {
+        var categories = Store.getCategories();
+        if (!categories || categories.length === 0) return;
+        
+        var EMOJI_MAP = { mango: '🥭', mixed: '🫙', nonveg: '🍗', specialty: '⭐', spicy: '🌶️', sweet: '🍯', veg: '🥒', combo: '🎁' };
+        
+        var listHtml = '';
+        
+        // "All" option
+        listHtml += '<button class="cat-list-item w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-pickle-50 transition-colors text-left" data-category="all">' +
+            '<span class="w-12 h-12 bg-pickle-100 rounded-xl flex items-center justify-center text-2xl">🫙</span>' +
+            '<div class="flex-1"><p class="font-semibold text-gray-800">All Products</p><p class="text-sm text-gray-500">Browse everything</p></div>' +
+            '<svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>' +
+            '</button>';
+        
+        for (var i = 0; i < categories.length; i++) {
+            var cat = categories[i];
+            var emoji = (cat.emoji || cat.icon || '');
+            if (!emoji || emoji === 'undefined' || emoji === 'null' || emoji === 'NULL' || emoji === '') {
+                emoji = EMOJI_MAP[cat.id] || '🫙';
+            }
+            var productCount = Store.getProducts().filter(function(p) {
+                var isActive = (p.isActive !== false && p.isActive !== 'false' && p.is_active !== false && p.is_active !== 'false');
+                return isActive && p.category === cat.id;
+            }).length;
+            
+            listHtml += '<button class="cat-list-item w-full flex items-center gap-4 p-4 rounded-2xl hover:bg-pickle-50 transition-colors text-left" data-category="' + cat.id + '">' +
+                '<span class="w-12 h-12 bg-pickle-100 rounded-xl flex items-center justify-center text-2xl">' + emoji + '</span>' +
+                '<div class="flex-1"><p class="font-semibold text-gray-800">' + cat.name + '</p><p class="text-sm text-gray-500">' + productCount + ' product' + (productCount !== 1 ? 's' : '') + '</p></div>' +
+                '<svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>' +
+                '</button>';
+        }
+        
+        var modal = document.createElement('div');
+        modal.id = 'categories-modal';
+        modal.className = 'fixed inset-0 z-[85] flex items-end justify-center';
+        modal.innerHTML = '<div class="absolute inset-0 bg-black/60 backdrop-blur-sm close-cat-modal"></div>' +
+            '<div class="relative bg-white rounded-t-3xl w-full max-w-lg max-h-[80vh] overflow-hidden animate-slide-up">' +
+                '<div class="sticky top-0 bg-white p-4 border-b flex items-center justify-between z-10">' +
+                    '<h3 class="font-display text-xl font-bold text-gray-800">📂 Categories</h3>' +
+                    '<button class="close-cat-modal w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">' +
+                        '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+                    '</button>' +
+                '</div>' +
+                '<div class="p-4 overflow-y-auto max-h-[calc(80vh-70px)] space-y-2">' +
+                    listHtml +
+                '</div>' +
+            '</div>';
+        
+        document.body.appendChild(modal);
+        document.body.style.overflow = 'hidden';
+        
+        var closeModal = function() { 
+            modal.remove(); 
+            document.body.style.overflow = ''; 
+            UI.updateBottomNav('home');
+        };
+        
+        modal.querySelectorAll('.close-cat-modal').forEach(function(btn) { 
+            btn.addEventListener('click', closeModal); 
+        });
+        
+        // Handle category selection
+        modal.querySelectorAll('.cat-list-item').forEach(function(item) {
+            item.addEventListener('click', function() {
+                var catId = item.dataset.category;
+                Store.setActiveCategory(catId);
+                
+                // Update top pills to match selection
+                var pills = document.querySelectorAll('.category-pill');
+                pills.forEach(function(p) {
+                    p.classList.remove('active', 'bg-pickle-500', 'text-white');
+                    p.classList.add('bg-gray-100', 'text-gray-700');
+                    if (p.dataset.category === catId) {
+                        p.classList.add('active', 'bg-pickle-500', 'text-white');
+                        p.classList.remove('bg-gray-100', 'text-gray-700');
+                    }
+                });
+                
+                // Re-render products
+                UI.renderCategorySections(Store.getCategories(), Store.getActiveProducts());
+                
+                closeModal();
+                
+                // Scroll to products
+                var catSection = document.getElementById('category-sections');
+                if (catSection) {
+                    setTimeout(function() {
+                        catSection.scrollIntoView({ behavior: 'smooth' });
+                    }, 100);
+                }
+            });
+        });
     }
     
     function showOrdersPage() {
