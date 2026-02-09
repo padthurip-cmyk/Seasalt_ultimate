@@ -1,591 +1,303 @@
 /**
- * SeaSalt Pickles - SpinWheel Module v17
- * =======================================
- * Works with EXISTING #spin-modal HTML in index.html
- * Pickle/Orange themed wheel with 6 prize segments
- * Phone captured IMMEDIATELY on "Send OTP" click
- * Wallet saved to localStorage + Supabase
+ * SeaSalt Pickles - Spin Wheel Module (Fixed)
+ * ============================================
  */
 
-(function() {
-    'use strict';
-
-    // ==================== CONFIG ====================
-    var SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
-    var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgwNTIzNTEsImV4cCI6MjA1MzYyODM1MX0.LPSwMPKBiMxMTmHOVJxWBbS8kgGDo4RaPNCR63P55Cw';
-    var SPIN_WALLET_KEY = 'seasalt_spin_wallet';
-    var WALLET_EXPIRY_HOURS = 48;
-
-    // ==================== FIREBASE CONFIG ====================
-    var FIREBASE_CONFIG = {
-        apiKey: "AIzaSyAX3IStPrmEU13jolUTLX2091B90mHLRsE",
-        authDomain: "seasalt-pickles.firebaseapp.com",
-        projectId: "seasalt-pickles",
-        storageBucket: "seasalt-pickles.firebasestorage.app",
-        messagingSenderId: "293579603498",
-        appId: "1:293579603498:web:f8e52381b6fe3d339af498"
-    };
-
-    // ==================== PICKLE THEME COLORS ====================
-    var THEME = {
-        primaryOrange: '#D4451A',
-        darkOrange: '#B91C1C',
-        pickleGreen: '#166534',
-        lightGreen: '#16A34A',
-        accentOrange: '#EA580C',
-        deepRed: '#DC2626',
-        gold: '#F59E0B',
-        spiceGold: '#DAA520'
-    };
-
-    // 6 prize segments with pickle-themed colors
-    var SEGMENTS = [
-        { value: 99,  label: '\u20B999',  color: THEME.primaryOrange, textColor: '#FFFFFF' },
-        { value: 199, label: '\u20B9199', color: THEME.pickleGreen,   textColor: '#FFFFFF' },
-        { value: 299, label: '\u20B9299', color: THEME.deepRed,       textColor: '#FFFFFF' },
-        { value: 399, label: '\u20B9399', color: THEME.lightGreen,    textColor: '#FFFFFF' },
-        { value: 499, label: '\u20B9499', color: THEME.accentOrange,  textColor: '#FFFFFF' },
-        { value: 599, label: '\u20B9599', color: THEME.gold,          textColor: '#FFFFFF' }
-    ];
-
-    // ==================== PRIZE ODDS ENGINE ====================
-    function calculatePrize() {
-        var rand = Math.random();
-
-        // Cumulative probability thresholds
-        if (rand < 0.005)  return { value: 599, segmentIndex: 5 }; // 0.5%
-        if (rand < 0.0117) return { value: 499, segmentIndex: 4 }; // 0.67%
-        if (rand < 0.0217) return { value: 399, segmentIndex: 3 }; // 1%
-        if (rand < 0.0417) return { value: 299, segmentIndex: 2 }; // 2%
-        if (rand < 0.0917) return { value: 199, segmentIndex: 1 }; // 5%
-        return { value: 99, segmentIndex: 0 };                     // ~90.83%
-    }
-
-    // ==================== STATE ====================
-    var state = {
-        phone: '',
-        countryCode: '+91',
-        spinning: false,
-        hasSpun: false
-    };
-
-    // ==================== DOM REFERENCES ====================
-    var els = {};
-
-    function cacheElements() {
-        els.modal = document.getElementById('spin-modal');
-        els.closeBtn = document.getElementById('spin-close-btn');
-        els.phoneSection = document.getElementById('phone-section');
-        els.otpSection = document.getElementById('otp-section');
-        els.wheelSection = document.getElementById('wheel-section');
-        els.resultSection = document.getElementById('result-section');
-        els.countryCode = document.getElementById('country-code');
-        els.phoneInput = document.getElementById('phone-input');
-        els.sendOtpBtn = document.getElementById('send-otp-btn');
-        els.otpInputs = document.querySelectorAll('.otp-input');
-        els.verifyOtpBtn = document.getElementById('verify-otp-btn');
-        els.spinWheel = document.getElementById('spin-wheel');
-        els.spinBtn = document.getElementById('spin-btn');
-        els.winResult = document.getElementById('win-result');
-        els.loseResult = document.getElementById('lose-result');
-        els.winAmount = document.getElementById('win-amount');
-        els.continueBtn = document.getElementById('continue-btn');
-    }
-
-    // ==================== BUILD PICKLE-THEMED SVG WHEEL ====================
-    function buildPickleWheel() {
-        if (!els.spinWheel) return;
-
-        var numSegs = SEGMENTS.length;
-        var anglePerSeg = 360 / numSegs;
-        var radius = 140;
-        var cx = 150, cy = 150;
-        var svgContent = '';
-
-        for (var i = 0; i < numSegs; i++) {
-            var startAngle = i * anglePerSeg - 90;
-            var endAngle = startAngle + anglePerSeg;
-            var startRad = (startAngle * Math.PI) / 180;
-            var endRad = (endAngle * Math.PI) / 180;
-
-            var x1 = cx + radius * Math.cos(startRad);
-            var y1 = cy + radius * Math.sin(startRad);
-            var x2 = cx + radius * Math.cos(endRad);
-            var y2 = cy + radius * Math.sin(endRad);
-
-            var largeArc = anglePerSeg > 180 ? 1 : 0;
-
-            // Segment path
-            svgContent += '<path d="M' + cx + ',' + cy + ' L' + x1.toFixed(2) + ',' + y1.toFixed(2) +
-                ' A' + radius + ',' + radius + ' 0 ' + largeArc + ',1 ' + x2.toFixed(2) + ',' + y2.toFixed(2) +
-                ' Z" fill="' + SEGMENTS[i].color + '"/>';
-
-            // Segment border
-            svgContent += '<line x1="' + cx + '" y1="' + cy + '" x2="' + x1.toFixed(2) + '" y2="' + y1.toFixed(2) +
-                '" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"/>';
-
-            // Prize text - at center of segment, rotated to read outward
-            var midAngle = startAngle + anglePerSeg / 2;
-            var midRad = (midAngle * Math.PI) / 180;
-            var textDist = radius * 0.62;
-            var tx = cx + textDist * Math.cos(midRad);
-            var ty = cy + textDist * Math.sin(midRad);
-            var textRotation = midAngle + 90;
-
-            svgContent += '<text x="' + tx.toFixed(2) + '" y="' + ty.toFixed(2) +
-                '" fill="' + SEGMENTS[i].textColor + '" font-size="22" font-weight="bold" ' +
-                'font-family="Outfit, -apple-system, BlinkMacSystemFont, sans-serif" ' +
-                'text-anchor="middle" dominant-baseline="central" ' +
-                'transform="rotate(' + textRotation.toFixed(2) + ', ' + tx.toFixed(2) + ', ' + ty.toFixed(2) + ')" ' +
-                'style="filter:drop-shadow(0px 1px 2px rgba(0,0,0,0.4))">' +
-                SEGMENTS[i].label + '</text>';
-        }
-
-        // Outer ring - pickle orange
-        svgContent += '<circle cx="' + cx + '" cy="' + cy + '" r="' + radius + '" fill="none" stroke="' + THEME.primaryOrange + '" stroke-width="8"/>';
-        svgContent += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (radius - 5) + '" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>';
-
-        // Decorative dots on outer ring
-        for (var d = 0; d < 24; d++) {
-            var dotAngle = (d * 15 - 90) * Math.PI / 180;
-            var dotX = cx + (radius + 0.5) * Math.cos(dotAngle);
-            var dotY = cy + (radius + 0.5) * Math.sin(dotAngle);
-            svgContent += '<circle cx="' + dotX.toFixed(2) + '" cy="' + dotY.toFixed(2) + '" r="2.5" fill="rgba(255,255,255,0.6)"/>';
-        }
-
-        els.spinWheel.innerHTML = svgContent;
-        console.log('[SpinWheel v17] Pickle-themed SVG wheel built (6 segments)');
-    }
-
-    // ==================== PHONE CAPTURE (IMMEDIATE) ====================
-    function capturePhone() {
-        var phone = els.phoneInput ? els.phoneInput.value.replace(/\D/g, '') : '';
-        var code = els.countryCode ? els.countryCode.value : '+91';
-        var fullPhone = code + phone;
-        state.phone = fullPhone;
-        state.countryCode = code;
-
-        // Save to ALL localStorage keys
-        localStorage.setItem('seasalt_phone', fullPhone);
-        localStorage.setItem('seasalt_user_phone', fullPhone);
-        try {
-            var existing = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
-            existing.phone = fullPhone;
-            localStorage.setItem('seasalt_user', JSON.stringify(existing));
-        } catch (e) {
-            localStorage.setItem('seasalt_user', JSON.stringify({ phone: fullPhone }));
-        }
-
-        // Upsert to Supabase users table
-        upsertUserToSupabase(fullPhone);
-        console.log('[SpinWheel v17] Phone captured IMMEDIATELY:', fullPhone);
-    }
-
-    function upsertUserToSupabase(phone) {
-        fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone) + '&select=phone', {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        })
-        .then(function(res) { return res.json(); })
-        .then(function(users) {
-            if (!users || users.length === 0) {
-                return fetch(SUPABASE_URL + '/rest/v1/users', {
-                    method: 'POST',
-                    headers: {
-                        'apikey': SUPABASE_KEY,
-                        'Authorization': 'Bearer ' + SUPABASE_KEY,
-                        'Content-Type': 'application/json',
-                        'Prefer': 'return=minimal'
-                    },
-                    body: JSON.stringify({
-                        phone: phone,
-                        wallet_balance: 0,
-                        created_at: new Date().toISOString()
-                    })
-                });
-            }
-        })
-        .catch(function(err) { console.error('[SpinWheel v17] Supabase upsert error:', err); });
-    }
-
-    // ==================== SECTION NAVIGATION ====================
-    function showSection(sectionId) {
-        ['phoneSection', 'otpSection', 'wheelSection', 'resultSection'].forEach(function(key) {
-            if (els[key]) els[key].classList.add('hidden');
-        });
-        if (els[sectionId]) els[sectionId].classList.remove('hidden');
-
-        // Show close button after phone step
-        if (els.closeBtn && sectionId !== 'phoneSection') {
-            els.closeBtn.classList.remove('hidden');
-        }
-    }
-
-    // ==================== OTP FLOW (Firebase) ====================
-    function initFirebase() {
-        if (window.firebase && !firebase.apps.length) {
-            try {
-                firebase.initializeApp(FIREBASE_CONFIG);
-                console.log('[SpinWheel v17] Firebase initialized');
-            } catch (e) {
-                console.log('[SpinWheel v17] Firebase init:', e.message);
-            }
-        }
-    }
-
-    function sendOTP() {
-        var phone = els.phoneInput ? els.phoneInput.value.replace(/\D/g, '') : '';
-        if (phone.length < 7) return;
-
-        // *** CAPTURE PHONE IMMEDIATELY ***
-        capturePhone();
-
-        var btn = els.sendOtpBtn;
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = 'Sending...';
-        }
-
-        var fullPhone = state.phone;
-
-        if (window.firebase && firebase.auth) {
-            if (!window.recaptchaVerifier) {
-                try {
-                    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('send-otp-btn', {
-                        size: 'invisible',
-                        callback: function() {}
-                    });
-                } catch (e) {
-                    console.error('[SpinWheel v17] reCAPTCHA error:', e);
-                    skipToWheel();
-                    return;
-                }
-            }
-
-            firebase.auth().signInWithPhoneNumber(fullPhone, window.recaptchaVerifier)
-                .then(function(confirmationResult) {
-                    window.confirmationResult = confirmationResult;
-                    showSection('otpSection');
-                    if (els.otpInputs && els.otpInputs[0]) els.otpInputs[0].focus();
-                    console.log('[SpinWheel v17] OTP sent to', fullPhone);
-                })
-                .catch(function(err) {
-                    console.error('[SpinWheel v17] OTP send error:', err);
-                    if (typeof UI !== 'undefined' && UI.showToast) {
-                        UI.showToast('OTP failed, proceeding to spin', 'warning');
-                    }
-                    skipToWheel();
-                });
-        } else {
-            console.warn('[SpinWheel v17] Firebase not loaded, skipping OTP');
-            skipToWheel();
-        }
-    }
-
-    function verifyOTP() {
-        var otp = '';
-        if (els.otpInputs) {
-            els.otpInputs.forEach(function(input) { otp += input.value; });
-        }
-        if (otp.length !== 6) return;
-
-        var btn = els.verifyOtpBtn;
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = 'Verifying...';
-        }
-
-        if (window.confirmationResult) {
-            window.confirmationResult.confirm(otp)
-                .then(function() {
-                    console.log('[SpinWheel v17] OTP verified for', state.phone);
-                    skipToWheel();
-                })
-                .catch(function(err) {
-                    console.error('[SpinWheel v17] OTP verify error:', err);
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.textContent = 'Verify & Spin \uD83C\uDFB0';
-                    }
-                    if (typeof UI !== 'undefined' && UI.showToast) {
-                        UI.showToast('Invalid OTP. Try again.', 'error');
-                    }
-                });
-        } else {
-            skipToWheel();
-        }
-    }
-
-    function skipToWheel() {
-        showSection('wheelSection');
-    }
-
-    // ==================== SPIN ANIMATION ====================
-    function spin() {
-        if (state.spinning || state.hasSpun) return;
-        state.spinning = true;
-
-        if (els.spinBtn) {
-            els.spinBtn.disabled = true;
-            els.spinBtn.innerHTML = '<span class="text-2xl">\uD83C\uDFB0</span><span>SPINNING...</span><span class="text-2xl">\uD83C\uDFB0</span>';
-        }
-
-        var prize = calculatePrize();
-        var numSegs = SEGMENTS.length;
-        var anglePerSeg = 360 / numSegs;
-
-        // Calculate target rotation:
-        // Pointer is at top (12 o'clock). Segment 0 starts at top.
-        // To land segment N under pointer: rotate so center of segment N is at top
-        var segmentCenter = prize.segmentIndex * anglePerSeg + anglePerSeg / 2;
-        var fullSpins = 5 + Math.floor(Math.random() * 4);
-        var targetRotation = fullSpins * 360 + (360 - segmentCenter);
-        // Add jitter for natural feel
-        targetRotation += (Math.random() - 0.5) * (anglePerSeg * 0.5);
-
-        if (els.spinWheel) {
-            els.spinWheel.style.transition = 'transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
-            els.spinWheel.style.transform = 'rotate(' + targetRotation + 'deg)';
-        }
-
-        setTimeout(function() {
-            state.spinning = false;
-            state.hasSpun = true;
-            onSpinComplete(prize);
-        }, 4200);
-    }
-
-    function onSpinComplete(prize) {
-        console.log('[SpinWheel v17] Won: \u20B9' + prize.value);
-
-        var expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + WALLET_EXPIRY_HOURS);
-
-        // Save to localStorage
-        var walletData = {
-            amount: prize.value,
-            expiresAt: expiresAt.toISOString(),
-            phone: state.phone,
-            wonAt: new Date().toISOString()
-        };
-        localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify(walletData));
-        localStorage.setItem('seasalt_has_spun', 'true');
-        localStorage.setItem('seasalt_spin_phone', state.phone);
-
-        // Save to Supabase
-        saveWalletToSupabase(prize.value, expiresAt.toISOString());
-
-        // Show win result
-        setTimeout(function() {
-            showSection('resultSection');
-            if (els.winResult) els.winResult.classList.remove('hidden');
-            if (els.loseResult) els.loseResult.classList.add('hidden');
-            if (els.winAmount) els.winAmount.textContent = '\u20B9' + prize.value;
-
-            // Update wallet in header via UI module
-            if (typeof UI !== 'undefined') {
-                var wallet = UI.getSpinWallet ? UI.getSpinWallet() : null;
-                if (wallet && UI.updateWalletDisplay) {
-                    UI.updateWalletDisplay(wallet);
-                    if (UI.startWalletTimer) UI.startWalletTimer();
-                }
-                if (UI.updateCartUI) UI.updateCartUI();
-            }
-        }, 500);
-    }
-
-    // ==================== SUPABASE WALLET SAVE ====================
-    function saveWalletToSupabase(amount, expiresAt) {
-        var phone = state.phone || localStorage.getItem('seasalt_phone') || '';
-        if (!phone) return;
-
-        // Get existing balance (admin credits + any prior spin)
-        fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone) + '&select=wallet_balance', {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        })
-        .then(function(res) { return res.json(); })
-        .then(function(users) {
-            var existing = (users && users[0] && users[0].wallet_balance) ? users[0].wallet_balance : 0;
-            var newBalance = existing + amount;
-
-            return fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone), {
-                method: 'PATCH',
-                headers: {
-                    'apikey': SUPABASE_KEY,
-                    'Authorization': 'Bearer ' + SUPABASE_KEY,
-                    'Content-Type': 'application/json',
-                    'Prefer': 'return=minimal'
-                },
-                body: JSON.stringify({
-                    wallet_balance: newBalance,
-                    wallet_expires_at: expiresAt
-                })
-            });
-        })
-        .then(function() {
-            console.log('[SpinWheel v17] Wallet saved to Supabase');
-        })
-        .catch(function(err) {
-            console.error('[SpinWheel v17] Supabase save error:', err);
-        });
-
-        // Log spin result (table may not exist - that's fine)
-        fetch(SUPABASE_URL + '/rest/v1/spin_results', {
-            method: 'POST',
-            headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': 'Bearer ' + SUPABASE_KEY,
-                'Content-Type': 'application/json',
-                'Prefer': 'return=minimal'
-            },
-            body: JSON.stringify({
-                phone: phone,
-                prize_amount: amount,
-                spun_at: new Date().toISOString()
-            })
-        }).catch(function() {});
-    }
-
-    // ==================== EVENT BINDING ====================
-    function bindEvents() {
-        // Phone input validation - enable button when valid
-        if (els.phoneInput) {
-            els.phoneInput.addEventListener('input', function() {
-                var phone = els.phoneInput.value.replace(/\D/g, '');
-                if (els.sendOtpBtn) els.sendOtpBtn.disabled = phone.length < 7;
-            });
-            els.phoneInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter' && els.sendOtpBtn && !els.sendOtpBtn.disabled) sendOTP();
-            });
-        }
-
-        // Send OTP
-        if (els.sendOtpBtn) {
-            els.sendOtpBtn.addEventListener('click', sendOTP);
-        }
-
-        // OTP inputs - auto-advance, paste support, enable verify
-        if (els.otpInputs && els.otpInputs.length > 0) {
-            els.otpInputs.forEach(function(input, index) {
-                input.addEventListener('input', function(e) {
-                    if (e.target.value.length === 1 && index < els.otpInputs.length - 1) {
-                        els.otpInputs[index + 1].focus();
-                    }
-                    var allFilled = true;
-                    els.otpInputs.forEach(function(inp) { if (!inp.value) allFilled = false; });
-                    if (els.verifyOtpBtn) els.verifyOtpBtn.disabled = !allFilled;
-                });
-                input.addEventListener('keydown', function(e) {
-                    if (e.key === 'Backspace' && !input.value && index > 0) {
-                        els.otpInputs[index - 1].focus();
-                    }
-                });
-                input.addEventListener('paste', function(e) {
-                    e.preventDefault();
-                    var pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
-                    for (var p = 0; p < Math.min(pasted.length, els.otpInputs.length); p++) {
-                        els.otpInputs[p].value = pasted[p];
-                    }
-                    var lastIdx = Math.min(pasted.length, els.otpInputs.length) - 1;
-                    if (lastIdx >= 0) els.otpInputs[lastIdx].focus();
-                    if (pasted.length >= 6 && els.verifyOtpBtn) els.verifyOtpBtn.disabled = false;
-                });
-            });
-        }
-
-        // Verify OTP
-        if (els.verifyOtpBtn) {
-            els.verifyOtpBtn.addEventListener('click', verifyOTP);
-        }
-
-        // Spin button
-        if (els.spinBtn) {
-            els.spinBtn.addEventListener('click', spin);
-        }
-
-        // Wheel click to spin
-        if (els.spinWheel) {
-            els.spinWheel.style.cursor = 'pointer';
-            els.spinWheel.addEventListener('click', spin);
-        }
-
-        // Continue button - close modal
-        if (els.continueBtn) {
-            els.continueBtn.addEventListener('click', closeModal);
-        }
-
-        // Close button
-        if (els.closeBtn) {
-            els.closeBtn.addEventListener('click', closeModal);
-        }
-    }
-
-    // ==================== MODAL CONTROL ====================
-    function openModal() {
-        if (els.modal) {
-            els.modal.classList.remove('hidden');
-            document.body.style.overflow = 'hidden';
-        }
-    }
-
-    function closeModal() {
-        if (els.modal) {
-            els.modal.classList.add('hidden');
-            document.body.style.overflow = '';
-        }
-    }
-
-    // ==================== CHECK EXISTING SPIN ====================
-    function checkExistingSpin() {
-        var hasSpun = localStorage.getItem('seasalt_has_spun');
-        var walletRaw = localStorage.getItem(SPIN_WALLET_KEY);
-
-        if (hasSpun === 'true' && walletRaw) {
-            try {
-                var data = JSON.parse(walletRaw);
-                var expiry = new Date(data.expiresAt);
-                if (new Date() < expiry) {
-                    state.hasSpun = true;
-                    console.log('[SpinWheel v17] Already spun, wallet active: \u20B9' + data.amount);
-                    return true;
-                } else {
-                    localStorage.removeItem('seasalt_has_spun');
-                    localStorage.removeItem(SPIN_WALLET_KEY);
-                    return false;
-                }
-            } catch (e) { return false; }
-        }
-        return false;
-    }
-
-    // ==================== INIT ====================
+var SpinWheel = (function() {
+    var modal, phoneSection, otpSection, wheelSection, resultSection;
+    var phoneInput, sendOtpBtn, otpInputs, verifyOtpBtn;
+    var spinWheel, spinBtn, closeBtn, continueBtn;
+    var winResult, loseResult, winAmount;
+    
+    var confirmationResult = null;
+    var userPhone = null;
+    var isSpinning = false;
+    var auth = null;
+    var recaptchaVerifier = null;
+    
     function init() {
         cacheElements();
-        initFirebase();
-        buildPickleWheel();
-        bindEvents();
-
-        var alreadySpun = checkExistingSpin();
-
-        if (!alreadySpun) {
-            // Show modal after products load
-            setTimeout(openModal, 1500);
+        if (!modal) {
+            console.log('[SpinWheel] Modal not found, skipping init');
+            return;
         }
-
-        console.log('[SpinWheel v17] Initialized - pickle theme, 6 prize segments');
+        bindEvents();
+        
+        // Check if spin wheel should be shown (with delay to let data load)
+        setTimeout(function() {
+            if (shouldShowSpinWheel()) {
+                showModal();
+            }
+        }, 2000);
     }
-
-    // ==================== AUTO-INIT ====================
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        setTimeout(init, 100);
+    
+    function cacheElements() {
+        modal = document.getElementById('spin-modal');
+        if (!modal) return;
+        
+        phoneSection = document.getElementById('phone-section');
+        otpSection = document.getElementById('otp-section');
+        wheelSection = document.getElementById('wheel-section');
+        resultSection = document.getElementById('result-section');
+        
+        phoneInput = document.getElementById('phone-input');
+        sendOtpBtn = document.getElementById('send-otp-btn');
+        otpInputs = document.querySelectorAll('.otp-input');
+        verifyOtpBtn = document.getElementById('verify-otp-btn');
+        
+        spinWheel = document.getElementById('spin-wheel');
+        spinBtn = document.getElementById('spin-btn');
+        closeBtn = document.getElementById('spin-close-btn');
+        continueBtn = document.getElementById('continue-btn');
+        
+        winResult = document.getElementById('win-result');
+        loseResult = document.getElementById('lose-result');
+        winAmount = document.getElementById('win-amount');
     }
-
-    // ==================== PUBLIC API ====================
-    window.SpinWheel = {
-        open: openModal,
-        close: closeModal,
-        init: init
+    
+    function bindEvents() {
+        if (!phoneInput || !sendOtpBtn) return;
+        
+        phoneInput.addEventListener('input', function(e) {
+            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+            sendOtpBtn.disabled = e.target.value.length !== 10;
+        });
+        
+        sendOtpBtn.addEventListener('click', handleSendOtp);
+        
+        if (otpInputs && otpInputs.length > 0) {
+            otpInputs.forEach(function(input, index) {
+                input.addEventListener('input', function(e) {
+                    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 1);
+                    if (e.target.value && index < otpInputs.length - 1) {
+                        otpInputs[index + 1].focus();
+                    }
+                    checkOtpComplete();
+                });
+                
+                input.addEventListener('keydown', function(e) {
+                    if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                        otpInputs[index - 1].focus();
+                    }
+                });
+            });
+        }
+        
+        if (verifyOtpBtn) verifyOtpBtn.addEventListener('click', handleVerifyOtp);
+        if (spinBtn) spinBtn.addEventListener('click', handleSpin);
+        if (closeBtn) closeBtn.addEventListener('click', hideModal);
+        if (continueBtn) continueBtn.addEventListener('click', hideModal);
+    }
+    
+    function shouldShowSpinWheel() {
+        // Check CONFIG
+        if (typeof CONFIG === 'undefined' || !CONFIG.SPIN_WHEEL || !CONFIG.SPIN_WHEEL.ENABLED) {
+            return false;
+        }
+        
+        // Check if user has already spun
+        if (typeof Store !== 'undefined' && Store.hasUserSpun && Store.hasUserSpun()) {
+            return false;
+        }
+        
+        // Check site config - FIXED: getState() returns the full state object
+        if (typeof Store !== 'undefined' && Store.getState) {
+            var state = Store.getState();
+            if (state && state.siteConfig && state.siteConfig.spinWheelEnabled === false) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    function showModal() {
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        if (phoneInput) phoneInput.focus();
+        
+        // Try to initialize Firebase
+        try {
+            if (typeof firebase !== 'undefined' && !firebase.apps.length && typeof CONFIG !== 'undefined' && CONFIG.FIREBASE) {
+                firebase.initializeApp(CONFIG.FIREBASE);
+                auth = firebase.auth();
+                recaptchaVerifier = new firebase.auth.RecaptchaVerifier('send-otp-btn', { size: 'invisible' });
+            }
+        } catch (e) {
+            console.warn('[SpinWheel] Firebase init failed, using mock OTP');
+        }
+    }
+    
+    function hideModal() {
+        if (!modal) return;
+        modal.classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+    
+    function handleSendOtp() {
+        var phone = phoneInput ? phoneInput.value.trim() : '';
+        if (phone.length !== 10) {
+            if (typeof UI !== 'undefined') UI.showToast('Please enter a valid 10-digit number', 'error');
+            return;
+        }
+        
+        userPhone = '+91' + phone;
+        sendOtpBtn.disabled = true;
+        sendOtpBtn.textContent = 'Sending...';
+        
+        // Use mock OTP for now (Firebase requires setup)
+        mockSendOtp();
+    }
+    
+    function mockSendOtp() {
+        showOtpSection();
+        if (typeof UI !== 'undefined') UI.showToast('OTP sent! (Demo: enter any 6 digits)', 'info');
+    }
+    
+    function showOtpSection() {
+        if (phoneSection) phoneSection.classList.add('hidden');
+        if (otpSection) otpSection.classList.remove('hidden');
+        if (otpInputs && otpInputs[0]) otpInputs[0].focus();
+    }
+    
+    function checkOtpComplete() {
+        var otp = Array.from(otpInputs).map(function(i) { return i.value; }).join('');
+        if (verifyOtpBtn) verifyOtpBtn.disabled = otp.length !== 6;
+    }
+    
+    function handleVerifyOtp() {
+        var otp = Array.from(otpInputs).map(function(i) { return i.value; }).join('');
+        
+        if (otp.length !== 6) {
+            if (typeof UI !== 'undefined') UI.showToast('Please enter complete OTP', 'error');
+            return;
+        }
+        
+        if (verifyOtpBtn) {
+            verifyOtpBtn.disabled = true;
+            verifyOtpBtn.textContent = 'Verifying...';
+        }
+        
+        // In mock mode, accept any OTP
+        onOtpVerified();
+    }
+    
+    function onOtpVerified() {
+        if (typeof Store !== 'undefined' && Store.setUser) {
+            Store.setUser({ phone: userPhone });
+        }
+        
+        if (otpSection) otpSection.classList.add('hidden');
+        if (wheelSection) wheelSection.classList.remove('hidden');
+        
+        if (typeof UI !== 'undefined') UI.showToast('Verified! Spin the wheel!', 'success');
+    }
+    
+    function handleSpin() {
+        if (isSpinning) return;
+        isSpinning = true;
+        
+        if (spinBtn) {
+            spinBtn.disabled = true;
+            spinBtn.textContent = 'Spinning...';
+        }
+        
+        var result = calculateSpinResult();
+        var degrees = result.degrees;
+        var won = result.won;
+        var amount = result.amount;
+        
+        if (spinWheel) {
+            spinWheel.style.setProperty('--spin-degrees', degrees + 'deg');
+            spinWheel.style.transform = 'rotate(' + degrees + 'deg)';
+        }
+        
+        setTimeout(function() {
+            showResult(won, amount);
+        }, 4000);
+    }
+    
+    function calculateSpinResult() {
+        var winningOdds = (typeof CONFIG !== 'undefined' && CONFIG.SPIN_WHEEL) ? CONFIG.SPIN_WHEEL.WINNING_ODDS : 3;
+        var random = Math.random();
+        var won = random < (1 / winningOdds);
+        
+        var amount = 0;
+        var segmentIndex = 0;
+        
+        if (won) {
+            var rewards = (typeof CONFIG !== 'undefined' && CONFIG.SPIN_WHEEL && CONFIG.SPIN_WHEEL.REWARD_PROBABILITIES)
+                ? CONFIG.SPIN_WHEEL.REWARD_PROBABILITIES
+                : { '99': 0.6, '299': 0.3, '599': 0.1 };
+            
+            var rewardRandom = Math.random();
+            var cumulative = 0;
+            
+            for (var reward in rewards) {
+                cumulative += rewards[reward];
+                if (rewardRandom <= cumulative) {
+                    amount = parseInt(reward);
+                    break;
+                }
+            }
+            
+            if (amount === 99) segmentIndex = 0;
+            else if (amount === 299) segmentIndex = 2;
+            else if (amount === 599) segmentIndex = 4;
+        } else {
+            var loseSegments = [1, 3, 5];
+            segmentIndex = loseSegments[Math.floor(Math.random() * loseSegments.length)];
+        }
+        
+        var baseRotation = 1800;
+        var segmentDegrees = 60;
+        var segmentCenter = (segmentIndex * segmentDegrees) + (segmentDegrees / 2);
+        var degrees = baseRotation + (360 - segmentCenter) + Math.random() * 20 - 10;
+        
+        return { degrees: degrees, won: won, amount: amount };
+    }
+    
+    function showResult(won, amount) {
+        if (typeof Store !== 'undefined' && Store.markSpinCompleted) {
+            Store.markSpinCompleted();
+        }
+        
+        if (wheelSection) wheelSection.classList.add('hidden');
+        if (resultSection) resultSection.classList.remove('hidden');
+        if (closeBtn) closeBtn.classList.remove('hidden');
+        
+        if (won) {
+            if (typeof Store !== 'undefined' && Store.addToWallet) {
+                Store.addToWallet(amount, 'Spin Wheel Reward');
+            }
+            if (typeof UI !== 'undefined' && UI.updateCartUI) {
+                UI.updateCartUI();
+            }
+            
+            var priceText = (typeof CONFIG !== 'undefined' && CONFIG.formatPrice) 
+                ? CONFIG.formatPrice(amount) 
+                : '₹' + amount;
+            
+            if (winAmount) winAmount.textContent = priceText;
+            if (winResult) winResult.classList.remove('hidden');
+            if (loseResult) loseResult.classList.add('hidden');
+            
+            if (typeof UI !== 'undefined') UI.showToast('You won ' + priceText + '!', 'success');
+        } else {
+            if (winResult) winResult.classList.add('hidden');
+            if (loseResult) loseResult.classList.remove('hidden');
+        }
+        
+        isSpinning = false;
+    }
+    
+    return {
+        init: init,
+        show: showModal,
+        hide: hideModal,
+        shouldShow: shouldShowSpinWheel
     };
-
 })();
+
+window.SpinWheel = SpinWheel;
