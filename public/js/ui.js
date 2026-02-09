@@ -231,6 +231,26 @@ const UI = (function() {
         cacheElements(); 
         injectWalletStyles();
         
+        // Fix category pills clickability - ensure pills are above hero banner
+        var catPillsSection = document.getElementById('category-pills');
+        if (catPillsSection) {
+            catPillsSection.style.zIndex = '45';
+            catPillsSection.style.pointerEvents = 'auto';
+            catPillsSection.style.isolation = 'isolate';
+        }
+        var catScroll = document.getElementById('category-scroll');
+        if (catScroll) {
+            catScroll.style.position = 'relative';
+            catScroll.style.zIndex = '5';
+            catScroll.style.pointerEvents = 'auto';
+        }
+        // Ensure hero doesn't overlap pills
+        var hero = document.getElementById('hero-banner');
+        if (hero) {
+            hero.style.position = 'relative';
+            hero.style.zIndex = '1';
+        }
+        
         setTimeout(function() {
             var wallet = getSpinWallet();
             if (wallet) {
@@ -357,16 +377,29 @@ const UI = (function() {
     
     function renderCategoryPills(categories) {
         if (!elements.categoryScroll) return;
-        var html = '<button class="category-pill active flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all bg-pickle-500 text-white" data-category="all">🫙 All</button>';
+        
+        // Ensure pills container is clickable (fix z-index overlap from hero)
+        elements.categoryScroll.style.position = 'relative';
+        elements.categoryScroll.style.zIndex = '10';
+        elements.categoryScroll.style.pointerEvents = 'auto';
+        // Also fix parent if needed
+        if (elements.categoryScroll.parentElement) {
+            elements.categoryScroll.parentElement.style.position = 'relative';
+            elements.categoryScroll.parentElement.style.zIndex = '10';
+        }
+        
+        var html = '<button class="category-pill active flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all bg-pickle-500 text-white" data-category="all" style="pointer-events:auto;cursor:pointer;">🫙 All</button>';
         for (var i = 0; i < categories.length; i++) {
             var c = categories[i];
             var emoji = safeEmoji(c.emoji || c.icon, c.id);
-            html += '<button class="category-pill flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200" data-category="' + c.id + '">' + emoji + ' ' + c.name + '</button>';
+            html += '<button class="category-pill flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all bg-gray-100 text-gray-700 hover:bg-gray-200" data-category="' + c.id + '" style="pointer-events:auto;cursor:pointer;">' + emoji + ' ' + c.name + '</button>';
         }
         elements.categoryScroll.innerHTML = html;
         
         elements.categoryScroll.querySelectorAll('.category-pill').forEach(function(pill) {
-            pill.addEventListener('click', function() {
+            pill.addEventListener('click', function(e) {
+                e.stopPropagation();
+                console.log('[UI] Category pill clicked:', pill.dataset.category);
                 elements.categoryScroll.querySelectorAll('.category-pill').forEach(function(p) {
                     p.classList.remove('active', 'bg-pickle-500', 'text-white');
                     p.classList.add('bg-gray-100', 'text-gray-700');
@@ -375,8 +408,14 @@ const UI = (function() {
                 pill.classList.remove('bg-gray-100', 'text-gray-700');
                 Store.setActiveCategory(pill.dataset.category);
                 renderCategorySections(Store.getCategories(), Store.getActiveProducts());
+                
+                // Scroll to products
+                var catSection = document.getElementById('category-sections');
+                if (catSection) catSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
             });
         });
+        
+        console.log('[UI] Category pills rendered:', categories.length + 1, 'pills');
     }
     
     function createProductCard(product) {
