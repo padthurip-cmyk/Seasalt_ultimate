@@ -171,6 +171,7 @@ const App = (function() {
             useWalletCheckbox.addEventListener('change', function(e) {
                 Store.setUseWallet(e.target.checked);
                 UI.renderCartItems();
+                UI.updateCartUI();
             });
         }
     }
