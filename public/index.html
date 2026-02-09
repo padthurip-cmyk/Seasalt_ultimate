@@ -83,6 +83,43 @@
         }
     </script>
     
+    <!-- LAYOUT SHIFT FIX -->
+    <style>
+        /* Force scrollbar to always show */
+        html {
+            overflow-y: scroll;
+        }
+        
+        /* Prevent horizontal scroll */
+        body {
+            overflow-x: hidden;
+            width: 100%;
+        }
+        
+        /* All modals use fixed positioning */
+        #product-modal,
+        #cart-sidebar,
+        #spin-modal,
+        #checkout-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+        }
+        
+        /* Header stays fixed width */
+        #main-header {
+            width: 100%;
+        }
+        
+        /* Bottom nav stays fixed */
+        #bottom-nav {
+            width: 100%;
+        }
+    </style>
+    
     <!-- Custom Styles -->
     <link rel="stylesheet" href="css/main.css">
     
@@ -209,9 +246,7 @@
 
     </div>
 
-    <!-- ============================================ -->
-    <!-- SPIN WHEEL MODAL - UPDATED WITH SVG WHEEL -->
-    <!-- ============================================ -->
+    <!-- SPIN WHEEL MODAL -->
     <div id="spin-modal" class="fixed inset-0 z-[90] hidden">
         <div class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
         <div class="relative h-full flex items-center justify-center p-4">
@@ -239,10 +274,8 @@
                     <!-- Phone Input with Country Code -->
                     <div id="phone-section" class="space-y-4">
                         <div class="flex gap-2">
-                            <!-- Country Code Dropdown -->
                             <div class="relative">
-                                <select id="country-code" 
-                                    class="appearance-none w-28 py-4 pl-3 pr-8 bg-white rounded-xl text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-spice-gold cursor-pointer text-sm">
+                                <select id="country-code" class="appearance-none w-28 py-4 pl-3 pr-8 bg-white rounded-xl text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-spice-gold cursor-pointer text-sm">
                                     <option value="+91">🇮🇳 +91</option>
                                     <option value="+1">🇺🇸 +1</option>
                                     <option value="+44">🇬🇧 +44</option>
@@ -270,10 +303,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                                 </svg>
                             </div>
-                            
-                            <!-- Phone Number Input -->
-                            <input type="tel" id="phone-input" maxlength="15" placeholder="Enter mobile number"
-                                class="flex-1 py-4 px-4 bg-white rounded-xl text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-spice-gold">
+                            <input type="tel" id="phone-input" maxlength="15" placeholder="Enter mobile number" class="flex-1 py-4 px-4 bg-white rounded-xl text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-spice-gold">
                         </div>
                         <button id="send-otp-btn" disabled class="w-full py-4 bg-gradient-to-r from-spice-gold to-yellow-500 text-white font-bold rounded-xl hover:from-yellow-500 hover:to-spice-gold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-spice-gold/30">
                             Send OTP ✨
@@ -300,59 +330,34 @@
                     <!-- Spin Wheel - SVG Based -->
                     <div id="wheel-section" class="hidden">
                         <div class="relative w-72 h-72 mx-auto mb-6">
-                            <!-- Outer glow -->
                             <div class="absolute inset-0 rounded-full bg-gradient-to-r from-spice-gold via-yellow-400 to-spice-gold animate-pulse opacity-30 blur-xl"></div>
-                            
-                            <!-- Pointer/Arrow -->
                             <div class="absolute -top-2 left-1/2 -translate-x-1/2 z-20">
                                 <div class="w-0 h-0 border-l-[15px] border-r-[15px] border-t-[25px] border-l-transparent border-r-transparent border-t-white drop-shadow-lg"></div>
                             </div>
-                            
-                            <!-- Center decoration -->
                             <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-gradient-to-br from-white to-gray-200 rounded-full z-10 shadow-lg flex items-center justify-center">
                                 <span class="text-2xl">🎰</span>
                             </div>
-                            
-                            <!-- The Wheel SVG -->
                             <svg id="spin-wheel" class="w-full h-full drop-shadow-2xl" viewBox="0 0 300 300" style="transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);">
-                                <!-- Segment 1: ₹99 (Gold) -->
                                 <path d="M150,150 L150,10 A140,140 0 0,1 271.24,71.24 Z" fill="#DAA520"/>
                                 <text x="190" y="70" fill="white" font-size="18" font-weight="bold" transform="rotate(22.5, 150, 150)">₹99</text>
-                                
-                                <!-- Segment 2: Try Again (Green) -->
                                 <path d="M150,150 L271.24,71.24 A140,140 0 0,1 290,150 Z" fill="#2E7D32"/>
                                 <text x="230" y="130" fill="white" font-size="10" font-weight="bold" transform="rotate(67.5, 150, 150)">TRY AGAIN</text>
-                                
-                                <!-- Segment 3: ₹299 (Red) -->
                                 <path d="M150,150 L290,150 A140,140 0 0,1 271.24,228.76 Z" fill="#E53935"/>
                                 <text x="225" y="185" fill="white" font-size="16" font-weight="bold" transform="rotate(112.5, 150, 150)">₹299</text>
-                                
-                                <!-- Segment 4: Try Again (Green) -->
                                 <path d="M150,150 L271.24,228.76 A140,140 0 0,1 150,290 Z" fill="#388E3C"/>
                                 <text x="180" y="245" fill="white" font-size="10" font-weight="bold" transform="rotate(157.5, 150, 150)">TRY AGAIN</text>
-                                
-                                <!-- Segment 5: ₹599 (Purple - Jackpot) -->
                                 <path d="M150,150 L150,290 A140,140 0 0,1 28.76,228.76 Z" fill="#7B1FA2"/>
                                 <text x="85" y="245" fill="white" font-size="16" font-weight="bold" transform="rotate(202.5, 150, 150)">₹599</text>
-                                
-                                <!-- Segment 6: Try Again (Green) -->
                                 <path d="M150,150 L28.76,228.76 A140,140 0 0,1 10,150 Z" fill="#43A047"/>
                                 <text x="35" y="185" fill="white" font-size="10" font-weight="bold" transform="rotate(247.5, 150, 150)">TRY AGAIN</text>
-                                
-                                <!-- Segment 7: ₹99 (Orange) -->
                                 <path d="M150,150 L10,150 A140,140 0 0,1 28.76,71.24 Z" fill="#FFA000"/>
                                 <text x="50" y="115" fill="white" font-size="18" font-weight="bold" transform="rotate(292.5, 150, 150)">₹99</text>
-                                
-                                <!-- Segment 8: Try Again (Green) -->
                                 <path d="M150,150 L28.76,71.24 A140,140 0 0,1 150,10 Z" fill="#2E7D32"/>
                                 <text x="95" y="55" fill="white" font-size="10" font-weight="bold" transform="rotate(337.5, 150, 150)">TRY AGAIN</text>
-                                
-                                <!-- Border circle -->
                                 <circle cx="150" cy="150" r="140" fill="none" stroke="white" stroke-width="8"/>
                                 <circle cx="150" cy="150" r="130" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
                             </svg>
                         </div>
-                        
                         <button id="spin-btn" class="w-full py-4 bg-gradient-to-r from-white to-gray-100 text-pickle-600 font-bold rounded-xl hover:from-gray-100 hover:to-white transition-all shadow-lg flex items-center justify-center gap-2">
                             <span class="text-2xl">🎰</span>
                             <span>SPIN NOW!</span>
@@ -397,29 +402,19 @@
                     <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
             </div>
-            
             <div class="p-4">
-                <!-- Product Image -->
                 <div class="relative aspect-square bg-pickle-50 rounded-2xl overflow-hidden mb-4">
                     <img id="modal-product-image" src="" alt="" class="w-full h-full object-cover">
                     <span id="modal-product-ribbon" class="absolute top-3 left-3 px-3 py-1 bg-spice-gold text-white text-xs font-semibold rounded-full"></span>
                 </div>
-                
-                <!-- Product Info -->
                 <div class="mb-4">
                     <p id="modal-product-category" class="text-sm text-pickle-600 font-medium mb-1"></p>
                     <p id="modal-product-description" class="text-gray-600 text-sm leading-relaxed"></p>
                 </div>
-                
-                <!-- Variant Selection -->
                 <div class="mb-6">
                     <h4 class="font-semibold text-gray-800 mb-3">Select Size</h4>
-                    <div id="variant-options" class="flex flex-wrap gap-2">
-                        <!-- Variants will be injected here -->
-                    </div>
+                    <div id="variant-options" class="flex flex-wrap gap-2"></div>
                 </div>
-                
-                <!-- Add to Cart Section -->
                 <div class="sticky bottom-0 bg-white pt-4 pb-6 border-t border-gray-100">
                     <div class="flex items-center justify-between">
                         <div>
@@ -447,15 +442,12 @@
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" id="cart-overlay"></div>
         <div class="absolute top-0 right-0 bottom-0 w-full max-w-md bg-white shadow-2xl animate-slide-up">
             <div class="h-full flex flex-col">
-                <!-- Cart Header -->
                 <div class="p-4 border-b border-gray-100 flex items-center justify-between">
                     <h2 class="font-display text-xl font-bold text-gray-800">Your Cart</h2>
                     <button id="close-cart" class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
                         <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                     </button>
                 </div>
-                
-                <!-- Cart Items -->
                 <div class="flex-1 overflow-y-auto p-4" id="cart-items">
                     <div id="empty-cart" class="h-full flex flex-col items-center justify-center text-center">
                         <div class="text-6xl mb-4">🛒</div>
@@ -463,10 +455,7 @@
                         <p class="text-gray-500 text-sm">Add some delicious pickles!</p>
                     </div>
                 </div>
-                
-                <!-- Cart Footer -->
                 <div id="cart-footer" class="p-4 border-t border-gray-100 bg-gray-50 hidden">
-                    <!-- Apply Wallet -->
                     <div id="wallet-apply-section" class="mb-4 p-3 bg-spice-gold/10 rounded-xl hidden">
                         <label class="flex items-center justify-between cursor-pointer">
                             <span class="flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -476,8 +465,6 @@
                             <input type="checkbox" id="use-wallet" class="w-5 h-5 accent-spice-gold">
                         </label>
                     </div>
-                    
-                    <!-- Summary -->
                     <div class="space-y-2 mb-4 text-sm">
                         <div class="flex justify-between">
                             <span class="text-gray-500">Subtotal</span>
@@ -496,7 +483,6 @@
                             <span class="text-pickle-600" id="cart-total">₹0</span>
                         </div>
                     </div>
-                    
                     <button id="checkout-btn" class="w-full py-4 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600 transition-colors flex items-center justify-center gap-2">
                         <span>Proceed to Checkout</span>
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
