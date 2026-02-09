@@ -1,24 +1,38 @@
 /**
- * SeaSalt Pickles - UI Module v8 (Layout Shift Fix)
+ * SeaSalt Pickles - UI Module v9 (Header Shift Fix)
  * ==================================================
- * FIXED: Proper scroll lock to prevent layout shift
+ * FIXED: Adds padding to fixed elements (header, bottom nav) when scroll locked
  */
 
 const UI = (function() {
     var elements = {};
     var walletTimerInterval = null;
     var scrollLockCount = 0;
+    var scrollbarWidth = 0;
     
     var SPIN_WALLET_KEY = 'seasalt_spin_wallet';
     
     // ============================================
-    // SCROLL LOCK - Prevents layout shift
+    // SCROLL LOCK - Prevents layout shift on ALL elements
     // ============================================
+    function getScrollbarWidth() {
+        return window.innerWidth - document.documentElement.clientWidth;
+    }
+    
     function lockScroll() {
         if (scrollLockCount === 0) {
-            var scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+            scrollbarWidth = getScrollbarWidth();
+            
+            // Add padding to body
             document.body.style.overflow = 'hidden';
             document.body.style.paddingRight = scrollbarWidth + 'px';
+            
+            // Add padding to fixed elements
+            var header = document.getElementById('main-header') || document.querySelector('header');
+            var bottomNav = document.getElementById('bottom-nav') || document.querySelector('.bottom-nav');
+            
+            if (header) header.style.paddingRight = scrollbarWidth + 'px';
+            if (bottomNav) bottomNav.style.paddingRight = scrollbarWidth + 'px';
         }
         scrollLockCount++;
     }
@@ -27,8 +41,17 @@ const UI = (function() {
         scrollLockCount--;
         if (scrollLockCount <= 0) {
             scrollLockCount = 0;
+            
+            // Remove padding from body
             document.body.style.overflow = '';
             document.body.style.paddingRight = '';
+            
+            // Remove padding from fixed elements
+            var header = document.getElementById('main-header') || document.querySelector('header');
+            var bottomNav = document.getElementById('bottom-nav') || document.querySelector('.bottom-nav');
+            
+            if (header) header.style.paddingRight = '';
+            if (bottomNav) bottomNav.style.paddingRight = '';
         }
     }
     
@@ -36,6 +59,12 @@ const UI = (function() {
         scrollLockCount = 0;
         document.body.style.overflow = '';
         document.body.style.paddingRight = '';
+        
+        var header = document.getElementById('main-header') || document.querySelector('header');
+        var bottomNav = document.getElementById('bottom-nav') || document.querySelector('.bottom-nav');
+        
+        if (header) header.style.paddingRight = '';
+        if (bottomNav) bottomNav.style.paddingRight = '';
     }
     
     function cacheElements() {
