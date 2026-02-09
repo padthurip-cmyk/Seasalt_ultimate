@@ -600,11 +600,32 @@ const UI = (function() {
     }
 
     // ============================================
+    // LOADING SCREEN
+    // ============================================
+    function showLoading() {
+        // Loading screen is handled by HTML, just ensure it's visible
+        const loader = document.getElementById('loading-screen');
+        if (loader) loader.style.display = 'flex';
+    }
+
+    function hideLoading() {
+        const loader = document.getElementById('loading-screen');
+        if (loader) {
+            loader.style.opacity = '0';
+            setTimeout(() => {
+                loader.style.display = 'none';
+            }, 300);
+        }
+    }
+
+    // ============================================
     // PUBLIC API
     // ============================================
     return {
         init,
         showToast,
+        showLoading,
+        hideLoading,
         openCart,
         closeCart,
         openProductModal,
