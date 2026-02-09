@@ -1,12 +1,195 @@
 /**
- * SeaSalt Pickles - UI Module v4 (Supabase-Compatible)
- * =====================================================
- * All DOM rendering. Handles loading overlay, #app visibility,
- * product cards, modals, cart, and category filtering.
+ * SeaSalt Pickles - UI Module v10 (Supabase Wallet Sync)
+ * ======================================================
+ * Based on v9 (Header Shift Fix) - ALL original functions preserved
+ * ADDED: syncWalletFromSupabase() for admin credits to reflect in customer wallet
  */
 
 const UI = (function() {
     var elements = {};
+    var walletTimerInterval = null;
+    var scrollLockCount = 0;
+    var scrollbarWidth = 0;
+    
+    var SPIN_WALLET_KEY = 'seasalt_spin_wallet';
+
+    // ============================================
+    // SUPABASE WALLET SYNC ENGINE (v10 addition)
+    // ============================================
+    var SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
+    var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgwNTIzNTEsImV4cCI6MjA1MzYyODM1MX0.LPSwMPKBiMxMTmHOVJxWBbS8kgGDo4RaPNCR63P55Cw';
+    var walletSyncInterval = null;
+    var SYNC_INTERVAL_MS = 15000; // 15 seconds
+
+    function getUserPhone() {
+        var sources = ['seasalt_phone', 'seasalt_user_phone', 'seasalt_spin_phone'];
+        for (var i = 0; i < sources.length; i++) {
+            var val = localStorage.getItem(sources[i]);
+            if (val && val.length >= 10) return val;
+        }
+        try {
+            var userData = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
+            if (userData.phone && userData.phone.length >= 10) return userData.phone;
+        } catch (e) {}
+        try {
+            var walletData = JSON.parse(localStorage.getItem(SPIN_WALLET_KEY) || '{}');
+            if (walletData.phone && walletData.phone.length >= 10) return walletData.phone;
+        } catch (e) {}
+        return null;
+    }
+
+    function syncWalletFromSupabase() {
+        var phone = getUserPhone();
+        if (!phone) {
+            console.log('[UI v10] No phone found for wallet sync');
+            return Promise.resolve(null);
+        }
+
+        console.log('[UI v10] Syncing wallet from Supabase for:', phone);
+
+        return fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone) + '&select=wallet_balance,wallet_expires_at', {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': 'Bearer ' + SUPABASE_KEY
+            }
+        })
+        .then(function(res) {
+            if (!res.ok) {
+                console.error('[UI v10] Supabase fetch failed:', res.status);
+                return [];
+            }
+            return res.json();
+        })
+        .then(function(users) {
+            if (!users || users.length === 0 || !users[0]) return null;
+
+            var serverBalance = users[0].wallet_balance || 0;
+            var serverExpiry = users[0].wallet_expires_at;
+
+            // Get current local wallet
+            var localWallet = null;
+            try { localWallet = JSON.parse(localStorage.getItem(SPIN_WALLET_KEY) || 'null'); } catch (e) {}
+            var localBalance = localWallet ? (localWallet.amount || 0) : 0;
+
+            if (serverBalance > 0 && serverExpiry) {
+                var expiry = new Date(serverExpiry);
+                if (new Date() < expiry) {
+                    // Server has valid wallet - use it as source of truth
+                    var walletData = {
+                        amount: serverBalance,
+                        expiresAt: serverExpiry,
+                        phone: phone,
+                        lastSync: new Date().toISOString()
+                    };
+                    localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify(walletData));
+
+                    // Update UI
+                    var wallet = getSpinWallet();
+                    updateWalletDisplay(wallet);
+                    if (!walletTimerInterval) startWalletTimer();
+
+                    if (serverBalance !== localBalance) {
+                        console.log('[UI v10] Wallet synced: ₹' + localBalance + ' → ₹' + serverBalance);
+                        if (serverBalance > localBalance && localBalance > 0) {
+                            showToast('Wallet updated! Balance: ₹' + serverBalance, 'success');
+                        } else if (localBalance === 0 && serverBalance > 0) {
+                            showToast('You have ₹' + serverBalance + ' wallet credits!', 'success');
+                        }
+                    }
+                    return { amount: serverBalance, timeLeft: expiry - new Date() };
+                } else {
+                    // Expired
+                    localStorage.removeItem(SPIN_WALLET_KEY);
+                    updateWalletDisplay(null);
+                    return null;
+                }
+            } else if (serverBalance === 0 && localBalance > 0) {
+                // Server says 0, clear local
+                localStorage.removeItem(SPIN_WALLET_KEY);
+                updateWalletDisplay(null);
+                return null;
+            }
+            return null;
+        })
+        .catch(function(err) {
+            console.error('[UI v10] Wallet sync error:', err);
+            return null;
+        });
+    }
+
+    function startWalletSync() {
+        // Initial sync
+        syncWalletFromSupabase();
+
+        // Recurring sync
+        if (walletSyncInterval) clearInterval(walletSyncInterval);
+        walletSyncInterval = setInterval(syncWalletFromSupabase, SYNC_INTERVAL_MS);
+
+        // Sync when tab becomes visible (critical for mobile)
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') syncWalletFromSupabase();
+        });
+
+        // Sync on window focus
+        window.addEventListener('focus', syncWalletFromSupabase);
+
+        console.log('[UI v10] Wallet sync engine started (every ' + (SYNC_INTERVAL_MS / 1000) + 's)');
+    }
+    
+    // ============================================
+    // SCROLL LOCK - Prevents layout shift on ALL elements
+    // ============================================
+    function getScrollbarWidth() {
+        return window.innerWidth - document.documentElement.clientWidth;
+    }
+    
+    function lockScroll() {
+        if (scrollLockCount === 0) {
+            scrollbarWidth = getScrollbarWidth();
+            
+            // Add padding to body
+            document.body.style.overflow = 'hidden';
+            document.body.style.paddingRight = scrollbarWidth + 'px';
+            
+            // Add padding to fixed elements
+            var header = document.getElementById('main-header') || document.querySelector('header');
+            var bottomNav = document.getElementById('bottom-nav') || document.querySelector('.bottom-nav');
+            
+            if (header) header.style.paddingRight = scrollbarWidth + 'px';
+            if (bottomNav) bottomNav.style.paddingRight = scrollbarWidth + 'px';
+        }
+        scrollLockCount++;
+    }
+    
+    function unlockScroll() {
+        scrollLockCount--;
+        if (scrollLockCount <= 0) {
+            scrollLockCount = 0;
+            
+            // Remove padding from body
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            
+            // Remove padding from fixed elements
+            var header = document.getElementById('main-header') || document.querySelector('header');
+            var bottomNav = document.getElementById('bottom-nav') || document.querySelector('.bottom-nav');
+            
+            if (header) header.style.paddingRight = '';
+            if (bottomNav) bottomNav.style.paddingRight = '';
+        }
+    }
+    
+    function forceUnlockScroll() {
+        scrollLockCount = 0;
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+        
+        var header = document.getElementById('main-header') || document.querySelector('header');
+        var bottomNav = document.getElementById('bottom-nav') || document.querySelector('.bottom-nav');
+        
+        if (header) header.style.paddingRight = '';
+        if (bottomNav) bottomNav.style.paddingRight = '';
+    }
     
     function cacheElements() {
         elements.loadingOverlay = document.getElementById('loading-overlay');
@@ -44,20 +227,100 @@ const UI = (function() {
         elements.modalTotalPrice = document.getElementById('modal-total-price');
     }
     
-    function init() { cacheElements(); }
+    function init() { 
+        cacheElements(); 
+        injectWalletStyles();
+        
+        setTimeout(function() {
+            var wallet = getSpinWallet();
+            if (wallet) {
+                updateWalletDisplay(wallet);
+                startWalletTimer();
+            }
+        }, 100);
+
+        // v10: Start Supabase wallet sync engine
+        startWalletSync();
+        console.log('[UI v10] Initialized with Supabase wallet sync');
+    }
+    
     function getElements() { return elements; }
     
-    // ============================================
-    // PRICE FORMATTER
-    // ============================================
+    function injectWalletStyles() {
+        if (document.getElementById('wallet-timer-css')) return;
+        
+        var style = document.createElement('style');
+        style.id = 'wallet-timer-css';
+        style.textContent = '#wallet-btn.has-timer{background:linear-gradient(135deg,#f97316 0%,#ea580c 100%)!important;color:white!important;padding:6px 12px!important;animation:walletGlow 2s ease-in-out infinite}#wallet-btn.has-timer svg{stroke:white!important}#wallet-btn.has-timer #wallet-balance{display:flex!important;flex-direction:column!important;align-items:center!important;line-height:1.1!important;gap:1px!important}.wallet-amount{font-size:14px!important;font-weight:700!important;color:white!important}.wallet-timer{font-size:9px!important;font-weight:600!important;color:rgba(255,255,255,0.9)!important;font-family:monospace!important;background:rgba(0,0,0,0.2)!important;padding:1px 6px!important;border-radius:4px!important}@keyframes walletGlow{0%,100%{box-shadow:0 2px 10px rgba(249,115,22,0.4)}50%{box-shadow:0 2px 20px rgba(249,115,22,0.6)}}';
+        document.head.appendChild(style);
+    }
+    
+    function getSpinWallet() {
+        try {
+            var data = JSON.parse(localStorage.getItem(SPIN_WALLET_KEY) || '{}');
+            if (!data.amount || data.amount <= 0) return null;
+            var expiresAt = new Date(data.expiresAt);
+            var now = new Date();
+            if (now >= expiresAt) {
+                localStorage.removeItem(SPIN_WALLET_KEY);
+                return null;
+            }
+            return { amount: data.amount, timeLeft: expiresAt - now };
+        } catch (e) {
+            return null;
+        }
+    }
+    
+    function formatTime(ms) {
+        if (ms <= 0) return '00:00:00';
+        var h = Math.floor(ms / 3600000);
+        var m = Math.floor((ms % 3600000) / 60000);
+        var s = Math.floor((ms % 60000) / 1000);
+        return h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+    }
+    
+    function updateWalletDisplay(wallet) {
+        if (!elements.walletBalance) elements.walletBalance = document.getElementById('wallet-balance');
+        if (!elements.walletBtn) elements.walletBtn = document.getElementById('wallet-btn');
+        if (!elements.walletBalance) return;
+        
+        if (wallet && wallet.amount > 0) {
+            if (elements.walletBtn) elements.walletBtn.classList.add('has-timer');
+            elements.walletBalance.innerHTML = '<span class="wallet-amount">₹' + wallet.amount + '</span><span class="wallet-timer">⏱ ' + formatTime(wallet.timeLeft) + '</span>';
+        } else {
+            if (elements.walletBtn) elements.walletBtn.classList.remove('has-timer');
+            elements.walletBalance.textContent = '₹0';
+        }
+    }
+    
+    function startWalletTimer() {
+        if (walletTimerInterval) {
+            clearInterval(walletTimerInterval);
+            walletTimerInterval = null;
+        }
+        
+        walletTimerInterval = setInterval(function() {
+            var wallet = getSpinWallet();
+            if (!wallet) {
+                clearInterval(walletTimerInterval);
+                walletTimerInterval = null;
+                updateWalletDisplay(null);
+                return;
+            }
+            var timerEl = document.querySelector('#wallet-balance .wallet-timer');
+            if (timerEl) {
+                timerEl.textContent = '⏱ ' + formatTime(wallet.timeLeft);
+            } else {
+                updateWalletDisplay(wallet);
+            }
+        }, 1000);
+    }
+
     function fmt(amount) {
         if (typeof CONFIG !== 'undefined' && CONFIG.formatPrice) return CONFIG.formatPrice(amount);
         return '₹' + amount;
     }
 
-    // ============================================
-    // LOADING - CRITICAL: must toggle #app visibility
-    // ============================================
     function showLoading() {
         if (elements.loadingOverlay) elements.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none', 'hidden');
         if (elements.app) elements.app.classList.add('hidden');
@@ -71,13 +334,9 @@ const UI = (function() {
         if (elements.app) elements.app.classList.remove('hidden');
     }
     
-    // ============================================
-    // TOAST
-    // ============================================
     function showToast(message, type, duration) {
         type = type || 'info';
         duration = duration || 3000;
-        if (typeof CONFIG !== 'undefined' && CONFIG.UI && CONFIG.UI.TOAST_DURATION) duration = CONFIG.UI.TOAST_DURATION;
         var toast = document.createElement('div');
         var bg = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : type === 'warning' ? 'bg-yellow-500' : 'bg-gray-800';
         var icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
@@ -89,9 +348,6 @@ const UI = (function() {
         }
     }
     
-    // ============================================
-    // EMOJI HELPER
-    // ============================================
     var EMOJI_MAP = { mango: '🥭', mixed: '🫙', nonveg: '🍗', specialty: '⭐', spicy: '🌶️', sweet: '🍯', veg: '🥒', combo: '🎁' };
     
     function safeEmoji(val, catId) {
@@ -99,9 +355,6 @@ const UI = (function() {
         return EMOJI_MAP[catId] || '🫙';
     }
     
-    // ============================================
-    // CATEGORY PILLS
-    // ============================================
     function renderCategoryPills(categories) {
         if (!elements.categoryScroll) return;
         var html = '<button class="category-pill active flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all bg-pickle-500 text-white" data-category="all">🫙 All</button>';
@@ -126,9 +379,6 @@ const UI = (function() {
         });
     }
     
-    // ============================================
-    // PRODUCT CARD
-    // ============================================
     function createProductCard(product) {
         var variants = product.variants;
         if (!variants || !Array.isArray(variants) || variants.length === 0) {
@@ -168,38 +418,26 @@ const UI = (function() {
         showToast(product.name + ' added to cart', 'success');
     }
     
-    // ============================================
-    // FEATURED PRODUCTS
-    // ============================================
     function renderFeaturedProducts(products) {
         if (!elements.featuredProducts) return;
-        
-        // Show all products as featured (Supabase data has isFeatured:true from api.js)
         var featured = products.slice(0, 6);
-        
         if (featured.length === 0) {
             var section = document.getElementById('featured-section');
             if (section) section.classList.add('hidden');
             return;
         }
-        
-        // Make sure section is visible
         var section = document.getElementById('featured-section');
         if (section) section.classList.remove('hidden');
         var parent = elements.featuredProducts.parentElement;
         if (parent) parent.classList.remove('hidden');
-        
         var html = '';
         for (var i = 0; i < featured.length; i++) {
-            try { html += createProductCard(featured[i]); } catch(e) { console.error('[UI] Card error:', e); }
+            try { html += createProductCard(featured[i]); } catch(e) {}
         }
         elements.featuredProducts.innerHTML = html;
         bindProductCardEvents(elements.featuredProducts);
     }
     
-    // ============================================
-    // CATEGORY SECTIONS
-    // ============================================
     function renderCategorySections(categories, products) {
         if (!elements.categorySections) return;
         var activeCategory = Store.getState().activeCategory;
@@ -238,9 +476,7 @@ const UI = (function() {
     }
     
     function renderProductsByCategory(category) {
-        var products = (typeof Store.getProductsByCategory === 'function')
-            ? Store.getProductsByCategory(category)
-            : Store.getActiveProducts();
+        var products = (typeof Store.getProductsByCategory === 'function') ? Store.getProductsByCategory(category) : Store.getActiveProducts();
         renderCategorySections(Store.getCategories(), products);
     }
     
@@ -259,9 +495,6 @@ const UI = (function() {
         bindProductCardEvents(elements.categorySections);
     }
     
-    // ============================================
-    // PRODUCT CARD EVENT BINDING
-    // ============================================
     function bindProductCardEvents(container) {
         if (!container) return;
         container.querySelectorAll('.product-card').forEach(function(card) {
@@ -279,9 +512,6 @@ const UI = (function() {
         });
     }
     
-    // ============================================
-    // PRODUCT MODAL
-    // ============================================
     function openProductModal(product) {
         if (!elements.productModal) return;
         Store.setSelectedProduct(product);
@@ -305,9 +535,7 @@ const UI = (function() {
             for (var i = 0; i < variants.length; i++) {
                 var v = variants[i];
                 var w = v.weight || v.size || '250g';
-                vh += '<button class="variant-option px-4 py-2 rounded-xl text-sm font-medium transition-all ' +
-                    (i === 0 ? 'bg-pickle-500 text-white selected' : 'bg-gray-100 text-gray-700') +
-                    '" data-index="' + i + '">' + w + ' - ' + fmt(v.price) + '</button>';
+                vh += '<button class="variant-option px-4 py-2 rounded-xl text-sm font-medium transition-all ' + (i === 0 ? 'bg-pickle-500 text-white selected' : 'bg-gray-100 text-gray-700') + '" data-index="' + i + '">' + w + ' - ' + fmt(v.price) + '</button>';
             }
             elements.variantOptions.innerHTML = vh;
             elements.variantOptions.querySelectorAll('.variant-option').forEach(function(btn) {
@@ -330,13 +558,13 @@ const UI = (function() {
         updateModalPrice();
         
         elements.productModal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
+        lockScroll();
     }
     
     function closeProductModal() {
         if (elements.productModal) {
             elements.productModal.classList.add('hidden');
-            document.body.style.overflow = '';
+            unlockScroll();
             Store.setSelectedProduct(null);
         }
     }
@@ -350,13 +578,10 @@ const UI = (function() {
         }
     }
     
-    // ============================================
-    // CART UI
-    // ============================================
     function openCart() {
         if (elements.cartSidebar) {
             elements.cartSidebar.classList.remove('hidden');
-            document.body.style.overflow = 'hidden';
+            lockScroll();
             renderCartItems();
         }
     }
@@ -364,7 +589,7 @@ const UI = (function() {
     function closeCart() {
         if (elements.cartSidebar) {
             elements.cartSidebar.classList.add('hidden');
-            document.body.style.overflow = '';
+            unlockScroll();
         }
     }
     
@@ -374,8 +599,14 @@ const UI = (function() {
             elements.cartCount.textContent = count;
             elements.cartCount.classList.toggle('hidden', count === 0);
         }
-        var walletBalance = Store.getWalletBalance();
-        if (elements.walletBalance) elements.walletBalance.textContent = fmt(walletBalance);
+        
+        var spinWallet = getSpinWallet();
+        if (spinWallet && spinWallet.amount > 0) {
+            updateWalletDisplay(spinWallet);
+            if (!walletTimerInterval) startWalletTimer();
+        } else {
+            updateWalletDisplay(null);
+        }
     }
     
     function renderCartItems() {
@@ -400,14 +631,7 @@ const UI = (function() {
             el.dataset.itemId = item.id;
             var img = item.image || 'https://placehold.co/80x80/D4451A/fff?text=Pickle';
             var size = item.size || item.weight || '250g';
-            el.innerHTML = '<div class="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0"><img src="' + img + '" alt="' + item.name + '" class="w-full h-full object-cover"></div>' +
-                '<div class="flex-1 min-w-0"><h4 class="font-semibold text-gray-800 text-sm truncate">' + item.name + '</h4><p class="text-xs text-gray-500">' + size + '</p>' +
-                '<div class="flex items-center justify-between mt-1">' +
-                '<div class="flex items-center gap-2"><button class="cart-qty-btn w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs" data-action="decrease" data-item-id="' + item.id + '">−</button>' +
-                '<span class="text-sm font-medium">' + item.quantity + '</span>' +
-                '<button class="cart-qty-btn w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs" data-action="increase" data-item-id="' + item.id + '">+</button></div>' +
-                '<span class="font-bold text-pickle-600 text-sm">' + fmt(item.price * item.quantity) + '</span>' +
-                '</div></div>';
+            el.innerHTML = '<div class="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0"><img src="' + img + '" alt="' + item.name + '" class="w-full h-full object-cover"></div><div class="flex-1 min-w-0"><h4 class="font-semibold text-gray-800 text-sm truncate">' + item.name + '</h4><p class="text-xs text-gray-500">' + size + '</p><div class="flex items-center justify-between mt-1"><div class="flex items-center gap-2"><button class="cart-qty-btn w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs" data-action="decrease" data-item-id="' + item.id + '">−</button><span class="text-sm font-medium">' + item.quantity + '</span><button class="cart-qty-btn w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs" data-action="increase" data-item-id="' + item.id + '">+</button></div><span class="font-bold text-pickle-600 text-sm">' + fmt(item.price * item.quantity) + '</span></div></div>';
             
             el.querySelectorAll('.cart-qty-btn').forEach(function(btn) {
                 btn.addEventListener('click', function() {
@@ -433,7 +657,8 @@ const UI = (function() {
     
     function updateCartTotals() {
         var cart = Store.getCart();
-        var walletBalance = Store.getWalletBalance();
+        var spinWallet = getSpinWallet();
+        var walletBalance = spinWallet ? spinWallet.amount : 0;
         
         if (elements.cartSubtotal) elements.cartSubtotal.textContent = fmt(cart.subtotal);
         if (elements.deliveryCharge) {
@@ -454,9 +679,6 @@ const UI = (function() {
         if (elements.cartTotal) elements.cartTotal.textContent = fmt(cart.total);
     }
     
-    // ============================================
-    // BOTTOM NAV
-    // ============================================
     function updateBottomNav(page) {
         document.querySelectorAll('.nav-item').forEach(function(item) {
             item.classList.remove('active');
@@ -464,9 +686,6 @@ const UI = (function() {
         });
     }
     
-    // ============================================
-    // PUBLIC API - every function other modules need
-    // ============================================
     return {
         init: init,
         getElements: getElements,
@@ -487,7 +706,16 @@ const UI = (function() {
         updateCartUI: updateCartUI,
         renderCartItems: renderCartItems,
         updateCartTotals: updateCartTotals,
-        updateBottomNav: updateBottomNav
+        updateBottomNav: updateBottomNav,
+        startWalletTimer: startWalletTimer,
+        updateWalletDisplay: updateWalletDisplay,
+        getSpinWallet: getSpinWallet,
+        syncWalletFromSupabase: syncWalletFromSupabase,
+        getUserPhone: getUserPhone,
+        SPIN_WALLET_KEY: SPIN_WALLET_KEY,
+        lockScroll: lockScroll,
+        unlockScroll: unlockScroll,
+        forceUnlockScroll: forceUnlockScroll
     };
 })();
 
