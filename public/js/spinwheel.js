@@ -20,14 +20,14 @@ const SpinWheel = (function() {
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
     const SPIN_WALLET_KEY = 'seasalt_spin_wallet';
 
-    // Prize segments - Orange/Green pickle theme
+    // Prize segments - Orange/Green pickle theme (alternating)
     const PRIZES = [
-        { value: 99,  label: '₹99',  color: '#D4451A', textColor: '#fff' },   // Pickle Orange
-        { value: 199, label: '₹199', color: '#166534', textColor: '#fff' },   // Pickle Green
-        { value: 299, label: '₹299', color: '#D4451A', textColor: '#fff' },   // Pickle Orange
-        { value: 399, label: '₹399', color: '#166534', textColor: '#fff' },   // Pickle Green
-        { value: 499, label: '₹499', color: '#D4451A', textColor: '#fff' },   // Pickle Orange
-        { value: 599, label: '₹599', color: '#166534', textColor: '#fff' }    // Pickle Green
+        { value: 99,  label: '₹99',  color: '#DC2626', textColor: '#fff' },   // Red
+        { value: 199, label: '₹199', color: '#16A34A', textColor: '#fff' },   // Green
+        { value: 299, label: '₹299', color: '#EA580C', textColor: '#fff' },   // Orange
+        { value: 399, label: '₹399', color: '#16A34A', textColor: '#fff' },   // Green
+        { value: 499, label: '₹499', color: '#DC2626', textColor: '#fff' },   // Red
+        { value: 599, label: '₹599', color: '#16A34A', textColor: '#fff' }    // Green
     ];
 
     let isSpinning = false;
@@ -489,17 +489,30 @@ const SpinWheel = (function() {
             
             // Segment border
             ctx.strokeStyle = '#FFF7ED';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 3;
             ctx.stroke();
 
-            // Draw text
+            // Draw text - positioned better
             ctx.save();
             ctx.translate(centerX, centerY);
             ctx.rotate(startAngle + segmentAngle / 2);
-            ctx.textAlign = 'right';
-            ctx.fillStyle = prize.textColor;
-            ctx.font = 'bold 18px system-ui, sans-serif';
-            ctx.fillText(prize.label, radius - 20, 6);
+            
+            // Text styling with shadow for visibility
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 16px Arial, sans-serif';
+            
+            // Add shadow for better readability
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            ctx.shadowBlur = 3;
+            ctx.shadowOffsetX = 1;
+            ctx.shadowOffsetY = 1;
+            
+            // Position text in middle of segment
+            const textRadius = radius * 0.65;
+            ctx.fillText(prize.label, textRadius, 0);
+            
             ctx.restore();
         });
 
@@ -508,6 +521,13 @@ const SpinWheel = (function() {
         ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
         ctx.strokeStyle = '#D4451A';
         ctx.lineWidth = 4;
+        ctx.stroke();
+        
+        // Inner decorative ring
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius - 8, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 2;
         ctx.stroke();
     }
 
