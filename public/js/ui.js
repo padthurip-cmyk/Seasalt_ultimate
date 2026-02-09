@@ -17,7 +17,7 @@ const UI = (function() {
     // SUPABASE WALLET SYNC ENGINE (v10 addition)
     // ============================================
     var SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
-    var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgwNTIzNTEsImV4cCI6MjA1MzYyODM1MX0.LPSwMPKBiMxMTmHOVJxWBbS8kgGDo4RaPNCR63P55Cw';
+    var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
     var walletSyncInterval = null;
     var SYNC_INTERVAL_MS = 15000; // 15 seconds
 
@@ -660,9 +660,26 @@ const UI = (function() {
         var spinWallet = getSpinWallet();
         var walletBalance = spinWallet ? spinWallet.amount : 0;
         
-        if (elements.cartSubtotal) elements.cartSubtotal.textContent = fmt(cart.subtotal);
+        // Check if wallet checkbox is checked
+        var useWalletCheckbox = document.getElementById('use-wallet');
+        var useWallet = useWalletCheckbox ? useWalletCheckbox.checked : false;
+        
+        // Get delivery charge from Cart module if available, else from Store
+        var subtotal = cart.subtotal;
+        var deliveryCharge = (typeof Cart !== 'undefined' && Cart.getDeliveryCharge) 
+            ? Cart.getDeliveryCharge(subtotal) 
+            : cart.deliveryCharge;
+        
+        // Calculate wallet discount from SPIN wallet (not Store.wallet)
+        var walletDiscount = 0;
+        if (useWallet && walletBalance > 0) {
+            walletDiscount = Math.min(walletBalance, subtotal + deliveryCharge);
+        }
+        var total = Math.max(0, subtotal + deliveryCharge - walletDiscount);
+        
+        if (elements.cartSubtotal) elements.cartSubtotal.textContent = fmt(subtotal);
         if (elements.deliveryCharge) {
-            elements.deliveryCharge.innerHTML = cart.deliveryCharge === 0 ? '<span class="text-spice-leaf font-medium">FREE</span>' : fmt(cart.deliveryCharge);
+            elements.deliveryCharge.innerHTML = deliveryCharge === 0 ? '<span class="text-spice-leaf font-medium">FREE</span>' : fmt(deliveryCharge);
         }
         if (walletBalance > 0 && elements.walletApplySection) {
             elements.walletApplySection.classList.remove('hidden');
@@ -670,13 +687,13 @@ const UI = (function() {
         } else if (elements.walletApplySection) {
             elements.walletApplySection.classList.add('hidden');
         }
-        if (cart.walletDiscount > 0 && elements.walletDiscountRow) {
+        if (walletDiscount > 0 && elements.walletDiscountRow) {
             elements.walletDiscountRow.style.display = 'flex';
-            if (elements.walletDiscount) elements.walletDiscount.textContent = '-' + fmt(cart.walletDiscount);
+            if (elements.walletDiscount) elements.walletDiscount.textContent = '-' + fmt(walletDiscount);
         } else if (elements.walletDiscountRow) {
             elements.walletDiscountRow.style.display = 'none';
         }
-        if (elements.cartTotal) elements.cartTotal.textContent = fmt(cart.total);
+        if (elements.cartTotal) elements.cartTotal.textContent = fmt(total);
     }
     
     function updateBottomNav(page) {
