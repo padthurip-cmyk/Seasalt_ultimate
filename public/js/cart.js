@@ -1,7 +1,7 @@
 /**
- * SeaSalt Pickles - Cart & Checkout Module v5 FINAL
- * ==================================================
- * FIXED: Auto close cart before showing checkout
+ * SeaSalt Pickles - Cart & Checkout Module v6
+ * ============================================
+ * FIXED: Layout shift during cart to checkout transition
  */
 
 const Cart = (function() {
@@ -18,7 +18,19 @@ const Cart = (function() {
         bindEvents();
         subscribeToChanges();
         initWalletCheckbox();
-        console.log('[Cart] v5 FINAL Initialized');
+        console.log('[Cart] v6 Initialized');
+    }
+
+    // Prevent layout shift when hiding scrollbar
+    function lockScroll() {
+        var scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+        document.body.style.overflow = 'hidden';
+        document.body.style.paddingRight = scrollbarWidth + 'px';
+    }
+
+    function unlockScroll() {
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
     }
 
     async function loadDeliveryCharges() {
@@ -167,7 +179,7 @@ const Cart = (function() {
         UI.showToast(product.name + ' added to cart!', 'success');
     }
 
-    // FIXED: Auto close cart before checkout
+    // FIXED: Smooth transition from cart to checkout without layout shift
     function handleCheckout() {
         var cart = Store.getCart();
         if (!cart.items || cart.items.length === 0) {
@@ -175,13 +187,17 @@ const Cart = (function() {
             return;
         }
         
-        // Close cart first, then show checkout
-        UI.closeCart();
+        // Keep scroll locked during transition
+        lockScroll();
         
-        // Small delay to ensure cart is closed before showing checkout
-        setTimeout(function() {
-            showCheckoutForm();
-        }, 100);
+        // Close cart sidebar without unlocking scroll
+        var cartSidebar = document.getElementById('cart-sidebar');
+        if (cartSidebar) {
+            cartSidebar.classList.add('hidden');
+        }
+        
+        // Show checkout immediately (scroll already locked)
+        showCheckoutForm();
     }
 
     function showCheckoutForm() {
@@ -213,9 +229,14 @@ const Cart = (function() {
         modal.innerHTML = '<div class="bg-white w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl animate-slide-up"><div class="sticky top-0 bg-white p-4 border-b border-gray-100 flex items-center justify-between"><h3 class="text-xl font-bold text-gray-800">Checkout</h3><button id="close-checkout" class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div><div class="p-4 space-y-6"><div><h4 class="font-semibold text-gray-800 mb-3">Order Summary</h4><div class="bg-gray-50 rounded-xl p-4"><div class="space-y-2">' + itemsHtml + '</div><div class="border-t border-gray-200 mt-3 pt-3 space-y-2"><div class="flex justify-between"><span class="text-gray-600">Subtotal</span><span class="font-medium">₹' + cart.subtotal + '</span></div><div class="flex justify-between"><span class="text-gray-600">Delivery</span><span class="font-medium">' + (deliveryCharge === 0 ? 'FREE' : '₹' + deliveryCharge) + '</span></div>' + (walletDiscount > 0 ? '<div class="flex justify-between text-green-600"><span>Wallet Discount</span><span class="font-medium">-₹' + walletDiscount + '</span></div>' : '') + '<div class="flex justify-between text-lg font-bold mt-2 pt-2 border-t"><span>Total</span><span class="text-pickle-600">₹' + finalTotal + '</span></div></div></div></div>' + walletHtml + '<div><h4 class="font-semibold text-gray-800 mb-3">Delivery Address</h4><div class="space-y-3"><input type="text" id="checkout-name" placeholder="Full Name" value="' + (user.name || '') + '" class="w-full px-4 py-3 border border-gray-200 rounded-xl outline-none"><input type="tel" id="checkout-phone" placeholder="Phone Number" value="' + (user.phone || '') + '" class="w-full px-4 py-3 border border-gray-200 rounded-xl outline-none"><textarea id="checkout-address" placeholder="Full Address" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl outline-none resize-none"></textarea><input type="text" id="checkout-pincode" placeholder="Pincode" maxlength="6" class="w-full px-4 py-3 border border-gray-200 rounded-xl outline-none"></div></div></div><div class="sticky bottom-0 bg-white p-4 border-t border-gray-100"><button id="pay-now-btn" class="w-full py-4 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600 flex items-center justify-center gap-2"><span>Pay ₹' + finalTotal + '</span><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg></button></div></div>';
 
         document.body.appendChild(modal);
-        document.body.style.overflow = 'hidden';
+        
+        // Ensure scroll is locked
+        lockScroll();
 
-        modal.querySelector('#close-checkout').onclick = function() { modal.remove(); document.body.style.overflow = ''; };
+        modal.querySelector('#close-checkout').onclick = function() { 
+            modal.remove(); 
+            unlockScroll();
+        };
 
         var walletCheckbox = modal.querySelector('#checkout-use-wallet');
         if (walletCheckbox) {
@@ -223,7 +244,6 @@ const Cart = (function() {
                 var cartCheckbox = document.getElementById('use-wallet');
                 if (cartCheckbox) cartCheckbox.checked = e.target.checked;
                 modal.remove();
-                document.body.style.overflow = '';
                 showCheckoutForm();
             };
         }
@@ -301,7 +321,7 @@ const Cart = (function() {
 
         Store.clearCart();
         modal.remove();
-        document.body.style.overflow = '';
+        unlockScroll();
         UI.showToast('🎉 Order ' + orderData.orderId + ' confirmed!', 'success');
         checkoutInProgress = false;
     }
