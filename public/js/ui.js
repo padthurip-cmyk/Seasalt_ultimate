@@ -603,7 +603,6 @@ const UI = (function() {
     // LOADING SCREEN
     // ============================================
     function showLoading() {
-        // Loading screen is handled by HTML, just ensure it's visible
         const loader = document.getElementById('loading-screen');
         if (loader) loader.style.display = 'flex';
     }
@@ -615,6 +614,228 @@ const UI = (function() {
             setTimeout(() => {
                 loader.style.display = 'none';
             }, 300);
+        }
+    }
+
+    // ============================================
+    // RENDER CATEGORY PILLS
+    // ============================================
+    function renderCategoryPills(categories) {
+        const container = document.getElementById('category-pills');
+        if (!container || !categories) return;
+
+        let html = '<button class="category-pill active" data-category="all">All</button>';
+        
+        categories.forEach(cat => {
+            const name = cat.name || cat.id || cat;
+            const id = cat.id || cat.name?.toLowerCase().replace(/\s+/g, '-') || cat;
+            html += `<button class="category-pill" data-category="${id}">${name}</button>`;
+        });
+
+        container.innerHTML = html;
+
+        // Add click handlers
+        container.querySelectorAll('.category-pill').forEach(pill => {
+            pill.addEventListener('click', function() {
+                container.querySelectorAll('.category-pill').forEach(p => p.classList.remove('active'));
+                this.classList.add('active');
+                const category = this.dataset.category;
+                if (typeof Store !== 'undefined' && Store.setCategory) {
+                    Store.setCategory(category);
+                }
+                filterProducts(category);
+            });
+        });
+    }
+
+    // ============================================
+    // RENDER PRODUCTS
+    // ============================================
+    function renderProducts(products) {
+        const container = document.getElementById('products-grid');
+        if (!container) return;
+
+        if (!products || products.length === 0) {
+            container.innerHTML = '<div class="col-span-full text-center py-12 text-gray-500">No products found</div>';
+            return;
+        }
+
+        let html = '';
+        products.forEach(product => {
+            const variants = product.variants || [];
+            const firstVariant = variants[0] || {};
+            const price = firstVariant.price || product.price || 0;
+            const image = product.image || '/images/placeholder.jpg';
+            const badge = product.badge ? `<span class="absolute top-2 left-2 bg-pickle-500 text-white text-xs font-bold px-2 py-1 rounded-full">${product.badge}</span>` : '';
+
+            html += `
+                <div class="product-card bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all cursor-pointer" data-product-id="${product.id}">
+                    <div class="relative aspect-square bg-gray-100">
+                        ${badge}
+                        <img src="${image}" alt="${product.name}" class="w-full h-full object-cover" loading="lazy" onerror="this.src='/images/placeholder.jpg'">
+                    </div>
+                    <div class="p-4">
+                        <h3 class="font-semibold text-gray-800 text-sm mb-1 line-clamp-2">${product.name}</h3>
+                        <div class="flex items-center justify-between mt-2">
+                            <span class="text-pickle-600 font-bold">₹${price}</span>
+                            <button class="quick-add-btn w-8 h-8 bg-pickle-500 text-white rounded-full flex items-center justify-center hover:bg-pickle-600 transition" data-product-id="${product.id}">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    // ============================================
+    // FILTER PRODUCTS BY CATEGORY
+    // ============================================
+    function filterProducts(category) {
+        const state = typeof Store !== 'undefined' ? Store.getState() : {};
+        let products = state.products || [];
+
+        if (category && category !== 'all') {
+            products = products.filter(p => p.category === category || p.category_id === category);
+        }
+
+        renderProducts(products);
+    }
+
+    // ============================================
+    // RENDER PRODUCT MODAL
+    // ============================================
+    function renderProductModal(product) {
+        if (!product) return;
+
+        const modal = document.getElementById('product-modal');
+        if (!modal) return;
+
+        const variants = product.variants || [];
+        const firstVariant = variants[0] || {};
+        const image = product.image || '/images/placeholder.jpg';
+
+        let variantsHtml = '';
+        variants.forEach((v, i) => {
+            variantsHtml += `
+                <button class="variant-btn px-4 py-2 border-2 rounded-xl text-sm font-medium transition ${i === 0 ? 'border-pickle-500 bg-pickle-50 text-pickle-700' : 'border-gray-200 hover:border-pickle-300'}" data-index="${i}" data-price="${v.price}">
+                    ${v.weight || v.size || v.name} - ₹${v.price}
+                </button>
+            `;
+        });
+
+        modal.innerHTML = `
+            <div class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center">
+                <div class="bg-white w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl">
+                    <div class="relative">
+                        <img src="${image}" alt="${product.name}" class="w-full aspect-square object-cover" onerror="this.src='/images/placeholder.jpg'">
+                        <button id="close-product-modal" class="absolute top-4 right-4 w-10 h-10 bg-white/90 backdrop-blur rounded-full flex items-center justify-center shadow-lg">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="p-6">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-2">${product.name}</h2>
+                        <p class="text-gray-600 text-sm mb-4">${product.description || ''}</p>
+                        
+                        ${variants.length > 0 ? `
+                            <div class="mb-4">
+                                <h4 class="font-semibold text-gray-700 mb-2">Select Size</h4>
+                                <div class="flex flex-wrap gap-2" id="variant-buttons">
+                                    ${variantsHtml}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        <div class="flex items-center justify-between mb-6">
+                            <div class="flex items-center gap-3 bg-gray-100 rounded-xl p-1">
+                                <button id="qty-minus" class="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-pickle-600">−</button>
+                                <span id="qty-display" class="w-8 text-center font-semibold">1</span>
+                                <button id="qty-plus" class="w-10 h-10 flex items-center justify-center text-gray-600 hover:text-pickle-600">+</button>
+                            </div>
+                            <div class="text-2xl font-bold text-pickle-600" id="modal-price">₹${firstVariant.price || product.price || 0}</div>
+                        </div>
+                        
+                        <button id="add-to-cart-btn" class="w-full py-4 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600 transition">
+                            Add to Cart
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        modal.classList.remove('hidden');
+        lockScroll();
+
+        // Setup event listeners
+        setupProductModalEvents(product, variants);
+    }
+
+    function setupProductModalEvents(product, variants) {
+        const modal = document.getElementById('product-modal');
+        if (!modal) return;
+
+        let selectedVariantIndex = 0;
+        let quantity = 1;
+
+        // Close button
+        modal.querySelector('#close-product-modal')?.addEventListener('click', closeProductModal);
+        
+        // Click outside
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal.firstElementChild) closeProductModal();
+        });
+
+        // Variant buttons
+        modal.querySelectorAll('.variant-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                modal.querySelectorAll('.variant-btn').forEach(b => {
+                    b.classList.remove('border-pickle-500', 'bg-pickle-50', 'text-pickle-700');
+                    b.classList.add('border-gray-200');
+                });
+                this.classList.remove('border-gray-200');
+                this.classList.add('border-pickle-500', 'bg-pickle-50', 'text-pickle-700');
+                selectedVariantIndex = parseInt(this.dataset.index);
+                updateModalPrice();
+            });
+        });
+
+        // Quantity buttons
+        modal.querySelector('#qty-minus')?.addEventListener('click', () => {
+            if (quantity > 1) {
+                quantity--;
+                modal.querySelector('#qty-display').textContent = quantity;
+                updateModalPrice();
+            }
+        });
+
+        modal.querySelector('#qty-plus')?.addEventListener('click', () => {
+            if (quantity < 10) {
+                quantity++;
+                modal.querySelector('#qty-display').textContent = quantity;
+                updateModalPrice();
+            }
+        });
+
+        // Add to cart
+        modal.querySelector('#add-to-cart-btn')?.addEventListener('click', () => {
+            const variant = variants[selectedVariantIndex] || {};
+            if (typeof Store !== 'undefined' && Store.addToCart) {
+                Store.addToCart(product, variant, quantity);
+                closeProductModal();
+                showToast(product.name + ' added to cart!', 'success');
+            }
+        });
+
+        function updateModalPrice() {
+            const variant = variants[selectedVariantIndex] || {};
+            const price = (variant.price || product.price || 0) * quantity;
+            modal.querySelector('#modal-price').textContent = '₹' + price;
         }
     }
 
@@ -634,6 +855,10 @@ const UI = (function() {
         updateCartUI,
         updateCartTotal,
         renderCartItems,
+        renderCategoryPills,
+        renderProducts,
+        renderProductModal,
+        filterProducts,
         getElements,
         getSpinWallet,
         getWalletAsync,
