@@ -11,6 +11,8 @@ const UI = (function() {
     var scrollbarWidth = 0;
     
     var SPIN_WALLET_KEY = 'seasalt_spin_wallet';
+    var SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
+    var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
     
     // ============================================
     // SCROLL LOCK - Prevents layout shift on ALL elements
@@ -107,16 +109,76 @@ const UI = (function() {
         cacheElements(); 
         injectWalletStyles();
         
-        setTimeout(function() {
-            var wallet = getSpinWallet();
+        // Sync wallet from Supabase on load
+        syncWalletFromSupabase().then(function(wallet) {
             if (wallet) {
                 updateWalletDisplay(wallet);
                 startWalletTimer();
+            } else {
+                var localWallet = getSpinWallet();
+                if (localWallet) {
+                    updateWalletDisplay(localWallet);
+                    startWalletTimer();
+                }
             }
-        }, 100);
+        });
+        
+        // Auto-sync every 30 seconds
+        setInterval(function() {
+            syncWalletFromSupabase().then(function(wallet) {
+                if (wallet) {
+                    updateWalletDisplay(wallet);
+                    if (!walletTimerInterval) startWalletTimer();
+                }
+            });
+        }, 30000);
     }
     
     function getElements() { return elements; }
+    
+    // ============================================
+    // WALLET SYNC FROM SUPABASE (for admin credits)
+    // ============================================
+    function getUserPhone() {
+        try {
+            var user = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
+            if (user && user.phone) return user.phone;
+        } catch (e) {}
+        return localStorage.getItem('seasalt_phone') || 
+               localStorage.getItem('seasalt_user_phone') || 
+               localStorage.getItem('spinwheel_phone') || null;
+    }
+    
+    function syncWalletFromSupabase() {
+        var phone = getUserPhone();
+        if (!phone) return Promise.resolve(null);
+        
+        return fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone) + '&select=wallet_balance,wallet_expires_at', {
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+        })
+        .then(function(res) { return res.ok ? res.json() : []; })
+        .then(function(users) {
+            if (users && users[0] && users[0].wallet_balance > 0 && users[0].wallet_expires_at) {
+                var expiry = new Date(users[0].wallet_expires_at);
+                if (new Date() < expiry) {
+                    var walletData = {
+                        amount: users[0].wallet_balance,
+                        expiresAt: users[0].wallet_expires_at,
+                        phone: phone
+                    };
+                    localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify(walletData));
+                    console.log('[UI] Wallet synced from Supabase:', walletData.amount);
+                    return { amount: walletData.amount, timeLeft: expiry - new Date() };
+                }
+            }
+            return null;
+        })
+        .catch(function(e) { 
+            console.log('[UI] Wallet sync error:', e);
+            return null; 
+        });
+    }
+    
     
     function injectWalletStyles() {
         if (document.getElementById('wallet-timer-css')) return;
@@ -582,6 +644,7 @@ const UI = (function() {
         startWalletTimer: startWalletTimer,
         updateWalletDisplay: updateWalletDisplay,
         getSpinWallet: getSpinWallet,
+        syncWalletFromSupabase: syncWalletFromSupabase,
         SPIN_WALLET_KEY: SPIN_WALLET_KEY,
         lockScroll: lockScroll,
         unlockScroll: unlockScroll,
