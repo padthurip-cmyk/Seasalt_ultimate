@@ -1,8 +1,15 @@
 /**
- * SeaSalt Pickles - Spin Wheel v15
+ * SeaSalt Pickles - Spin Wheel v16
  * =================================
- * CAPTURES PHONE IMMEDIATELY when user clicks Send OTP
- * Phone is saved to localStorage and Supabase right away
+ * MODERN DESIGN with EXACT ODDS:
+ * ₹99  - Everyone wins this (base prize)
+ * ₹199 - 1 in 20  (5%)
+ * ₹299 - 1 in 50  (2%)
+ * ₹399 - 1 in 100 (1%)
+ * ₹499 - 1 in 150 (0.67%)
+ * ₹599 - 1 in 200 (0.5%)
+ * 
+ * Phone captured IMMEDIATELY on Send OTP click
  */
 
 const SpinWheel = (function() {
@@ -28,28 +35,78 @@ const SpinWheel = (function() {
     const SPIN_WALLET_KEY = 'seasalt_spin_wallet';
     
     // ============================================
-    // WHEEL SEGMENTS (8 segments, 45° each)
+    // WHEEL SEGMENTS (6 segments for prizes)
     // ============================================
     const SEGMENTS = [
-        { label: '₹99', value: 99, color: '#DAA520', isWin: true },
-        { label: 'TRY AGAIN', value: 0, color: '#2E7D32', isWin: false },
-        { label: '₹299', value: 299, color: '#E53935', isWin: true },
-        { label: 'TRY AGAIN', value: 0, color: '#388E3C', isWin: false },
-        { label: '₹599', value: 599, color: '#7B1FA2', isWin: true },
-        { label: 'TRY AGAIN', value: 0, color: '#43A047', isWin: false },
-        { label: '₹99', value: 99, color: '#FFA000', isWin: true },
-        { label: 'TRY AGAIN', value: 0, color: '#2E7D32', isWin: false }
+        { label: '₹99', value: 99, color: '#10B981' },   // Green
+        { label: '₹199', value: 199, color: '#3B82F6' }, // Blue
+        { label: '₹299', value: 299, color: '#8B5CF6' }, // Purple
+        { label: '₹399', value: 399, color: '#EC4899' }, // Pink
+        { label: '₹499', value: 499, color: '#F59E0B' }, // Amber
+        { label: '₹599', value: 599, color: '#EF4444' }  // Red
     ];
     
     // ============================================
-    // STYLES
+    // PRIZE CALCULATION WITH EXACT ODDS
+    // ============================================
+    function calculatePrize() {
+        const rand = Math.random();
+        
+        // ₹599 - 1 in 200 (0.5%)
+        if (rand < 0.005) {
+            return { value: 599, segmentIndex: 5 };
+        }
+        // ₹499 - 1 in 150 (0.67%)
+        if (rand < 0.005 + 0.0067) {
+            return { value: 499, segmentIndex: 4 };
+        }
+        // ₹399 - 1 in 100 (1%)
+        if (rand < 0.005 + 0.0067 + 0.01) {
+            return { value: 399, segmentIndex: 3 };
+        }
+        // ₹299 - 1 in 50 (2%)
+        if (rand < 0.005 + 0.0067 + 0.01 + 0.02) {
+            return { value: 299, segmentIndex: 2 };
+        }
+        // ₹199 - 1 in 20 (5%)
+        if (rand < 0.005 + 0.0067 + 0.01 + 0.02 + 0.05) {
+            return { value: 199, segmentIndex: 1 };
+        }
+        // ₹99 - Everyone else (base prize ~91%)
+        return { value: 99, segmentIndex: 0 };
+    }
+    
+    // ============================================
+    // MODERN STYLES
     // ============================================
     const STYLES = `
+        @keyframes sw-glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(251, 191, 36, 0.4); }
+            50% { box-shadow: 0 0 40px rgba(251, 191, 36, 0.8); }
+        }
+        @keyframes sw-float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+        @keyframes sw-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        @keyframes sw-confetti {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+        @keyframes sw-spin-glow {
+            0% { filter: drop-shadow(0 0 10px rgba(255,255,255,0.5)); }
+            50% { filter: drop-shadow(0 0 30px rgba(255,255,255,0.9)); }
+            100% { filter: drop-shadow(0 0 10px rgba(255,255,255,0.5)); }
+        }
+        
         .sw-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.8);
-            backdrop-filter: blur(4px);
+            background: linear-gradient(135deg, rgba(0,0,0,0.9) 0%, rgba(30,10,60,0.95) 100%);
+            backdrop-filter: blur(8px);
             z-index: 9999;
             display: flex;
             align-items: center;
@@ -57,274 +114,362 @@ const SpinWheel = (function() {
             padding: 16px;
             opacity: 0;
             visibility: hidden;
-            transition: all 0.3s ease;
+            transition: all 0.4s ease;
         }
         .sw-overlay.active {
             opacity: 1;
             visibility: visible;
         }
         .sw-modal {
-            background: linear-gradient(145deg, #9A3412 0%, #7C2D12 100%);
-            border-radius: 24px;
+            background: linear-gradient(165deg, #1F1135 0%, #0F0A1A 100%);
+            border-radius: 28px;
             width: 100%;
-            max-width: 380px;
-            max-height: 90vh;
+            max-width: 400px;
+            max-height: 92vh;
             overflow-y: auto;
             position: relative;
-            transform: scale(0.9);
-            transition: transform 0.3s ease;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            transform: scale(0.8) translateY(20px);
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 25px 80px rgba(139, 92, 246, 0.3), 0 0 0 1px rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.1);
         }
         .sw-overlay.active .sw-modal {
-            transform: scale(1);
+            transform: scale(1) translateY(0);
         }
         .sw-close {
             position: absolute;
-            top: 12px;
-            right: 12px;
-            width: 32px;
-            height: 32px;
+            top: 16px;
+            right: 16px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            font-size: 18px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: rgba(255,255,255,0.7);
+            font-size: 20px;
             cursor: pointer;
             z-index: 10;
             display: none;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
         }
         .sw-close.visible {
             display: flex;
-            align-items: center;
-            justify-content: center;
         }
         .sw-close:hover {
-            background: rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.2);
+            color: white;
+            transform: rotate(90deg);
         }
         .sw-header {
             text-align: center;
-            padding: 28px 20px 16px;
+            padding: 32px 24px 20px;
+            background: linear-gradient(180deg, rgba(139,92,246,0.2) 0%, transparent 100%);
         }
         .sw-badge {
-            display: inline-block;
-            background: rgba(218,165,32,0.2);
-            color: #DAA520;
-            padding: 6px 16px;
-            border-radius: 20px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            margin-bottom: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #FBBF24 0%, #F59E0B 100%);
+            color: #1F1135;
+            padding: 8px 18px;
+            border-radius: 50px;
+            font-size: 0.8rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            animation: sw-pulse 2s ease infinite;
+            box-shadow: 0 4px 15px rgba(251, 191, 36, 0.4);
         }
         .sw-title {
             color: white;
-            font-size: 1.75rem;
-            font-weight: 700;
+            font-size: 2rem;
+            font-weight: 800;
             margin: 0 0 8px;
+            background: linear-gradient(135deg, #fff 0%, #a78bfa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         .sw-subtitle {
-            color: rgba(255,255,255,0.8);
-            font-size: 0.95rem;
+            color: rgba(255,255,255,0.7);
+            font-size: 1rem;
             margin: 0;
+            font-weight: 400;
+        }
+        .sw-subtitle strong {
+            color: #FBBF24;
+            font-weight: 700;
         }
         .sw-content {
-            padding: 0 24px 28px;
+            padding: 0 24px 32px;
         }
         .sw-input-group {
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            margin-bottom: 16px;
+            gap: 14px;
+            margin-bottom: 18px;
         }
         .sw-select {
             width: 100%;
-            padding: 14px 16px;
-            border: none;
-            border-radius: 12px;
+            padding: 16px 18px;
+            border: 2px solid rgba(139,92,246,0.3);
+            border-radius: 14px;
             font-size: 1rem;
-            background: white;
+            background: rgba(255,255,255,0.05);
+            color: white;
             cursor: pointer;
+            transition: all 0.2s;
+        }
+        .sw-select:focus {
+            outline: none;
+            border-color: #8B5CF6;
+            box-shadow: 0 0 0 4px rgba(139,92,246,0.2);
+        }
+        .sw-select option {
+            background: #1F1135;
+            color: white;
         }
         .sw-input {
             width: 100%;
-            padding: 14px 16px;
-            border: none;
-            border-radius: 12px;
-            font-size: 1.1rem;
+            padding: 16px 18px;
+            border: 2px solid rgba(139,92,246,0.3);
+            border-radius: 14px;
+            font-size: 1.2rem;
             text-align: center;
-            letter-spacing: 2px;
-            font-weight: 600;
+            letter-spacing: 3px;
+            font-weight: 700;
+            background: rgba(255,255,255,0.05);
+            color: white;
+            transition: all 0.2s;
+        }
+        .sw-input::placeholder {
+            color: rgba(255,255,255,0.4);
+            letter-spacing: 0;
+            font-weight: 400;
         }
         .sw-input:focus {
-            outline: 3px solid #DAA520;
+            outline: none;
+            border-color: #8B5CF6;
+            box-shadow: 0 0 0 4px rgba(139,92,246,0.2);
+            background: rgba(255,255,255,0.08);
         }
         .sw-btn {
             width: 100%;
-            padding: 16px;
+            padding: 18px;
             border: none;
-            border-radius: 12px;
+            border-radius: 14px;
             font-size: 1.1rem;
             font-weight: 700;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
         }
         .sw-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            transform: none !important;
+        }
+        .sw-btn-primary {
+            background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
+            color: white;
+            box-shadow: 0 8px 25px rgba(139,92,246,0.4);
+        }
+        .sw-btn-primary:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(139,92,246,0.5);
         }
         .sw-btn-gold {
-            background: linear-gradient(135deg, #DAA520, #F4C430);
-            color: white;
-            box-shadow: 0 4px 15px rgba(218,165,32,0.4);
+            background: linear-gradient(135deg, #FBBF24 0%, #F59E0B 100%);
+            color: #1F1135;
+            box-shadow: 0 8px 25px rgba(251,191,36,0.4);
+            animation: sw-glow 2s ease infinite;
         }
         .sw-btn-gold:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(218,165,32,0.5);
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(251,191,36,0.5);
         }
         .sw-helper {
             text-align: center;
-            color: rgba(255,255,255,0.5);
+            color: rgba(255,255,255,0.4);
             font-size: 0.8rem;
-            margin-top: 12px;
+            margin-top: 14px;
         }
         .sw-hidden {
             display: none !important;
         }
-        .sw-otp-label {
+        .sw-otp-section {
             text-align: center;
+        }
+        .sw-otp-label {
             color: rgba(255,255,255,0.8);
-            font-size: 0.9rem;
-            margin-bottom: 16px;
+            font-size: 0.95rem;
+            margin-bottom: 20px;
         }
         .sw-otp-boxes {
             display: flex;
-            gap: 8px;
+            gap: 10px;
             justify-content: center;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
         }
         .sw-otp-input {
-            width: 45px;
-            height: 55px;
-            border: none;
-            border-radius: 10px;
+            width: 48px;
+            height: 58px;
+            border: 2px solid rgba(139,92,246,0.3);
+            border-radius: 12px;
             text-align: center;
-            font-size: 1.5rem;
+            font-size: 1.6rem;
             font-weight: 700;
+            background: rgba(255,255,255,0.05);
+            color: white;
+            transition: all 0.2s;
         }
         .sw-otp-input:focus {
-            outline: 3px solid #DAA520;
+            outline: none;
+            border-color: #8B5CF6;
+            background: rgba(139,92,246,0.1);
+            box-shadow: 0 0 0 4px rgba(139,92,246,0.2);
         }
         .sw-resend {
             text-align: center;
-            color: rgba(255,255,255,0.6);
+            color: rgba(255,255,255,0.5);
             font-size: 0.85rem;
-            margin-top: 12px;
+            margin-top: 16px;
         }
         .sw-resend-link {
-            color: #DAA520;
+            color: #FBBF24;
             cursor: pointer;
             font-weight: 600;
+            transition: color 0.2s;
         }
-        .sw-wheel-wrap {
+        .sw-resend-link:hover {
+            color: #FCD34D;
+            text-decoration: underline;
+        }
+        .sw-wheel-section {
+            text-align: center;
+        }
+        .sw-wheel-container {
             position: relative;
-            width: 280px;
-            height: 280px;
-            margin: 0 auto 20px;
+            width: 300px;
+            height: 300px;
+            margin: 0 auto 24px;
         }
-        .sw-wheel-img {
-            width: 100%;
-            height: 100%;
-            transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);
+        .sw-wheel-outer {
+            position: absolute;
+            inset: -10px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #FBBF24 0%, #F59E0B 50%, #FBBF24 100%);
+            animation: sw-spin-glow 3s ease infinite;
+        }
+        .sw-wheel-inner {
+            position: absolute;
+            inset: 6px;
+            border-radius: 50%;
+            background: #1F1135;
+        }
+        .sw-wheel-svg {
+            position: absolute;
+            inset: 10px;
+            width: calc(100% - 20px);
+            height: calc(100% - 20px);
+            transition: transform 5s cubic-bezier(0.17, 0.67, 0.05, 0.99);
         }
         .sw-pointer {
             position: absolute;
-            top: -8px;
+            top: -5px;
             left: 50%;
             transform: translateX(-50%);
             width: 0;
             height: 0;
-            border-left: 15px solid transparent;
-            border-right: 15px solid transparent;
-            border-top: 28px solid white;
+            border-left: 18px solid transparent;
+            border-right: 18px solid transparent;
+            border-top: 35px solid #FBBF24;
             z-index: 10;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
         }
-        .sw-center {
+        .sw-pointer::after {
+            content: '';
+            position: absolute;
+            top: -35px;
+            left: -10px;
+            width: 20px;
+            height: 20px;
+            background: #FCD34D;
+            border-radius: 50%;
+        }
+        .sw-center-btn {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 60px;
-            height: 60px;
-            background: linear-gradient(135deg, #fff, #f0f0f0);
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #FBBF24 0%, #F59E0B 100%);
             border-radius: 50%;
+            border: 4px solid #FCD34D;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.8rem;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            z-index: 5;
-        }
-        .sw-btn-spin {
-            width: 100%;
-            padding: 18px;
-            background: linear-gradient(135deg, #fff, #f8f8f8);
-            border: none;
-            border-radius: 14px;
-            font-size: 1.2rem;
-            font-weight: 800;
-            color: #9A3412;
+            font-size: 2rem;
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            z-index: 5;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
             transition: all 0.2s;
         }
-        .sw-btn-spin:hover:not(:disabled) {
-            transform: translateY(-2px);
+        .sw-center-btn:hover {
+            transform: translate(-50%, -50%) scale(1.1);
         }
-        .sw-btn-spin:disabled {
-            opacity: 0.7;
+        .sw-center-btn:disabled {
             cursor: not-allowed;
+            opacity: 0.8;
+        }
+        .sw-spin-text {
+            color: rgba(255,255,255,0.6);
+            font-size: 0.9rem;
+            margin-top: 8px;
         }
         .sw-result {
             text-align: center;
             padding: 20px 0;
         }
         .sw-result-icon {
-            font-size: 4rem;
+            font-size: 5rem;
             margin-bottom: 16px;
-            animation: bounce 0.6s ease infinite;
-        }
-        @keyframes bounce {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-10px); }
+            animation: sw-float 1s ease infinite;
         }
         .sw-result-title {
-            color: #DAA520;
-            font-size: 1.8rem;
-            font-weight: 700;
+            font-size: 1.6rem;
+            font-weight: 800;
             margin: 0 0 8px;
+            background: linear-gradient(135deg, #FBBF24 0%, #FCD34D 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         .sw-result-amount {
+            font-size: 4rem;
+            font-weight: 900;
             color: white;
-            font-size: 3.5rem;
-            font-weight: 800;
-            margin: 16px 0;
+            margin: 20px 0;
+            text-shadow: 0 0 30px rgba(251,191,36,0.5);
         }
         .sw-result-text {
-            color: rgba(255,255,255,0.8);
+            color: rgba(255,255,255,0.7);
             font-size: 1rem;
-            margin: 0 0 24px;
+            margin: 0 0 28px;
         }
-        .sw-btn-continue {
-            width: 100%;
-            padding: 16px;
-            background: linear-gradient(135deg, #DAA520, #F4C430);
-            border: none;
-            border-radius: 12px;
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: white;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(218,165,32,0.4);
+        .sw-result-text strong {
+            color: #FBBF24;
+        }
+        .sw-confetti {
+            position: fixed;
+            top: -20px;
+            font-size: 24px;
+            animation: sw-confetti 3s linear forwards;
+            z-index: 10001;
+            pointer-events: none;
         }
     `;
     
@@ -335,8 +480,9 @@ const SpinWheel = (function() {
         const size = 280;
         const cx = size / 2;
         const cy = size / 2;
-        const r = size / 2 - 10;
-        const segAngle = 360 / SEGMENTS.length;
+        const r = size / 2 - 5;
+        const segCount = SEGMENTS.length;
+        const segAngle = 360 / segCount;
         
         let paths = '';
         let labels = '';
@@ -345,40 +491,31 @@ const SpinWheel = (function() {
             const startAngle = i * segAngle - 90;
             const endAngle = startAngle + segAngle;
             
-            const start = {
-                x: cx + r * Math.cos(startAngle * Math.PI / 180),
-                y: cy + r * Math.sin(startAngle * Math.PI / 180)
-            };
-            const end = {
-                x: cx + r * Math.cos(endAngle * Math.PI / 180),
-                y: cy + r * Math.sin(endAngle * Math.PI / 180)
-            };
+            const startRad = (startAngle * Math.PI) / 180;
+            const endRad = (endAngle * Math.PI) / 180;
             
-            const largeArc = segAngle > 180 ? 1 : 0;
+            const x1 = cx + r * Math.cos(startRad);
+            const y1 = cy + r * Math.sin(startRad);
+            const x2 = cx + r * Math.cos(endRad);
+            const y2 = cy + r * Math.sin(endRad);
             
-            paths += `<path d="M${cx},${cy} L${start.x},${start.y} A${r},${r} 0 ${largeArc},1 ${end.x},${end.y} Z" fill="${seg.color}"/>`;
+            paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z" fill="${seg.color}" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>`;
             
             // Label
-            const midAngle = (startAngle + segAngle / 2) * Math.PI / 180;
+            const midAngle = ((startAngle + endAngle) / 2) * Math.PI / 180;
             const labelR = r * 0.65;
             const lx = cx + labelR * Math.cos(midAngle);
             const ly = cy + labelR * Math.sin(midAngle);
-            const rotation = startAngle + segAngle / 2 + 90;
+            const rotation = (startAngle + endAngle) / 2 + 90;
             
-            const fontSize = seg.isWin ? 16 : 9;
             labels += `
                 <g transform="rotate(${rotation}, ${lx}, ${ly})">
-                    <text x="${lx}" y="${ly}" fill="white" font-size="${fontSize}" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${seg.label}</text>
+                    <text x="${lx}" y="${ly}" fill="white" font-size="22" font-weight="800" text-anchor="middle" dominant-baseline="middle" style="text-shadow: 0 2px 4px rgba(0,0,0,0.3);">${seg.label}</text>
                 </g>
             `;
         });
         
-        return `<svg viewBox="0 0 ${size} ${size}" class="sw-wheel-img" id="sw-wheel">
-            <circle cx="${cx}" cy="${cy}" r="${r + 6}" fill="white" opacity="0.2"/>
-            ${paths}
-            ${labels}
-            <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="white" stroke-width="6"/>
-        </svg>`;
+        return `<svg viewBox="0 0 ${size} ${size}" class="sw-wheel-svg" id="sw-wheel">${paths}${labels}</svg>`;
     }
     
     // ============================================
@@ -393,14 +530,14 @@ const SpinWheel = (function() {
                     <button class="sw-close" id="sw-close">✕</button>
                     
                     <div class="sw-header">
-                        <div class="sw-badge">🎁 Limited Time Offer</div>
-                        <h2 class="sw-title">🎉 Welcome Gift!</h2>
-                        <p class="sw-subtitle">Spin to win wallet cashback up to ₹599</p>
+                        <div class="sw-badge">🎰 EXCLUSIVE OFFER</div>
+                        <h2 class="sw-title">Spin & Win!</h2>
+                        <p class="sw-subtitle">Win up to <strong>₹599</strong> wallet cashback</p>
                     </div>
                     
                     <div class="sw-content">
                         <!-- PHONE SECTION -->
-                        <div class="sw-phone" id="sw-phone">
+                        <div class="sw-phone-section" id="sw-phone">
                             <div class="sw-input-group">
                                 <select class="sw-select" id="sw-country">
                                     <option value="+91">🇮🇳 India (+91)</option>
@@ -413,14 +550,16 @@ const SpinWheel = (function() {
                                     <option value="+974">🇶🇦 Qatar (+974)</option>
                                     <option value="+60">🇲🇾 Malaysia (+60)</option>
                                 </select>
-                                <input type="tel" class="sw-input" id="sw-phone-input" placeholder="Enter mobile number" maxlength="10">
+                                <input type="tel" class="sw-input" id="sw-phone-input" placeholder="Enter mobile number" maxlength="10" inputmode="numeric">
                             </div>
-                            <button class="sw-btn sw-btn-gold" id="sw-send-otp" disabled>Send OTP ✨</button>
-                            <p class="sw-helper">We'll send a verification code to your phone</p>
+                            <button class="sw-btn sw-btn-gold" id="sw-send-otp" disabled>
+                                ✨ Get OTP & Spin
+                            </button>
+                            <p class="sw-helper">🔒 Your number is safe with us</p>
                         </div>
                         
                         <!-- OTP SECTION -->
-                        <div class="sw-otp sw-hidden" id="sw-otp">
+                        <div class="sw-otp-section sw-hidden" id="sw-otp">
                             <p class="sw-otp-label">Enter the 6-digit code sent to your phone</p>
                             <div class="sw-otp-boxes">
                                 <input type="text" class="sw-otp-input" maxlength="1" inputmode="numeric">
@@ -430,34 +569,33 @@ const SpinWheel = (function() {
                                 <input type="text" class="sw-otp-input" maxlength="1" inputmode="numeric">
                                 <input type="text" class="sw-otp-input" maxlength="1" inputmode="numeric">
                             </div>
-                            <button class="sw-btn sw-btn-gold" id="sw-verify" disabled>Verify & Spin 🎰</button>
-                            <p class="sw-resend">Didn't receive? <span class="sw-resend-link" id="sw-resend">Resend</span></p>
+                            <button class="sw-btn sw-btn-primary" id="sw-verify" disabled>
+                                🎰 Verify & Spin Now!
+                            </button>
+                            <p class="sw-resend">Didn't get code? <span class="sw-resend-link" id="sw-resend">Resend OTP</span></p>
                         </div>
                         
                         <!-- WHEEL SECTION -->
                         <div class="sw-wheel-section sw-hidden" id="sw-wheel-section">
-                            <div class="sw-wheel-wrap">
+                            <div class="sw-wheel-container">
+                                <div class="sw-wheel-outer"></div>
+                                <div class="sw-wheel-inner"></div>
                                 <div class="sw-pointer"></div>
                                 ${createWheelSVG()}
-                                <div class="sw-center">🎰</div>
+                                <button class="sw-center-btn" id="sw-spin">🎲</button>
                             </div>
-                            <button class="sw-btn-spin" id="sw-spin">🎲 SPIN NOW! 🎲</button>
+                            <p class="sw-spin-text">Tap the center to spin!</p>
                         </div>
                         
                         <!-- RESULT SECTION -->
                         <div class="sw-result sw-hidden" id="sw-result">
-                            <div id="sw-win">
-                                <div class="sw-result-icon">🎉</div>
-                                <h3 class="sw-result-title">Congratulations!</h3>
-                                <div class="sw-result-amount" id="sw-amount">₹99</div>
-                                <p class="sw-result-text">Added to your wallet! Valid for 48 hours.</p>
-                            </div>
-                            <div id="sw-lose" class="sw-hidden">
-                                <div class="sw-result-icon">😢</div>
-                                <h3 class="sw-result-title" style="color:white;">Better Luck Next Time!</h3>
-                                <p class="sw-result-text">Don't worry, check out our amazing products!</p>
-                            </div>
-                            <button class="sw-btn-continue" id="sw-continue">Start Shopping 🛒</button>
+                            <div class="sw-result-icon">🎉</div>
+                            <h3 class="sw-result-title">Congratulations!</h3>
+                            <div class="sw-result-amount" id="sw-amount">₹99</div>
+                            <p class="sw-result-text">Added to your wallet!<br><strong>Valid for 48 hours</strong></p>
+                            <button class="sw-btn sw-btn-gold" id="sw-continue">
+                                🛒 Start Shopping
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -470,9 +608,9 @@ const SpinWheel = (function() {
     }
     
     function injectStyles() {
-        if (document.getElementById('sw-styles')) return;
+        if (document.getElementById('sw-styles-v16')) return;
         const style = document.createElement('style');
-        style.id = 'sw-styles';
+        style.id = 'sw-styles-v16';
         style.textContent = STYLES;
         document.head.appendChild(style);
     }
@@ -486,21 +624,21 @@ const SpinWheel = (function() {
         const sendBtn = document.getElementById('sw-send-otp');
         const closeBtn = document.getElementById('sw-close');
         
-        // Country change
-        countrySelect.onchange = (e) => {
-            selectedCountryCode = e.target.value;
-        };
+        countrySelect.onchange = (e) => selectedCountryCode = e.target.value;
         
-        // Phone input validation
         phoneInput.oninput = (e) => {
             e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
             sendBtn.disabled = e.target.value.length < 10;
         };
         
-        // Send OTP
+        phoneInput.onkeydown = (e) => {
+            if (e.key === 'Enter' && !sendBtn.disabled) {
+                sendBtn.click();
+            }
+        };
+        
         sendBtn.onclick = handleSendOtp;
         
-        // OTP inputs
         const otpInputs = document.querySelectorAll('.sw-otp-input');
         otpInputs.forEach((input, i) => {
             input.oninput = (e) => {
@@ -515,26 +653,26 @@ const SpinWheel = (function() {
                     otpInputs[i - 1].focus();
                 }
             };
+            input.onpaste = (e) => {
+                e.preventDefault();
+                const paste = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '');
+                paste.split('').slice(0, 6).forEach((char, j) => {
+                    if (otpInputs[j]) otpInputs[j].value = char;
+                });
+                checkOtp();
+            };
         });
         
-        // Verify
         document.getElementById('sw-verify').onclick = handleVerify;
-        
-        // Resend
         document.getElementById('sw-resend').onclick = () => {
             document.getElementById('sw-otp').classList.add('sw-hidden');
             document.getElementById('sw-phone').classList.remove('sw-hidden');
-            sendBtn.textContent = 'Send OTP ✨';
+            sendBtn.textContent = '✨ Get OTP & Spin';
             sendBtn.disabled = phoneInput.value.length < 10;
         };
         
-        // Spin
         document.getElementById('sw-spin').onclick = handleSpin;
-        
-        // Continue
         document.getElementById('sw-continue').onclick = hide;
-        
-        // Close
         closeBtn.onclick = hide;
     }
     
@@ -544,42 +682,26 @@ const SpinWheel = (function() {
     }
     
     // ============================================
-    // ⭐ CAPTURE PHONE IMMEDIATELY ON SEND OTP
+    // CAPTURE PHONE IMMEDIATELY
     // ============================================
     async function capturePhoneImmediately(phone) {
-        console.log('[SpinWheel] 📱 CAPTURING PHONE IMMEDIATELY:', phone);
+        console.log('[SpinWheel] 📱 CAPTURING PHONE:', phone);
         
-        // 1. Save to localStorage (multiple keys for compatibility)
         localStorage.setItem('seasalt_phone', phone);
         localStorage.setItem('seasalt_user', JSON.stringify({ phone: phone }));
         
-        // 2. Update Store if available
         if (typeof Store !== 'undefined' && Store.setUser) {
             Store.setUser({ phone: phone });
         }
         
-        // 3. Track in Analytics immediately
-        if (typeof Analytics !== 'undefined') {
-            if (Analytics.trackEvent) {
-                Analytics.trackEvent('phone_captured', { extra: { phone: phone, stage: 'send_otp_clicked' } });
-            }
-        }
-        
-        // 4. Save to Supabase users table IMMEDIATELY
         try {
-            // Check if user exists
             const checkRes = await fetch(`${SUPABASE_URL}/rest/v1/users?phone=eq.${encodeURIComponent(phone)}&select=id,phone,total_visits`, {
-                headers: {
-                    'apikey': SUPABASE_KEY,
-                    'Authorization': 'Bearer ' + SUPABASE_KEY
-                }
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
             });
             
             const existingUsers = await checkRes.json();
             
             if (existingUsers && existingUsers.length > 0) {
-                // Update existing user - increment visits
-                console.log('[SpinWheel] User exists, updating...');
                 await fetch(`${SUPABASE_URL}/rest/v1/users?phone=eq.${encodeURIComponent(phone)}`, {
                     method: 'PATCH',
                     headers: {
@@ -594,8 +716,6 @@ const SpinWheel = (function() {
                     })
                 });
             } else {
-                // Create new user IMMEDIATELY
-                console.log('[SpinWheel] Creating new user...');
                 await fetch(`${SUPABASE_URL}/rest/v1/users`, {
                     method: 'POST',
                     headers: {
@@ -606,35 +726,26 @@ const SpinWheel = (function() {
                     },
                     body: JSON.stringify({
                         phone: phone,
-                        name: null,
                         country: getCountryFromCode(selectedCountryCode),
                         selected_country: getCountryFromCode(selectedCountryCode),
                         wallet_balance: 0,
                         total_visits: 1,
-                        total_purchases: 0,
                         created_at: new Date().toISOString(),
                         last_seen: new Date().toISOString()
                     })
                 });
             }
-            
-            console.log('[SpinWheel] ✅ User saved to Supabase IMMEDIATELY');
+            console.log('[SpinWheel] ✅ User saved');
         } catch (err) {
-            console.warn('[SpinWheel] Could not save to Supabase:', err);
+            console.warn('[SpinWheel] Save error:', err);
         }
     }
     
     function getCountryFromCode(code) {
         const map = {
-            '+91': 'India',
-            '+1': 'United States',
-            '+44': 'United Kingdom',
-            '+971': 'United Arab Emirates',
-            '+65': 'Singapore',
-            '+61': 'Australia',
-            '+966': 'Saudi Arabia',
-            '+974': 'Qatar',
-            '+60': 'Malaysia'
+            '+91': 'India', '+1': 'United States', '+44': 'United Kingdom',
+            '+971': 'United Arab Emirates', '+65': 'Singapore', '+61': 'Australia',
+            '+966': 'Saudi Arabia', '+974': 'Qatar', '+60': 'Malaysia'
         };
         return map[code] || 'India';
     }
@@ -649,16 +760,14 @@ const SpinWheel = (function() {
         userPhone = selectedCountryCode + phone;
         const btn = document.getElementById('sw-send-otp');
         btn.disabled = true;
-        btn.textContent = 'Capturing...';
+        btn.textContent = '📱 Capturing...';
         
-        // ⭐⭐⭐ CAPTURE PHONE IMMEDIATELY - BEFORE EVEN SENDING OTP ⭐⭐⭐
         await capturePhoneImmediately(userPhone);
         
-        btn.textContent = 'Sending OTP...';
+        btn.textContent = '📤 Sending OTP...';
         
         try {
-            // Check for demo OTP mode (123456)
-            const DEMO_MODE = true; // Set to false for production Firebase OTP
+            const DEMO_MODE = true;
             
             if (!DEMO_MODE && typeof firebase !== 'undefined' && firebase.auth) {
                 if (!auth) auth = firebase.auth();
@@ -667,16 +776,15 @@ const SpinWheel = (function() {
                 }
                 confirmationResult = await auth.signInWithPhoneNumber(userPhone, recaptchaVerifier);
                 showOtpSection();
-                toast('OTP sent to ' + userPhone, 'success');
+                toast('OTP sent! 📱', 'success');
             } else {
-                // Demo mode - any 6 digit OTP works (or use 123456)
                 showOtpSection();
                 toast('Demo: Use OTP 123456', 'info');
             }
         } catch (err) {
             console.error('[SpinWheel] OTP error:', err);
             showOtpSection();
-            toast('Demo: Use OTP 123456', 'info');
+            toast('Demo: Use 123456', 'info');
         }
     }
     
@@ -692,10 +800,9 @@ const SpinWheel = (function() {
         
         const btn = document.getElementById('sw-verify');
         btn.disabled = true;
-        btn.textContent = 'Verifying...';
+        btn.textContent = '🔐 Verifying...';
         
         try {
-            // Demo mode: accept 123456 or any 6 digits
             if (otp === '123456' || !confirmationResult) {
                 onVerified();
             } else if (confirmationResult) {
@@ -703,28 +810,19 @@ const SpinWheel = (function() {
                 onVerified();
             }
         } catch (err) {
-            console.error('[SpinWheel] Verify error:', err);
-            toast('Invalid OTP. Try 123456', 'error');
+            toast('Invalid OTP', 'error');
             btn.disabled = false;
-            btn.textContent = 'Verify & Spin 🎰';
+            btn.textContent = '🎰 Verify & Spin Now!';
             document.querySelectorAll('.sw-otp-input').forEach(i => i.value = '');
             document.querySelector('.sw-otp-input').focus();
         }
     }
     
     function onVerified() {
-        console.log('[SpinWheel] ✅ User verified:', userPhone);
-        
-        // Track verification
-        if (typeof Analytics !== 'undefined' && Analytics.trackEvent) {
-            Analytics.trackEvent('user_verified', { extra: { phone: userPhone } });
-        }
-        
-        // Show wheel
         document.getElementById('sw-otp').classList.add('sw-hidden');
         document.getElementById('sw-wheel-section').classList.remove('sw-hidden');
         document.getElementById('sw-close').classList.add('visible');
-        toast('Verified! Spin the wheel!', 'success');
+        toast('Verified! 🎉 Spin to win!', 'success');
     }
     
     // ============================================
@@ -736,104 +834,56 @@ const SpinWheel = (function() {
         
         const btn = document.getElementById('sw-spin');
         btn.disabled = true;
-        btn.textContent = 'Spinning...';
         
-        // Track spin
-        if (typeof Analytics !== 'undefined' && Analytics.trackEvent) {
-            Analytics.trackEvent('spin_started', { extra: { phone: userPhone } });
-        }
-        
-        // Calculate result (weighted - more likely to win small amounts)
-        const rand = Math.random();
-        let segmentIndex, amount = 0, won = false;
-        
-        if (rand < 0.35) {
-            // 35% chance - win ₹99
-            const idx99 = SEGMENTS.findIndex(s => s.value === 99);
-            segmentIndex = idx99 >= 0 ? idx99 : 0;
-            amount = 99;
-            won = true;
-        } else if (rand < 0.45) {
-            // 10% chance - win ₹299
-            const idx299 = SEGMENTS.findIndex(s => s.value === 299);
-            segmentIndex = idx299 >= 0 ? idx299 : 2;
-            amount = 299;
-            won = true;
-        } else if (rand < 0.48) {
-            // 3% chance - win ₹599
-            const idx599 = SEGMENTS.findIndex(s => s.value === 599);
-            segmentIndex = idx599 >= 0 ? idx599 : 4;
-            amount = 599;
-            won = true;
-        } else {
-            // 52% chance - lose (try again)
-            const loseSegments = SEGMENTS.map((s, i) => ({ s, i })).filter(x => !x.s.isWin);
-            const pick = loseSegments[Math.floor(Math.random() * loseSegments.length)];
-            segmentIndex = pick.i;
-            won = false;
-        }
+        // Calculate prize with exact odds
+        const prize = calculatePrize();
+        console.log('[SpinWheel] Prize:', prize.value);
         
         // Calculate rotation
         const segAngle = 360 / SEGMENTS.length;
-        const targetAngle = 360 - (segmentIndex * segAngle + segAngle / 2);
-        const spins = 5 + Math.floor(Math.random() * 3);
+        const targetAngle = 360 - (prize.segmentIndex * segAngle + segAngle / 2);
+        const spins = 6 + Math.floor(Math.random() * 3);
         const totalRotation = spins * 360 + targetAngle;
         
-        // Animate wheel
+        // Animate
         const wheel = document.getElementById('sw-wheel');
         wheel.style.transform = `rotate(${totalRotation}deg)`;
         
-        // Show result after animation
-        setTimeout(() => showResult(won, amount), 4200);
+        setTimeout(() => showResult(prize.value), 5500);
     }
     
-    function showResult(won, amount) {
-        console.log('[SpinWheel] Result:', won ? 'Won ₹' + amount : 'Lost');
-        
-        // Mark spin completed
+    function showResult(amount) {
         localStorage.setItem('seasalt_spin_completed', 'true');
+        saveWallet(amount);
         
-        // Save wallet if won
-        if (won && amount > 0) {
-            saveWallet(amount);
+        // Confetti
+        for (let i = 0; i < 30; i++) {
+            setTimeout(() => createConfetti(), i * 50);
         }
         
-        // Track result
-        if (typeof Analytics !== 'undefined' && Analytics.trackEvent) {
-            Analytics.trackEvent('spin_completed', { 
-                extra: { 
-                    phone: userPhone, 
-                    won: won, 
-                    amount: amount 
-                } 
-            });
-        }
+        if (typeof UI !== 'undefined' && UI.updateCartUI) UI.updateCartUI();
         
-        // Update UI
-        if (typeof UI !== 'undefined' && UI.updateCartUI) {
-            UI.updateCartUI();
-        }
-        
-        // Show result section
         document.getElementById('sw-wheel-section').classList.add('sw-hidden');
         document.getElementById('sw-result').classList.remove('sw-hidden');
+        document.getElementById('sw-amount').textContent = '₹' + amount;
         
-        if (won) {
-            document.getElementById('sw-amount').textContent = '₹' + amount;
-            document.getElementById('sw-win').classList.remove('sw-hidden');
-            document.getElementById('sw-lose').classList.add('sw-hidden');
-            toast('🎉 You won ₹' + amount + '!', 'success');
-        } else {
-            document.getElementById('sw-win').classList.add('sw-hidden');
-            document.getElementById('sw-lose').classList.remove('sw-hidden');
-            toast('Better luck next time!', 'info');
-        }
-        
+        toast('🎉 You won ₹' + amount + '!', 'success');
         isSpinning = false;
     }
     
+    function createConfetti() {
+        const emojis = ['🎉', '🎊', '✨', '💫', '⭐', '🌟'];
+        const conf = document.createElement('div');
+        conf.className = 'sw-confetti';
+        conf.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+        conf.style.left = Math.random() * 100 + 'vw';
+        conf.style.animationDuration = (2 + Math.random() * 2) + 's';
+        document.body.appendChild(conf);
+        setTimeout(() => conf.remove(), 4000);
+    }
+    
     function saveWallet(amount) {
-        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
         const walletData = {
             amount: amount,
             expiresAt: expiresAt.toISOString(),
@@ -844,7 +894,6 @@ const SpinWheel = (function() {
         localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify(walletData));
         console.log('[SpinWheel] 💰 Wallet saved:', walletData);
         
-        // Also update Supabase user wallet
         updateUserWallet(userPhone, amount);
     }
     
@@ -865,10 +914,9 @@ const SpinWheel = (function() {
                     wallet_expires_at: expiresAt
                 })
             });
-            
-            console.log('[SpinWheel] ✅ Wallet updated in Supabase');
+            console.log('[SpinWheel] ✅ Wallet updated in DB');
         } catch (err) {
-            console.warn('[SpinWheel] Could not update wallet in Supabase:', err);
+            console.warn('[SpinWheel] Wallet update error:', err);
         }
     }
     
@@ -876,18 +924,14 @@ const SpinWheel = (function() {
     // VISIBILITY
     // ============================================
     function shouldShow() {
-        // Don't show if already completed spin
-        if (localStorage.getItem('seasalt_spin_completed') === 'true') {
-            return false;
-        }
-        return true;
+        return localStorage.getItem('seasalt_spin_completed') !== 'true';
     }
     
     function show() {
         if (!modal) createModal();
         modal.classList.add('active');
         document.body.style.overflow = 'hidden';
-        setTimeout(() => document.getElementById('sw-phone-input')?.focus(), 300);
+        setTimeout(() => document.getElementById('sw-phone-input')?.focus(), 400);
     }
     
     function hide() {
@@ -902,23 +946,17 @@ const SpinWheel = (function() {
             return;
         }
         const t = document.createElement('div');
-        const bg = type === 'success' ? '#10B981' : type === 'error' ? '#EF4444' : '#6B7280';
-        t.style.cssText = `position:fixed;bottom:100px;left:50%;transform:translateX(-50%);padding:14px 28px;border-radius:12px;color:#fff;font-weight:600;z-index:99999;background:${bg};box-shadow:0 4px 15px rgba(0,0,0,0.2);`;
+        const bg = type === 'success' ? '#10B981' : type === 'error' ? '#EF4444' : '#6366F1';
+        t.style.cssText = `position:fixed;bottom:100px;left:50%;transform:translateX(-50%);padding:14px 28px;border-radius:14px;color:#fff;font-weight:600;z-index:99999;background:${bg};box-shadow:0 8px 25px rgba(0,0,0,0.3);`;
         t.textContent = msg;
         document.body.appendChild(t);
         setTimeout(() => t.remove(), 3000);
     }
     
-    // ============================================
-    // INIT
-    // ============================================
     function init() {
-        console.log('[SpinWheel] v15 Initializing...');
-        
+        console.log('[SpinWheel] v16 Modern - Initializing');
         if (shouldShow()) {
-            setTimeout(show, 1500);
-        } else {
-            console.log('[SpinWheel] Already completed, not showing');
+            setTimeout(show, 1000);
         }
     }
     
