@@ -703,11 +703,22 @@ const UI = (function() {
         var useWalletCheckbox = document.getElementById('use-wallet');
         var useWallet = useWalletCheckbox ? useWalletCheckbox.checked : false;
         
-        // Get delivery charge from Cart module if available, else from Store
-        var subtotal = cart.subtotal;
-        var deliveryCharge = (typeof Cart !== 'undefined' && Cart.getDeliveryCharge) 
-            ? Cart.getDeliveryCharge(subtotal) 
-            : cart.deliveryCharge;
+        // Get delivery charge - try Cart module first, then calculate directly
+        var subtotal = cart.subtotal || 0;
+        var deliveryCharge = 0;
+        
+        try {
+            if (typeof Cart !== 'undefined' && typeof Cart.getDeliveryCharge === 'function') {
+                deliveryCharge = Cart.getDeliveryCharge(subtotal);
+            }
+        } catch (e) {}
+        
+        // Fallback: if Cart module didn't return a number, use default logic
+        if (typeof deliveryCharge !== 'number' || isNaN(deliveryCharge)) {
+            deliveryCharge = subtotal >= 500 ? 0 : 50;
+        }
+        
+        console.log('[UI] Cart totals - subtotal:', subtotal, 'delivery:', deliveryCharge, 'wallet:', walletBalance);
         
         // Calculate wallet discount from SPIN wallet (not Store.wallet)
         var walletDiscount = 0;
@@ -718,7 +729,13 @@ const UI = (function() {
         
         if (elements.cartSubtotal) elements.cartSubtotal.textContent = fmt(subtotal);
         if (elements.deliveryCharge) {
-            elements.deliveryCharge.innerHTML = deliveryCharge === 0 ? '<span class="text-spice-leaf font-medium">FREE</span>' : fmt(deliveryCharge);
+            if (subtotal === 0) {
+                elements.deliveryCharge.textContent = fmt(0);
+            } else if (deliveryCharge === 0) {
+                elements.deliveryCharge.innerHTML = '<span class="text-spice-leaf font-medium">FREE</span>';
+            } else {
+                elements.deliveryCharge.textContent = fmt(deliveryCharge);
+            }
         }
         if (walletBalance > 0 && elements.walletApplySection) {
             elements.walletApplySection.classList.remove('hidden');
