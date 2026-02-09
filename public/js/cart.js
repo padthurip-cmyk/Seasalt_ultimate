@@ -1,7 +1,7 @@
 /**
- * SeaSalt Pickles - Cart & Checkout Module v4 FINAL
+ * SeaSalt Pickles - Cart & Checkout Module v5 FINAL
  * ==================================================
- * FIXED: Null safety in getDeliveryCharge function
+ * FIXED: Auto close cart before showing checkout
  */
 
 const Cart = (function() {
@@ -18,7 +18,7 @@ const Cart = (function() {
         bindEvents();
         subscribeToChanges();
         initWalletCheckbox();
-        console.log('[Cart] v4 FINAL Initialized');
+        console.log('[Cart] v5 FINAL Initialized');
     }
 
     async function loadDeliveryCharges() {
@@ -51,7 +51,6 @@ const Cart = (function() {
         }
     }
 
-    // FIXED: Null safety
     function getDeliveryCharge(subtotal, country, region) {
         var freeAbove = 500;
         var flatFee = 50;
@@ -168,13 +167,21 @@ const Cart = (function() {
         UI.showToast(product.name + ' added to cart!', 'success');
     }
 
+    // FIXED: Auto close cart before checkout
     function handleCheckout() {
         var cart = Store.getCart();
         if (!cart.items || cart.items.length === 0) {
             UI.showToast('Your cart is empty!', 'error');
             return;
         }
-        showCheckoutForm();
+        
+        // Close cart first, then show checkout
+        UI.closeCart();
+        
+        // Small delay to ensure cart is closed before showing checkout
+        setTimeout(function() {
+            showCheckoutForm();
+        }, 100);
     }
 
     function showCheckoutForm() {
@@ -295,7 +302,6 @@ const Cart = (function() {
         Store.clearCart();
         modal.remove();
         document.body.style.overflow = '';
-        UI.closeCart();
         UI.showToast('🎉 Order ' + orderData.orderId + ' confirmed!', 'success');
         checkoutInProgress = false;
     }
