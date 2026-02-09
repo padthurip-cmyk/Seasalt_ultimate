@@ -1,17 +1,42 @@
 /**
- * SeaSalt Pickles - UI Module v7 (Wallet Timer Fix)
+ * SeaSalt Pickles - UI Module v8 (Layout Shift Fix)
  * ==================================================
- * FIXED: Uses 'seasalt_spin_wallet' key to avoid conflict with store.js
- * store.js uses 'seasalt_wallet' with {balance, transactions} format
- * spinwheel uses 'seasalt_spin_wallet' with {amount, expiresAt} format
+ * FIXED: Proper scroll lock to prevent layout shift
  */
 
 const UI = (function() {
     var elements = {};
     var walletTimerInterval = null;
+    var scrollLockCount = 0;
     
-    // KEY CHANGE: Use different localStorage key to avoid store.js conflict
     var SPIN_WALLET_KEY = 'seasalt_spin_wallet';
+    
+    // ============================================
+    // SCROLL LOCK - Prevents layout shift
+    // ============================================
+    function lockScroll() {
+        if (scrollLockCount === 0) {
+            var scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+            document.body.style.overflow = 'hidden';
+            document.body.style.paddingRight = scrollbarWidth + 'px';
+        }
+        scrollLockCount++;
+    }
+    
+    function unlockScroll() {
+        scrollLockCount--;
+        if (scrollLockCount <= 0) {
+            scrollLockCount = 0;
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+        }
+    }
+    
+    function forceUnlockScroll() {
+        scrollLockCount = 0;
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+    }
     
     function cacheElements() {
         elements.loadingOverlay = document.getElementById('loading-overlay');
@@ -53,10 +78,8 @@ const UI = (function() {
         cacheElements(); 
         injectWalletStyles();
         
-        // Check for existing spin wallet on init
         setTimeout(function() {
             var wallet = getSpinWallet();
-            console.log('[UI] Init - checking spin wallet:', wallet);
             if (wallet) {
                 updateWalletDisplay(wallet);
                 startWalletTimer();
@@ -66,78 +89,27 @@ const UI = (function() {
     
     function getElements() { return elements; }
     
-    // ============================================
-    // INJECT WALLET TIMER STYLES
-    // ============================================
     function injectWalletStyles() {
         if (document.getElementById('wallet-timer-css')) return;
         
         var style = document.createElement('style');
         style.id = 'wallet-timer-css';
-        style.textContent = '\
-            #wallet-btn.has-timer {\
-                background: linear-gradient(135deg, #f97316 0%, #ea580c 100%) !important;\
-                color: white !important;\
-                padding: 6px 12px !important;\
-                animation: walletGlow 2s ease-in-out infinite;\
-            }\
-            #wallet-btn.has-timer svg {\
-                stroke: white !important;\
-            }\
-            #wallet-btn.has-timer #wallet-balance {\
-                display: flex !important;\
-                flex-direction: column !important;\
-                align-items: center !important;\
-                line-height: 1.1 !important;\
-                gap: 1px !important;\
-            }\
-            .wallet-amount {\
-                font-size: 14px !important;\
-                font-weight: 700 !important;\
-                color: white !important;\
-            }\
-            .wallet-timer {\
-                font-size: 9px !important;\
-                font-weight: 600 !important;\
-                color: rgba(255,255,255,0.9) !important;\
-                font-family: monospace !important;\
-                background: rgba(0,0,0,0.2) !important;\
-                padding: 1px 6px !important;\
-                border-radius: 4px !important;\
-            }\
-            @keyframes walletGlow {\
-                0%, 100% { box-shadow: 0 2px 10px rgba(249, 115, 22, 0.4); }\
-                50% { box-shadow: 0 2px 20px rgba(249, 115, 22, 0.6); }\
-            }\
-        ';
+        style.textContent = '#wallet-btn.has-timer{background:linear-gradient(135deg,#f97316 0%,#ea580c 100%)!important;color:white!important;padding:6px 12px!important;animation:walletGlow 2s ease-in-out infinite}#wallet-btn.has-timer svg{stroke:white!important}#wallet-btn.has-timer #wallet-balance{display:flex!important;flex-direction:column!important;align-items:center!important;line-height:1.1!important;gap:1px!important}.wallet-amount{font-size:14px!important;font-weight:700!important;color:white!important}.wallet-timer{font-size:9px!important;font-weight:600!important;color:rgba(255,255,255,0.9)!important;font-family:monospace!important;background:rgba(0,0,0,0.2)!important;padding:1px 6px!important;border-radius:4px!important}@keyframes walletGlow{0%,100%{box-shadow:0 2px 10px rgba(249,115,22,0.4)}50%{box-shadow:0 2px 20px rgba(249,115,22,0.6)}}';
         document.head.appendChild(style);
     }
     
-    // ============================================
-    // SPIN WALLET HELPERS - Uses separate key!
-    // ============================================
     function getSpinWallet() {
         try {
             var data = JSON.parse(localStorage.getItem(SPIN_WALLET_KEY) || '{}');
-            console.log('[UI] getSpinWallet raw data:', data);
-            
             if (!data.amount || data.amount <= 0) return null;
-            
             var expiresAt = new Date(data.expiresAt);
             var now = new Date();
-            
             if (now >= expiresAt) {
-                console.log('[UI] Spin wallet expired, removing');
                 localStorage.removeItem(SPIN_WALLET_KEY);
                 return null;
             }
-            
-            return {
-                amount: data.amount,
-                timeLeft: expiresAt - now
-            };
+            return { amount: data.amount, timeLeft: expiresAt - now };
         } catch (e) {
-            console.log('[UI] getSpinWallet error:', e);
             return null;
         }
     }
@@ -150,40 +122,21 @@ const UI = (function() {
         return h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
     }
     
-    // ============================================
-    // UPDATE WALLET DISPLAY
-    // ============================================
     function updateWalletDisplay(wallet) {
-        if (!elements.walletBalance) {
-            elements.walletBalance = document.getElementById('wallet-balance');
-        }
-        if (!elements.walletBtn) {
-            elements.walletBtn = document.getElementById('wallet-btn');
-        }
+        if (!elements.walletBalance) elements.walletBalance = document.getElementById('wallet-balance');
+        if (!elements.walletBtn) elements.walletBtn = document.getElementById('wallet-btn');
         if (!elements.walletBalance) return;
         
-        console.log('[UI] updateWalletDisplay called with:', wallet);
-        
         if (wallet && wallet.amount > 0) {
-            // Show wallet with timer
             if (elements.walletBtn) elements.walletBtn.classList.add('has-timer');
-            elements.walletBalance.innerHTML = 
-                '<span class="wallet-amount">₹' + wallet.amount + '</span>' +
-                '<span class="wallet-timer">⏱ ' + formatTime(wallet.timeLeft) + '</span>';
+            elements.walletBalance.innerHTML = '<span class="wallet-amount">₹' + wallet.amount + '</span><span class="wallet-timer">⏱ ' + formatTime(wallet.timeLeft) + '</span>';
         } else {
-            // Show default ₹0
             if (elements.walletBtn) elements.walletBtn.classList.remove('has-timer');
             elements.walletBalance.textContent = '₹0';
         }
     }
     
-    // ============================================
-    // START WALLET TIMER
-    // ============================================
     function startWalletTimer() {
-        console.log('[UI] Starting wallet timer...');
-        
-        // Clear existing
         if (walletTimerInterval) {
             clearInterval(walletTimerInterval);
             walletTimerInterval = null;
@@ -191,16 +144,12 @@ const UI = (function() {
         
         walletTimerInterval = setInterval(function() {
             var wallet = getSpinWallet();
-            
             if (!wallet) {
-                console.log('[UI] Wallet expired, stopping timer');
                 clearInterval(walletTimerInterval);
                 walletTimerInterval = null;
                 updateWalletDisplay(null);
                 return;
             }
-            
-            // Update timer only
             var timerEl = document.querySelector('#wallet-balance .wallet-timer');
             if (timerEl) {
                 timerEl.textContent = '⏱ ' + formatTime(wallet.timeLeft);
@@ -210,17 +159,11 @@ const UI = (function() {
         }, 1000);
     }
 
-    // ============================================
-    // PRICE FORMATTER
-    // ============================================
     function fmt(amount) {
         if (typeof CONFIG !== 'undefined' && CONFIG.formatPrice) return CONFIG.formatPrice(amount);
         return '₹' + amount;
     }
 
-    // ============================================
-    // LOADING
-    // ============================================
     function showLoading() {
         if (elements.loadingOverlay) elements.loadingOverlay.classList.remove('opacity-0', 'pointer-events-none', 'hidden');
         if (elements.app) elements.app.classList.add('hidden');
@@ -234,13 +177,9 @@ const UI = (function() {
         if (elements.app) elements.app.classList.remove('hidden');
     }
     
-    // ============================================
-    // TOAST
-    // ============================================
     function showToast(message, type, duration) {
         type = type || 'info';
         duration = duration || 3000;
-        if (typeof CONFIG !== 'undefined' && CONFIG.UI && CONFIG.UI.TOAST_DURATION) duration = CONFIG.UI.TOAST_DURATION;
         var toast = document.createElement('div');
         var bg = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : type === 'warning' ? 'bg-yellow-500' : 'bg-gray-800';
         var icons = { success: '✓', error: '✕', info: 'ℹ', warning: '⚠' };
@@ -252,9 +191,6 @@ const UI = (function() {
         }
     }
     
-    // ============================================
-    // EMOJI HELPER
-    // ============================================
     var EMOJI_MAP = { mango: '🥭', mixed: '🫙', nonveg: '🍗', specialty: '⭐', spicy: '🌶️', sweet: '🍯', veg: '🥒', combo: '🎁' };
     
     function safeEmoji(val, catId) {
@@ -262,9 +198,6 @@ const UI = (function() {
         return EMOJI_MAP[catId] || '🫙';
     }
     
-    // ============================================
-    // CATEGORY PILLS
-    // ============================================
     function renderCategoryPills(categories) {
         if (!elements.categoryScroll) return;
         var html = '<button class="category-pill active flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all bg-pickle-500 text-white" data-category="all">🫙 All</button>';
@@ -289,9 +222,6 @@ const UI = (function() {
         });
     }
     
-    // ============================================
-    // PRODUCT CARD
-    // ============================================
     function createProductCard(product) {
         var variants = product.variants;
         if (!variants || !Array.isArray(variants) || variants.length === 0) {
@@ -331,36 +261,26 @@ const UI = (function() {
         showToast(product.name + ' added to cart', 'success');
     }
     
-    // ============================================
-    // FEATURED PRODUCTS
-    // ============================================
     function renderFeaturedProducts(products) {
         if (!elements.featuredProducts) return;
-        
         var featured = products.slice(0, 6);
-        
         if (featured.length === 0) {
             var section = document.getElementById('featured-section');
             if (section) section.classList.add('hidden');
             return;
         }
-        
         var section = document.getElementById('featured-section');
         if (section) section.classList.remove('hidden');
         var parent = elements.featuredProducts.parentElement;
         if (parent) parent.classList.remove('hidden');
-        
         var html = '';
         for (var i = 0; i < featured.length; i++) {
-            try { html += createProductCard(featured[i]); } catch(e) { console.error('[UI] Card error:', e); }
+            try { html += createProductCard(featured[i]); } catch(e) {}
         }
         elements.featuredProducts.innerHTML = html;
         bindProductCardEvents(elements.featuredProducts);
     }
     
-    // ============================================
-    // CATEGORY SECTIONS
-    // ============================================
     function renderCategorySections(categories, products) {
         if (!elements.categorySections) return;
         var activeCategory = Store.getState().activeCategory;
@@ -399,9 +319,7 @@ const UI = (function() {
     }
     
     function renderProductsByCategory(category) {
-        var products = (typeof Store.getProductsByCategory === 'function')
-            ? Store.getProductsByCategory(category)
-            : Store.getActiveProducts();
+        var products = (typeof Store.getProductsByCategory === 'function') ? Store.getProductsByCategory(category) : Store.getActiveProducts();
         renderCategorySections(Store.getCategories(), products);
     }
     
@@ -420,9 +338,6 @@ const UI = (function() {
         bindProductCardEvents(elements.categorySections);
     }
     
-    // ============================================
-    // PRODUCT CARD EVENT BINDING
-    // ============================================
     function bindProductCardEvents(container) {
         if (!container) return;
         container.querySelectorAll('.product-card').forEach(function(card) {
@@ -440,9 +355,6 @@ const UI = (function() {
         });
     }
     
-    // ============================================
-    // PRODUCT MODAL
-    // ============================================
     function openProductModal(product) {
         if (!elements.productModal) return;
         Store.setSelectedProduct(product);
@@ -466,9 +378,7 @@ const UI = (function() {
             for (var i = 0; i < variants.length; i++) {
                 var v = variants[i];
                 var w = v.weight || v.size || '250g';
-                vh += '<button class="variant-option px-4 py-2 rounded-xl text-sm font-medium transition-all ' +
-                    (i === 0 ? 'bg-pickle-500 text-white selected' : 'bg-gray-100 text-gray-700') +
-                    '" data-index="' + i + '">' + w + ' - ' + fmt(v.price) + '</button>';
+                vh += '<button class="variant-option px-4 py-2 rounded-xl text-sm font-medium transition-all ' + (i === 0 ? 'bg-pickle-500 text-white selected' : 'bg-gray-100 text-gray-700') + '" data-index="' + i + '">' + w + ' - ' + fmt(v.price) + '</button>';
             }
             elements.variantOptions.innerHTML = vh;
             elements.variantOptions.querySelectorAll('.variant-option').forEach(function(btn) {
@@ -491,13 +401,13 @@ const UI = (function() {
         updateModalPrice();
         
         elements.productModal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
+        lockScroll();
     }
     
     function closeProductModal() {
         if (elements.productModal) {
             elements.productModal.classList.add('hidden');
-            document.body.style.overflow = '';
+            unlockScroll();
             Store.setSelectedProduct(null);
         }
     }
@@ -511,13 +421,10 @@ const UI = (function() {
         }
     }
     
-    // ============================================
-    // CART UI
-    // ============================================
     function openCart() {
         if (elements.cartSidebar) {
             elements.cartSidebar.classList.remove('hidden');
-            document.body.style.overflow = 'hidden';
+            lockScroll();
             renderCartItems();
         }
     }
@@ -525,37 +432,22 @@ const UI = (function() {
     function closeCart() {
         if (elements.cartSidebar) {
             elements.cartSidebar.classList.add('hidden');
-            document.body.style.overflow = '';
+            unlockScroll();
         }
     }
     
-    // ============================================
-    // THE KEY FUNCTION - updateCartUI
-    // ============================================
     function updateCartUI() {
-        console.log('[UI] updateCartUI called');
-        
-        // Update cart count
         var count = Store.getCartItemCount();
         if (elements.cartCount) {
             elements.cartCount.textContent = count;
             elements.cartCount.classList.toggle('hidden', count === 0);
         }
         
-        // Check for spin wallet (separate key from store.js)
         var spinWallet = getSpinWallet();
-        console.log('[UI] Spin wallet check:', spinWallet);
-        
         if (spinWallet && spinWallet.amount > 0) {
-            // Has spin wallet - show with timer
             updateWalletDisplay(spinWallet);
-            
-            // Make sure timer is running
-            if (!walletTimerInterval) {
-                startWalletTimer();
-            }
+            if (!walletTimerInterval) startWalletTimer();
         } else {
-            // No spin wallet - show ₹0
             updateWalletDisplay(null);
         }
     }
@@ -582,14 +474,7 @@ const UI = (function() {
             el.dataset.itemId = item.id;
             var img = item.image || 'https://placehold.co/80x80/D4451A/fff?text=Pickle';
             var size = item.size || item.weight || '250g';
-            el.innerHTML = '<div class="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0"><img src="' + img + '" alt="' + item.name + '" class="w-full h-full object-cover"></div>' +
-                '<div class="flex-1 min-w-0"><h4 class="font-semibold text-gray-800 text-sm truncate">' + item.name + '</h4><p class="text-xs text-gray-500">' + size + '</p>' +
-                '<div class="flex items-center justify-between mt-1">' +
-                '<div class="flex items-center gap-2"><button class="cart-qty-btn w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs" data-action="decrease" data-item-id="' + item.id + '">−</button>' +
-                '<span class="text-sm font-medium">' + item.quantity + '</span>' +
-                '<button class="cart-qty-btn w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs" data-action="increase" data-item-id="' + item.id + '">+</button></div>' +
-                '<span class="font-bold text-pickle-600 text-sm">' + fmt(item.price * item.quantity) + '</span>' +
-                '</div></div>';
+            el.innerHTML = '<div class="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0"><img src="' + img + '" alt="' + item.name + '" class="w-full h-full object-cover"></div><div class="flex-1 min-w-0"><h4 class="font-semibold text-gray-800 text-sm truncate">' + item.name + '</h4><p class="text-xs text-gray-500">' + size + '</p><div class="flex items-center justify-between mt-1"><div class="flex items-center gap-2"><button class="cart-qty-btn w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs" data-action="decrease" data-item-id="' + item.id + '">−</button><span class="text-sm font-medium">' + item.quantity + '</span><button class="cart-qty-btn w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-xs" data-action="increase" data-item-id="' + item.id + '">+</button></div><span class="font-bold text-pickle-600 text-sm">' + fmt(item.price * item.quantity) + '</span></div></div>';
             
             el.querySelectorAll('.cart-qty-btn').forEach(function(btn) {
                 btn.addEventListener('click', function() {
@@ -615,8 +500,6 @@ const UI = (function() {
     
     function updateCartTotals() {
         var cart = Store.getCart();
-        
-        // Get wallet balance from spin wallet
         var spinWallet = getSpinWallet();
         var walletBalance = spinWallet ? spinWallet.amount : 0;
         
@@ -639,9 +522,6 @@ const UI = (function() {
         if (elements.cartTotal) elements.cartTotal.textContent = fmt(cart.total);
     }
     
-    // ============================================
-    // BOTTOM NAV
-    // ============================================
     function updateBottomNav(page) {
         document.querySelectorAll('.nav-item').forEach(function(item) {
             item.classList.remove('active');
@@ -649,9 +529,6 @@ const UI = (function() {
         });
     }
     
-    // ============================================
-    // PUBLIC API
-    // ============================================
     return {
         init: init,
         getElements: getElements,
@@ -673,11 +550,13 @@ const UI = (function() {
         renderCartItems: renderCartItems,
         updateCartTotals: updateCartTotals,
         updateBottomNav: updateBottomNav,
-        // Exposed for spinwheel
         startWalletTimer: startWalletTimer,
         updateWalletDisplay: updateWalletDisplay,
         getSpinWallet: getSpinWallet,
-        SPIN_WALLET_KEY: SPIN_WALLET_KEY
+        SPIN_WALLET_KEY: SPIN_WALLET_KEY,
+        lockScroll: lockScroll,
+        unlockScroll: unlockScroll,
+        forceUnlockScroll: forceUnlockScroll
     };
 })();
 
