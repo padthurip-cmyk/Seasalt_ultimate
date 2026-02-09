@@ -408,12 +408,36 @@
         
         // Update UI
         if (typeof UI !== 'undefined') {
-            console.log('[SpinWheel] Updating UI...');
-            UI.updateCartUI();
-            if (typeof UI.startWalletTimer === 'function') {
-                UI.startWalletTimer();
+            console.log('[SpinWheel] Updating UI wallet display...');
+            try {
+                var wallet = UI.getSpinWallet ? UI.getSpinWallet() : null;
+                if (wallet) {
+                    UI.updateWalletDisplay(wallet);
+                }
+                UI.updateCartUI();
+                if (typeof UI.startWalletTimer === 'function') {
+                    UI.startWalletTimer();
+                }
+            } catch (e) {
+                console.warn('[SpinWheel] UI update error:', e);
             }
         }
+        
+        // Direct DOM fallback - ensure wallet shows even if UI module has issues
+        try {
+            var walletBtn = document.getElementById('wallet-btn');
+            var walletBalance = document.getElementById('wallet-balance');
+            if (walletBtn && walletBalance) {
+                walletBtn.classList.add('has-timer');
+                var timeLeft = expiresAt - new Date();
+                var h = Math.floor(timeLeft / 3600000);
+                var m = Math.floor((timeLeft % 3600000) / 60000);
+                var s = Math.floor((timeLeft % 60000) / 1000);
+                var timeStr = h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+                walletBalance.innerHTML = '<span class="wallet-amount">₹' + wonAmount + '</span><span class="wallet-timer">⏱ ' + timeStr + '</span>';
+                console.log('[SpinWheel] Direct DOM wallet update done: ₹' + wonAmount);
+            }
+        } catch (e) {}
         
         // Dispatch event
         window.dispatchEvent(new CustomEvent('walletUpdated', {
@@ -423,6 +447,53 @@
         // Close modal and show toast
         hide();
         toast('🎊 ₹' + wonAmount + ' added to wallet! Use within 48 hours.', 'success');
+        
+        // Retry UI update after modal closes (elements may be more accessible)
+        setTimeout(function() {
+            if (typeof UI !== 'undefined') {
+                try {
+                    var wallet = UI.getSpinWallet ? UI.getSpinWallet() : null;
+                    if (wallet) {
+                        UI.updateWalletDisplay(wallet);
+                        UI.updateCartUI();
+                        if (typeof UI.startWalletTimer === 'function') UI.startWalletTimer();
+                    }
+                } catch (e) {}
+            }
+            
+            // Backup: start own countdown timer if UI timer isn't running
+            startBackupWalletTimer(expiresAt);
+        }, 600);
+    }
+    
+    // Backup wallet timer - updates DOM directly every second
+    var backupTimerInterval = null;
+    function startBackupWalletTimer(expiresAt) {
+        if (backupTimerInterval) clearInterval(backupTimerInterval);
+        
+        backupTimerInterval = setInterval(function() {
+            var walletBalance = document.getElementById('wallet-balance');
+            if (!walletBalance) return;
+            
+            var timeLeft = new Date(expiresAt) - new Date();
+            if (timeLeft <= 0) {
+                clearInterval(backupTimerInterval);
+                localStorage.removeItem(SPIN_WALLET_KEY);
+                var walletBtn = document.getElementById('wallet-btn');
+                if (walletBtn) walletBtn.classList.remove('has-timer');
+                walletBalance.textContent = '₹0';
+                return;
+            }
+            
+            // Only update if UI.startWalletTimer hasn't taken over
+            var timerEl = walletBalance.querySelector('.wallet-timer');
+            if (timerEl) {
+                var h = Math.floor(timeLeft / 3600000);
+                var m = Math.floor((timeLeft % 3600000) / 60000);
+                var s = Math.floor((timeLeft % 60000) / 1000);
+                timerEl.textContent = '⏱ ' + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+            }
+        }, 1000);
     }
     
     function shouldShow() {
@@ -453,6 +524,14 @@
     function init() {
         console.log('[SpinWheel] v15 Initializing...');
         
+        // Inject wallet timer CSS if not already present (backup for UI module)
+        if (!document.getElementById('wallet-timer-css')) {
+            var style = document.createElement('style');
+            style.id = 'wallet-timer-css';
+            style.textContent = '#wallet-btn.has-timer{background:linear-gradient(135deg,#f97316 0%,#ea580c 100%)!important;color:white!important;padding:6px 12px!important;animation:walletGlow 2s ease-in-out infinite}#wallet-btn.has-timer svg{stroke:white!important}#wallet-btn.has-timer #wallet-balance{display:flex!important;flex-direction:column!important;align-items:center!important;line-height:1.1!important;gap:1px!important}.wallet-amount{font-size:14px!important;font-weight:700!important;color:white!important}.wallet-timer{font-size:9px!important;font-weight:600!important;color:rgba(255,255,255,0.9)!important;font-family:monospace!important;background:rgba(0,0,0,0.2)!important;padding:1px 6px!important;border-radius:4px!important}@keyframes walletGlow{0%,100%{box-shadow:0 2px 10px rgba(249,115,22,0.4)}50%{box-shadow:0 2px 20px rgba(249,115,22,0.6)}}';
+            document.head.appendChild(style);
+        }
+        
         // Check if user already has spin wallet
         var existingWallet = localStorage.getItem(SPIN_WALLET_KEY);
         console.log('[SpinWheel] Existing spin wallet:', existingWallet);
@@ -461,13 +540,28 @@
             try {
                 var data = JSON.parse(existingWallet);
                 if (data.amount > 0 && new Date(data.expiresAt) > new Date()) {
-                    console.log('[SpinWheel] Valid wallet found, updating UI');
+                    console.log('[SpinWheel] Valid wallet found: ₹' + data.amount + ', updating UI');
                     if (typeof UI !== 'undefined') {
                         UI.updateCartUI();
                         if (typeof UI.startWalletTimer === 'function') {
                             UI.startWalletTimer();
                         }
                     }
+                    // Direct DOM fallback
+                    try {
+                        var walletBtn = document.getElementById('wallet-btn');
+                        var walletBalance = document.getElementById('wallet-balance');
+                        if (walletBtn && walletBalance) {
+                            walletBtn.classList.add('has-timer');
+                            var timeLeft = new Date(data.expiresAt) - new Date();
+                            var h = Math.floor(timeLeft / 3600000);
+                            var m = Math.floor((timeLeft % 3600000) / 60000);
+                            var s = Math.floor((timeLeft % 60000) / 1000);
+                            walletBalance.innerHTML = '<span class="wallet-amount">₹' + data.amount + '</span><span class="wallet-timer">⏱ ' + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s + '</span>';
+                        }
+                    } catch (e2) {}
+                    // Start backup timer
+                    startBackupWalletTimer(new Date(data.expiresAt));
                 }
             } catch (e) {}
         }
