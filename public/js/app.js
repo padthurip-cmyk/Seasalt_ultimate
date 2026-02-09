@@ -1,7 +1,8 @@
 /**
- * SeaSalt Pickles - Main Application v4
+ * SeaSalt Pickles - Main Application v5
  * =======================================
  * Entry point. Initializes all modules.
+ * FIXED: Added all missing event bindings for cart, product modal, checkout
  */
 
 const App = (function() {
@@ -20,10 +21,6 @@ const App = (function() {
             Cart.init();
             setupEventListeners();
             UI.hideLoading();
-            
-            setTimeout(function() {
-                if (typeof SpinWheel !== 'undefined') SpinWheel.init();
-            }, 1000);
             
             isInitialized = true;
             console.log('✅ SeaSalt Pickles - Ready!');
@@ -124,6 +121,127 @@ const App = (function() {
         setupBottomNav();
         setupScrollBehavior();
         setupKeyboardShortcuts();
+        setupCartEvents();
+        setupProductModalEvents();
+        console.log('[App] ✅ Product event listeners attached');
+    }
+
+    // ============================================
+    // CART EVENTS (was missing in v4!)
+    // ============================================
+    
+    function setupCartEvents() {
+        // Open cart
+        var cartBtn = document.getElementById('cart-btn');
+        if (cartBtn) {
+            cartBtn.addEventListener('click', function() {
+                UI.openCart();
+            });
+        }
+
+        // Close cart
+        var closeCartBtn = document.getElementById('close-cart');
+        if (closeCartBtn) {
+            closeCartBtn.addEventListener('click', function() {
+                UI.closeCart();
+            });
+        }
+
+        // Cart overlay click to close
+        var cartOverlay = document.getElementById('cart-overlay');
+        if (cartOverlay) {
+            cartOverlay.addEventListener('click', function() {
+                UI.closeCart();
+            });
+        }
+
+        // Checkout button
+        var checkoutBtn = document.getElementById('checkout-btn');
+        if (checkoutBtn) {
+            checkoutBtn.addEventListener('click', function() {
+                if (typeof Cart !== 'undefined' && Cart.checkout) {
+                    Cart.checkout();
+                }
+            });
+        }
+
+        // Wallet checkbox in cart
+        var useWalletCheckbox = document.getElementById('use-wallet');
+        if (useWalletCheckbox) {
+            useWalletCheckbox.addEventListener('change', function(e) {
+                Store.setUseWallet(e.target.checked);
+                UI.renderCartItems();
+            });
+        }
+    }
+    
+    // ============================================
+    // PRODUCT MODAL EVENTS (was missing in v4!)
+    // ============================================
+    
+    function setupProductModalEvents() {
+        // Close product modal
+        var closeProductModal = document.getElementById('close-product-modal');
+        if (closeProductModal) {
+            closeProductModal.addEventListener('click', function() {
+                UI.closeProductModal();
+            });
+        }
+        
+        // Product modal overlay click to close
+        var productModalOverlay = document.getElementById('product-modal-overlay');
+        if (productModalOverlay) {
+            productModalOverlay.addEventListener('click', function() {
+                UI.closeProductModal();
+            });
+        }
+        
+        // Quantity decrease
+        var qtyDecrease = document.getElementById('qty-decrease');
+        if (qtyDecrease) {
+            qtyDecrease.addEventListener('click', function() {
+                var state = Store.getState();
+                var newQty = Math.max(1, (state.quantity || 1) - 1);
+                Store.setQuantity(newQty);
+                var qtyEl = document.getElementById('qty-value');
+                if (qtyEl) qtyEl.textContent = newQty;
+                UI.updateModalPrice();
+            });
+        }
+        
+        // Quantity increase
+        var qtyIncrease = document.getElementById('qty-increase');
+        if (qtyIncrease) {
+            qtyIncrease.addEventListener('click', function() {
+                var state = Store.getState();
+                var newQty = (state.quantity || 1) + 1;
+                Store.setQuantity(newQty);
+                var qtyEl = document.getElementById('qty-value');
+                if (qtyEl) qtyEl.textContent = newQty;
+                UI.updateModalPrice();
+            });
+        }
+        
+        // ADD TO CART button
+        var addToCartBtn = document.getElementById('add-to-cart-btn');
+        if (addToCartBtn) {
+            addToCartBtn.addEventListener('click', function() {
+                var state = Store.getState();
+                var product = state.selectedProduct;
+                var variant = state.selectedVariant;
+                var quantity = state.quantity || 1;
+                
+                if (!product || !variant) {
+                    UI.showToast('Please select a product', 'error');
+                    return;
+                }
+                
+                Store.addToCart(product, variant, quantity);
+                UI.updateCartUI();
+                UI.closeProductModal();
+                UI.showToast(product.name + ' added to cart!', 'success');
+            });
+        }
     }
     
     function setupSearch() {
@@ -195,8 +313,6 @@ const App = (function() {
     }
     
     function showOrdersPage() {
-        var mainContent = document.getElementById('main-content');
-        // Orders module handles this if available
         if (typeof Orders !== 'undefined' && Orders.showOrdersPage) {
             Orders.showOrdersPage();
         }
