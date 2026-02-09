@@ -1,832 +1,748 @@
-/**
- * SeaSalt Pickles - Spin Wheel v16
- * =================================
- * Theme: Matches app's orange/pickle color scheme
- * Phone captured on "Send OTP" click
- * 
- * Prize Odds:
- * - ₹99:  Everyone wins (base prize ~91%)
- * - ₹199: 1 in 20 (5%)
- * - ₹299: 1 in 50 (2%)
- * - ₹399: 1 in 100 (1%)
- * - ₹499: 1 in 150 (0.67%)
- * - ₹599: 1 in 200 (0.5%)
- */
+// spinwheel.js v17 - SeaSalt Pickles
+// Pickle/Orange Theme + Visible Prizes + Phone Capture + Supabase Sync
+// Date: February 8, 2026
 
-const SpinWheel = (function() {
+(function() {
     'use strict';
 
-    const SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
-    const SPIN_WALLET_KEY = 'seasalt_spin_wallet';
+    // ==================== CONFIG ====================
+    var SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
+    var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgwNTIzNTEsImV4cCI6MjA1MzYyODM1MX0.LPSwMPKBiMxMTmHOVJxWBbS8kgGDo4RaPNCR63P55Cw';
+    var SPIN_WALLET_KEY = 'seasalt_spin_wallet';
+    var WALLET_EXPIRY_HOURS = 48;
 
-    // Prize segments - Orange/Green pickle theme (alternating)
-    const PRIZES = [
-        { value: 99,  label: '₹99',  color: '#DC2626', textColor: '#fff' },   // Red
-        { value: 199, label: '₹199', color: '#16A34A', textColor: '#fff' },   // Green
-        { value: 299, label: '₹299', color: '#EA580C', textColor: '#fff' },   // Orange
-        { value: 399, label: '₹399', color: '#16A34A', textColor: '#fff' },   // Green
-        { value: 499, label: '₹499', color: '#DC2626', textColor: '#fff' },   // Red
-        { value: 599, label: '₹599', color: '#16A34A', textColor: '#fff' }    // Green
+    // ==================== THEME COLORS ====================
+    var THEME = {
+        primaryOrange: '#D4451A',
+        darkOrange: '#B91C1C',
+        pickleGreen: '#166534',
+        lightGreen: '#16A34A',
+        backgroundCream: '#FFF7ED',
+        lightOrange: '#FDBA74',
+        textBrown: '#7C2D12',
+        accentOrange: '#EA580C',
+        warmWhite: '#FFFBF5',
+        deepRed: '#DC2626',
+        gold: '#F59E0B',
+        softShadow: 'rgba(212, 69, 26, 0.15)'
+    };
+
+    // Wheel segment colors (alternating to match app palette)
+    var SEGMENT_COLORS = [
+        { bg: '#DC2626', text: '#FFFFFF' },  // ₹99 - Red
+        { bg: '#16A34A', text: '#FFFFFF' },  // ₹199 - Green
+        { bg: '#EA580C', text: '#FFFFFF' },  // ₹299 - Orange
+        { bg: '#166534', text: '#FFFFFF' },  // ₹399 - Dark Green
+        { bg: '#B91C1C', text: '#FFFFFF' },  // ₹499 - Dark Red
+        { bg: '#F59E0B', text: '#FFFFFF' }   // ₹599 - Gold
     ];
 
-    let isSpinning = false;
-    let hasSpun = false;
-    let verifiedPhone = null;
+    var PRIZES = [
+        { value: 99, label: '₹99' },
+        { value: 199, label: '₹199' },
+        { value: 299, label: '₹299' },
+        { value: 399, label: '₹399' },
+        { value: 499, label: '₹499' },
+        { value: 599, label: '₹599' }
+    ];
 
-    // ══════════════════════════════════════════
-    // PRIZE CALCULATION (Exact Odds)
-    // ══════════════════════════════════════════
+    // ==================== PRIZE ODDS ENGINE ====================
+    // Deep probabilistic model with cumulative distribution
     function calculatePrize() {
-        const rand = Math.random();
-        
-        // ₹599: 1 in 200 (0.5%)
+        var rand = Math.random();
+
+        // Cumulative probability thresholds
+        // ₹599: 0.5% (1 in 200)
         if (rand < 0.005) return { value: 599, segmentIndex: 5 };
-        
-        // ₹499: 1 in 150 (0.67%)
+
+        // ₹499: 0.67% (1 in 150)
         if (rand < 0.0117) return { value: 499, segmentIndex: 4 };
-        
-        // ₹399: 1 in 100 (1%)
+
+        // ₹399: 1% (1 in 100)
         if (rand < 0.0217) return { value: 399, segmentIndex: 3 };
-        
-        // ₹299: 1 in 50 (2%)
+
+        // ₹299: 2% (1 in 50)
         if (rand < 0.0417) return { value: 299, segmentIndex: 2 };
-        
-        // ₹199: 1 in 20 (5%)
+
+        // ₹199: 5% (1 in 20)
         if (rand < 0.0917) return { value: 199, segmentIndex: 1 };
-        
-        // ₹99: Everyone else (~91%)
+
+        // ₹99: ~90.83% (everyone else)
         return { value: 99, segmentIndex: 0 };
     }
 
-    // ══════════════════════════════════════════
-    // INIT & SHOW
-    // ══════════════════════════════════════════
-    function init() {
-        console.log('[SpinWheel] v16 Initialized - Pickle Theme');
-        
-        if (localStorage.getItem('seasalt_spin_completed')) {
-            hasSpun = true;
+    // ==================== STATE ====================
+    var state = {
+        phone: '',
+        otpSent: false,
+        otpVerified: false,
+        spinning: false,
+        hasSpun: false,
+        currentAngle: 0
+    };
+
+    // ==================== RENDER FULL PAGE ====================
+    function renderSpinWheelPage() {
+        var container = document.getElementById('spin-wheel-page') || document.getElementById('app');
+        if (!container) {
+            container = document.body;
         }
-        
-        // Auto-show after 2 seconds if not spun
+
+        container.innerHTML = '';
+        container.style.cssText = 'margin:0; padding:0; min-height:100vh; background:' + THEME.backgroundCream + '; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
+
+        var wrapper = document.createElement('div');
+        wrapper.id = 'spinwheel-wrapper';
+        wrapper.style.cssText = 'max-width:420px; margin:0 auto; padding:0; min-height:100vh; background:' + THEME.warmWhite + '; position:relative; overflow:hidden;';
+
+        wrapper.innerHTML = buildHeader() + buildContent();
+        container.appendChild(wrapper);
+
+        // Initialize canvas after DOM is ready
         setTimeout(function() {
-            if (!hasSpun && !document.getElementById('spinwheel-modal')) {
-                show();
-            }
-        }, 2000);
+            initCanvas();
+            bindEvents();
+            checkExistingSpin();
+        }, 100);
     }
 
-    function show() {
-        if (document.getElementById('spinwheel-modal')) return;
-        
-        const modal = document.createElement('div');
-        modal.id = 'spinwheel-modal';
-        modal.innerHTML = getModalHTML();
-        document.body.appendChild(modal);
-        document.body.style.overflow = 'hidden';
-        
-        // Animate in
-        requestAnimationFrame(() => {
-            modal.querySelector('.spinwheel-content').style.transform = 'scale(1)';
-            modal.querySelector('.spinwheel-content').style.opacity = '1';
-        });
-        
-        bindEvents(modal);
-        drawWheel();
+    // ==================== HEADER ====================
+    function buildHeader() {
+        return '<div style="' +
+            'background: linear-gradient(135deg, ' + THEME.primaryOrange + ' 0%, ' + THEME.darkOrange + ' 100%);' +
+            'padding: 20px 16px 24px;' +
+            'text-align: center;' +
+            'position: relative;' +
+            'overflow: hidden;' +
+            '">' +
+            // Decorative pickle pattern overlay
+            '<div style="position:absolute;top:0;left:0;right:0;bottom:0;opacity:0.06;' +
+            'background-image:radial-gradient(circle at 20% 30%, #fff 2px, transparent 2px),' +
+            'radial-gradient(circle at 60% 70%, #fff 1.5px, transparent 1.5px),' +
+            'radial-gradient(circle at 80% 20%, #fff 1px, transparent 1px);' +
+            'background-size: 60px 60px;"></div>' +
+            '<div style="position:relative;z-index:1;">' +
+            '<div style="font-size:28px;margin-bottom:4px;">🥒</div>' +
+            '<h1 style="margin:0;color:#fff;font-size:22px;font-weight:800;letter-spacing:0.5px;text-shadow:0 2px 4px rgba(0,0,0,0.2);">' +
+            'SeaSalt Lucky Spin</h1>' +
+            '<p style="margin:6px 0 0;color:rgba(255,255,255,0.9);font-size:13px;font-weight:500;">' +
+            'Win wallet credits up to ₹599!</p>' +
+            '</div></div>';
     }
 
-    function hide() {
-        const modal = document.getElementById('spinwheel-modal');
-        if (modal) {
-            modal.querySelector('.spinwheel-content').style.transform = 'scale(0.9)';
-            modal.querySelector('.spinwheel-content').style.opacity = '0';
-            setTimeout(() => {
-                modal.remove();
-                document.body.style.overflow = '';
-            }, 300);
-        }
+    // ==================== MAIN CONTENT ====================
+    function buildContent() {
+        return '<div id="spinwheel-content" style="padding:20px 16px 32px;">' +
+            buildPhoneStep() +
+            buildOTPStep() +
+            buildWheelStep() +
+            buildResultStep() +
+            '</div>';
     }
 
-    // ══════════════════════════════════════════
-    // MODAL HTML - Pickle Orange Theme
-    // ══════════════════════════════════════════
-    function getModalHTML() {
-        return `
-            <style>
-                #spinwheel-modal {
-                    position: fixed;
-                    inset: 0;
-                    z-index: 9999;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 16px;
-                    background: rgba(0,0,0,0.8);
-                    backdrop-filter: blur(8px);
-                }
-                .spinwheel-content {
-                    background: linear-gradient(135deg, #FFF7ED 0%, #FFEDD5 100%);
-                    border-radius: 24px;
-                    width: 100%;
-                    max-width: 380px;
-                    max-height: 90vh;
-                    overflow-y: auto;
-                    transform: scale(0.9);
-                    opacity: 0;
-                    transition: all 0.3s ease;
-                    box-shadow: 0 25px 50px rgba(212, 69, 26, 0.3);
-                    border: 3px solid #D4451A;
-                }
-                .spinwheel-header {
-                    background: linear-gradient(135deg, #D4451A 0%, #B91C1C 100%);
-                    padding: 20px;
-                    text-align: center;
-                    position: relative;
-                }
-                .spinwheel-close {
-                    position: absolute;
-                    top: 12px;
-                    right: 12px;
-                    width: 32px;
-                    height: 32px;
-                    border-radius: 50%;
-                    background: rgba(255,255,255,0.2);
-                    border: none;
-                    color: white;
-                    font-size: 20px;
-                    cursor: pointer;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    transition: background 0.2s;
-                }
-                .spinwheel-close:hover {
-                    background: rgba(255,255,255,0.3);
-                }
-                .spinwheel-title {
-                    color: white;
-                    font-size: 24px;
-                    font-weight: 800;
-                    margin: 0 0 4px 0;
-                    text-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                }
-                .spinwheel-subtitle {
-                    color: rgba(255,255,255,0.9);
-                    font-size: 14px;
-                    margin: 0;
-                }
-                .spinwheel-body {
-                    padding: 24px;
-                }
-                .wheel-container {
-                    position: relative;
-                    width: 280px;
-                    height: 280px;
-                    margin: 0 auto 24px;
-                }
-                #spin-wheel {
-                    width: 100%;
-                    height: 100%;
-                    border-radius: 50%;
-                    box-shadow: 0 8px 32px rgba(212, 69, 26, 0.4), inset 0 0 20px rgba(0,0,0,0.1);
-                    border: 6px solid #D4451A;
-                }
-                .wheel-pointer {
-                    position: absolute;
-                    top: -12px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    width: 0;
-                    height: 0;
-                    border-left: 16px solid transparent;
-                    border-right: 16px solid transparent;
-                    border-top: 28px solid #D4451A;
-                    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
-                    z-index: 10;
-                }
-                .wheel-center {
-                    position: absolute;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                    width: 70px;
-                    height: 70px;
-                    background: linear-gradient(135deg, #D4451A 0%, #B91C1C 100%);
-                    border-radius: 50%;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 28px;
-                    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-                    border: 4px solid #FFF7ED;
-                    z-index: 5;
-                }
-                .phone-section, .otp-section, .result-section {
-                    display: none;
-                }
-                .phone-section.active, .otp-section.active, .result-section.active {
-                    display: block;
-                    animation: fadeIn 0.3s ease;
-                }
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                .input-group {
-                    margin-bottom: 16px;
-                }
-                .input-label {
-                    display: block;
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: #7C2D12;
-                    margin-bottom: 8px;
-                }
-                .phone-input-wrapper {
-                    display: flex;
-                    align-items: center;
-                    background: white;
-                    border: 2px solid #FDBA74;
-                    border-radius: 12px;
-                    overflow: hidden;
-                    transition: border-color 0.2s;
-                }
-                .phone-input-wrapper:focus-within {
-                    border-color: #D4451A;
-                    box-shadow: 0 0 0 3px rgba(212, 69, 26, 0.1);
-                }
-                .country-code {
-                    padding: 14px 12px;
-                    background: #FFF7ED;
-                    font-weight: 600;
-                    color: #7C2D12;
-                    border-right: 2px solid #FDBA74;
-                }
-                .phone-input {
-                    flex: 1;
-                    padding: 14px;
-                    border: none;
-                    font-size: 16px;
-                    outline: none;
-                    background: transparent;
-                }
-                .otp-inputs {
-                    display: flex;
-                    gap: 10px;
-                    justify-content: center;
-                    margin-bottom: 16px;
-                }
-                .otp-input {
-                    width: 50px;
-                    height: 56px;
-                    text-align: center;
-                    font-size: 24px;
-                    font-weight: 700;
-                    border: 2px solid #FDBA74;
-                    border-radius: 12px;
-                    outline: none;
-                    background: white;
-                    color: #7C2D12;
-                    transition: all 0.2s;
-                }
-                .otp-input:focus {
-                    border-color: #D4451A;
-                    box-shadow: 0 0 0 3px rgba(212, 69, 26, 0.1);
-                }
-                .btn-primary {
-                    width: 100%;
-                    padding: 16px;
-                    background: linear-gradient(135deg, #D4451A 0%, #B91C1C 100%);
-                    color: white;
-                    border: none;
-                    border-radius: 12px;
-                    font-size: 16px;
-                    font-weight: 700;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                    box-shadow: 0 4px 15px rgba(212, 69, 26, 0.4);
-                }
-                .btn-primary:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 6px 20px rgba(212, 69, 26, 0.5);
-                }
-                .btn-primary:disabled {
-                    opacity: 0.6;
-                    cursor: not-allowed;
-                    transform: none;
-                }
-                .btn-spin {
-                    background: linear-gradient(135deg, #166534 0%, #14532D 100%);
-                    box-shadow: 0 4px 15px rgba(22, 101, 52, 0.4);
-                }
-                .btn-spin:hover {
-                    box-shadow: 0 6px 20px rgba(22, 101, 52, 0.5);
-                }
-                .resend-link {
-                    text-align: center;
-                    margin-top: 16px;
-                    font-size: 14px;
-                    color: #9CA3AF;
-                }
-                .resend-link button {
-                    background: none;
-                    border: none;
-                    color: #D4451A;
-                    font-weight: 600;
-                    cursor: pointer;
-                    text-decoration: underline;
-                }
-                .resend-link button:disabled {
-                    color: #9CA3AF;
-                    cursor: not-allowed;
-                    text-decoration: none;
-                }
-                .result-amount {
-                    font-size: 56px;
-                    font-weight: 800;
-                    color: #D4451A;
-                    text-align: center;
-                    margin: 16px 0;
-                    text-shadow: 0 2px 4px rgba(212, 69, 26, 0.2);
-                }
-                .result-text {
-                    text-align: center;
-                    color: #7C2D12;
-                    font-size: 16px;
-                    margin-bottom: 8px;
-                }
-                .result-expiry {
-                    text-align: center;
-                    color: #B91C1C;
-                    font-size: 14px;
-                    font-weight: 600;
-                    margin-bottom: 20px;
-                    padding: 8px 16px;
-                    background: #FEE2E2;
-                    border-radius: 8px;
-                    display: inline-block;
-                    width: 100%;
-                }
-                .error-text {
-                    color: #DC2626;
-                    font-size: 13px;
-                    margin-top: 8px;
-                    text-align: center;
-                }
-                .confetti {
-                    position: fixed;
-                    width: 10px;
-                    height: 10px;
-                    pointer-events: none;
-                    z-index: 10000;
-                    animation: confetti-fall 3s ease-out forwards;
-                }
-                @keyframes confetti-fall {
-                    0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-                    100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
-                }
-                @keyframes spin {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(var(--spin-degrees)); }
-                }
-                .terms-text {
-                    font-size: 11px;
-                    color: #9CA3AF;
-                    text-align: center;
-                    margin-top: 16px;
-                }
-            </style>
-            
-            <div class="spinwheel-content">
-                <div class="spinwheel-header">
-                    <button class="spinwheel-close" id="spinwheel-close">×</button>
-                    <h2 class="spinwheel-title">🫙 Spin & Win!</h2>
-                    <p class="spinwheel-subtitle">Win up to ₹599 wallet credits</p>
-                </div>
-                
-                <div class="spinwheel-body">
-                    <div class="wheel-container">
-                        <div class="wheel-pointer"></div>
-                        <canvas id="spin-wheel" width="280" height="280"></canvas>
-                        <div class="wheel-center">🫙</div>
-                    </div>
-                    
-                    <!-- Phone Section -->
-                    <div class="phone-section active" id="phone-section">
-                        <div class="input-group">
-                            <label class="input-label">Enter your mobile number</label>
-                            <div class="phone-input-wrapper">
-                                <span class="country-code">+91</span>
-                                <input type="tel" class="phone-input" id="phone-input" 
-                                    placeholder="Enter 10 digit number" maxlength="10"
-                                    inputmode="numeric" pattern="[0-9]*">
-                            </div>
-                            <div class="error-text" id="phone-error" style="display:none;"></div>
-                        </div>
-                        <button class="btn-primary" id="send-otp-btn">Send OTP</button>
-                        <p class="terms-text">By continuing, you agree to receive promotional messages</p>
-                    </div>
-                    
-                    <!-- OTP Section -->
-                    <div class="otp-section" id="otp-section">
-                        <div class="input-group">
-                            <label class="input-label">Enter OTP sent to <span id="otp-phone"></span></label>
-                            <div class="otp-inputs">
-                                <input type="tel" class="otp-input" maxlength="1" inputmode="numeric">
-                                <input type="tel" class="otp-input" maxlength="1" inputmode="numeric">
-                                <input type="tel" class="otp-input" maxlength="1" inputmode="numeric">
-                                <input type="tel" class="otp-input" maxlength="1" inputmode="numeric">
-                                <input type="tel" class="otp-input" maxlength="1" inputmode="numeric">
-                                <input type="tel" class="otp-input" maxlength="1" inputmode="numeric">
-                            </div>
-                            <div class="error-text" id="otp-error" style="display:none;"></div>
-                        </div>
-                        <button class="btn-primary btn-spin" id="verify-spin-btn">Verify & Spin!</button>
-                        <div class="resend-link">
-                            Didn't receive? <button id="resend-btn" disabled>Resend in <span id="resend-timer">30</span>s</button>
-                        </div>
-                    </div>
-                    
-                    <!-- Result Section -->
-                    <div class="result-section" id="result-section">
-                        <p class="result-text">🎉 Congratulations! You won</p>
-                        <div class="result-amount" id="result-amount">₹0</div>
-                        <div class="result-expiry">⏰ Valid for 48 hours only!</div>
-                        <button class="btn-primary" id="shop-now-btn">🛒 Shop Now & Use Credits</button>
-                    </div>
-                </div>
-            </div>
-        `;
+    // --- STEP 1: Phone Input ---
+    function buildPhoneStep() {
+        return '<div id="step-phone" style="display:block;">' +
+            '<div style="' +
+            'background: #fff;' +
+            'border-radius: 16px;' +
+            'padding: 24px 20px;' +
+            'box-shadow: 0 2px 12px ' + THEME.softShadow + ';' +
+            'border: 1px solid rgba(212,69,26,0.08);' +
+            '">' +
+            '<h2 style="margin:0 0 4px;color:' + THEME.textBrown + ';font-size:18px;font-weight:700;">Enter Your Number</h2>' +
+            '<p style="margin:0 0 16px;color:#9a6e4a;font-size:13px;">Verify to spin & win instant credits</p>' +
+            '<div style="display:flex;gap:8px;align-items:center;">' +
+            '<span style="padding:12px 10px;background:' + THEME.backgroundCream + ';border-radius:10px;font-size:15px;color:' + THEME.textBrown + ';font-weight:600;border:1.5px solid rgba(212,69,26,0.12);">+91</span>' +
+            '<input type="tel" id="spin-phone" maxlength="10" placeholder="Phone number" ' +
+            'style="flex:1;padding:12px 14px;border-radius:10px;border:1.5px solid rgba(212,69,26,0.15);font-size:15px;outline:none;' +
+            'background:' + THEME.backgroundCream + ';color:' + THEME.textBrown + ';font-weight:500;' +
+            'transition:border-color 0.2s;" ' +
+            'onfocus="this.style.borderColor=\'' + THEME.primaryOrange + '\'" ' +
+            'onblur="this.style.borderColor=\'rgba(212,69,26,0.15)\'">' +
+            '</div>' +
+            '<button id="btn-send-otp" onclick="SpinWheel.sendOTP()" style="' +
+            'width:100%;margin-top:14px;padding:14px;border:none;border-radius:12px;' +
+            'background:linear-gradient(135deg,' + THEME.primaryOrange + ',' + THEME.darkOrange + ');' +
+            'color:#fff;font-size:15px;font-weight:700;cursor:pointer;' +
+            'box-shadow:0 4px 14px rgba(212,69,26,0.3);' +
+            'transition:transform 0.15s,box-shadow 0.15s;' +
+            'letter-spacing:0.3px;' +
+            '" onmousedown="this.style.transform=\'scale(0.97)\'" onmouseup="this.style.transform=\'scale(1)\'">Send OTP</button>' +
+            '<p id="phone-error" style="margin:8px 0 0;color:' + THEME.deepRed + ';font-size:12px;display:none;"></p>' +
+            '</div></div>';
     }
 
-    // ══════════════════════════════════════════
-    // DRAW WHEEL
-    // ══════════════════════════════════════════
-    function drawWheel() {
-        const canvas = document.getElementById('spin-wheel');
+    // --- STEP 2: OTP Verification ---
+    function buildOTPStep() {
+        return '<div id="step-otp" style="display:none;">' +
+            '<div style="' +
+            'background:#fff;border-radius:16px;padding:24px 20px;' +
+            'box-shadow:0 2px 12px ' + THEME.softShadow + ';' +
+            'border:1px solid rgba(212,69,26,0.08);' +
+            '">' +
+            '<h2 style="margin:0 0 4px;color:' + THEME.textBrown + ';font-size:18px;font-weight:700;">Verify OTP</h2>' +
+            '<p id="otp-subtitle" style="margin:0 0 16px;color:#9a6e4a;font-size:13px;">Code sent to your phone</p>' +
+            '<input type="tel" id="spin-otp" maxlength="6" placeholder="Enter 6-digit OTP" ' +
+            'style="width:100%;padding:14px;border-radius:10px;border:1.5px solid rgba(212,69,26,0.15);' +
+            'font-size:18px;text-align:center;letter-spacing:8px;outline:none;' +
+            'background:' + THEME.backgroundCream + ';color:' + THEME.textBrown + ';font-weight:600;' +
+            'box-sizing:border-box;transition:border-color 0.2s;" ' +
+            'onfocus="this.style.borderColor=\'' + THEME.primaryOrange + '\'" ' +
+            'onblur="this.style.borderColor=\'rgba(212,69,26,0.15)\'">' +
+            '<button id="btn-verify-otp" onclick="SpinWheel.verifyOTP()" style="' +
+            'width:100%;margin-top:14px;padding:14px;border:none;border-radius:12px;' +
+            'background:linear-gradient(135deg,' + THEME.primaryOrange + ',' + THEME.darkOrange + ');' +
+            'color:#fff;font-size:15px;font-weight:700;cursor:pointer;' +
+            'box-shadow:0 4px 14px rgba(212,69,26,0.3);' +
+            'letter-spacing:0.3px;' +
+            '">Verify & Spin</button>' +
+            '<p id="otp-error" style="margin:8px 0 0;color:' + THEME.deepRed + ';font-size:12px;display:none;"></p>' +
+            '</div></div>';
+    }
+
+    // --- STEP 3: Wheel ---
+    function buildWheelStep() {
+        return '<div id="step-wheel" style="display:none;text-align:center;">' +
+            '<p style="margin:0 0 16px;color:' + THEME.textBrown + ';font-size:15px;font-weight:600;">Tap the wheel to spin!</p>' +
+            // Wheel container with pointer
+            '<div style="position:relative;display:inline-block;margin:0 auto;">' +
+            // Pointer triangle (top center)
+            '<div style="' +
+            'position:absolute;top:-8px;left:50%;transform:translateX(-50%);z-index:10;' +
+            'width:0;height:0;' +
+            'border-left:14px solid transparent;border-right:14px solid transparent;' +
+            'border-top:28px solid ' + THEME.primaryOrange + ';' +
+            'filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3));' +
+            '"></div>' +
+            // Canvas
+            '<canvas id="spin-canvas" width="300" height="300" style="' +
+            'cursor:pointer;border-radius:50%;' +
+            'box-shadow:0 0 0 6px ' + THEME.primaryOrange + ',0 0 0 10px rgba(212,69,26,0.2),0 8px 32px rgba(0,0,0,0.15);' +
+            '" onclick="SpinWheel.spin()"></canvas>' +
+            '</div>' +
+            // Spin button below wheel
+            '<button id="btn-spin" onclick="SpinWheel.spin()" style="' +
+            'margin-top:20px;padding:14px 48px;border:none;border-radius:12px;' +
+            'background:linear-gradient(135deg,' + THEME.primaryOrange + ',' + THEME.darkOrange + ');' +
+            'color:#fff;font-size:16px;font-weight:700;cursor:pointer;' +
+            'box-shadow:0 4px 14px rgba(212,69,26,0.3);' +
+            'letter-spacing:0.3px;' +
+            '">🎰 SPIN NOW</button>' +
+            '</div>';
+    }
+
+    // --- STEP 4: Result ---
+    function buildResultStep() {
+        return '<div id="step-result" style="display:none;text-align:center;">' +
+            '<div style="' +
+            'background:#fff;border-radius:16px;padding:32px 20px;' +
+            'box-shadow:0 2px 12px ' + THEME.softShadow + ';' +
+            'border:1px solid rgba(212,69,26,0.08);' +
+            '">' +
+            '<div style="font-size:48px;margin-bottom:8px;">🎉</div>' +
+            '<h2 style="margin:0 0 4px;color:' + THEME.pickleGreen + ';font-size:22px;font-weight:800;">Congratulations!</h2>' +
+            '<p style="margin:0 0 16px;color:#9a6e4a;font-size:13px;">You\'ve won wallet credits</p>' +
+            '<div id="prize-display" style="' +
+            'font-size:42px;font-weight:900;color:' + THEME.primaryOrange + ';' +
+            'padding:16px;border-radius:12px;' +
+            'background:' + THEME.backgroundCream + ';' +
+            'border:2px dashed ' + THEME.lightOrange + ';' +
+            'margin-bottom:16px;' +
+            'text-shadow:0 2px 4px rgba(212,69,26,0.15);' +
+            '">₹0</div>' +
+            '<p style="margin:0 0 20px;color:#9a6e4a;font-size:12px;">Credits expire in 48 hours. Use them at checkout!</p>' +
+            '<button onclick="SpinWheel.goToShop()" style="' +
+            'width:100%;padding:14px;border:none;border-radius:12px;' +
+            'background:linear-gradient(135deg,' + THEME.pickleGreen + ',' + THEME.lightGreen + ');' +
+            'color:#fff;font-size:15px;font-weight:700;cursor:pointer;' +
+            'box-shadow:0 4px 14px rgba(22,101,52,0.3);' +
+            'letter-spacing:0.3px;' +
+            '">🛒 Start Shopping</button>' +
+            '</div></div>';
+    }
+
+    // ==================== CANVAS DRAWING ====================
+    function initCanvas() {
+        var canvas = document.getElementById('spin-canvas');
         if (!canvas) return;
-        
-        const ctx = canvas.getContext('2d');
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const radius = Math.min(centerX, centerY) - 4;
-        const segmentAngle = (2 * Math.PI) / PRIZES.length;
+        var ctx = canvas.getContext('2d');
+        drawWheel(ctx, canvas, 0);
+    }
+
+    function drawWheel(ctx, canvas, rotation) {
+        var cx = canvas.width / 2;
+        var cy = canvas.height / 2;
+        var radius = Math.min(cx, cy) - 4;
+        var numSegments = PRIZES.length;
+        var arc = (2 * Math.PI) / numSegments;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        PRIZES.forEach((prize, i) => {
-            const startAngle = i * segmentAngle - Math.PI / 2;
-            const endAngle = startAngle + segmentAngle;
+        for (var i = 0; i < numSegments; i++) {
+            var startAngle = rotation + i * arc - Math.PI / 2;
+            var endAngle = startAngle + arc;
 
             // Draw segment
             ctx.beginPath();
-            ctx.moveTo(centerX, centerY);
-            ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+            ctx.moveTo(cx, cy);
+            ctx.arc(cx, cy, radius, startAngle, endAngle);
             ctx.closePath();
-            ctx.fillStyle = prize.color;
+            ctx.fillStyle = SEGMENT_COLORS[i].bg;
             ctx.fill();
-            
+
             // Segment border
-            ctx.strokeStyle = '#FFF7ED';
-            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+            ctx.lineWidth = 2;
             ctx.stroke();
 
-            // Draw text - positioned better
+            // Draw prize text - positioned at center of each segment
             ctx.save();
-            ctx.translate(centerX, centerY);
-            ctx.rotate(startAngle + segmentAngle / 2);
-            
-            // Text styling with shadow for visibility
+            ctx.translate(cx, cy);
+            var textAngle = startAngle + arc / 2;
+            ctx.rotate(textAngle);
+
+            // Prize label - bold, with shadow for visibility
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillStyle = '#FFFFFF';
-            ctx.font = 'bold 16px Arial, sans-serif';
-            
-            // Add shadow for better readability
+
+            // Text shadow for readability
             ctx.shadowColor = 'rgba(0,0,0,0.5)';
-            ctx.shadowBlur = 3;
+            ctx.shadowBlur = 4;
             ctx.shadowOffsetX = 1;
             ctx.shadowOffsetY = 1;
-            
-            // Position text in middle of segment
-            const textRadius = radius * 0.65;
-            ctx.fillText(prize.label, textRadius, 0);
-            
+
+            ctx.fillText(PRIZES[i].label, radius * 0.62, 0);
+
+            // Reset shadow
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+
             ctx.restore();
-        });
-
-        // Outer ring
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-        ctx.strokeStyle = '#D4451A';
-        ctx.lineWidth = 4;
-        ctx.stroke();
-        
-        // Inner decorative ring
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, radius - 8, 0, 2 * Math.PI);
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
-
-    // ══════════════════════════════════════════
-    // EVENT BINDINGS
-    // ══════════════════════════════════════════
-    function bindEvents(modal) {
-        // Close button
-        modal.querySelector('#spinwheel-close').onclick = hide;
-        
-        // Phone input - only numbers
-        const phoneInput = modal.querySelector('#phone-input');
-        phoneInput.oninput = function() {
-            this.value = this.value.replace(/\D/g, '').slice(0, 10);
-        };
-        
-        // Send OTP
-        modal.querySelector('#send-otp-btn').onclick = handleSendOTP;
-        
-        // OTP inputs
-        const otpInputs = modal.querySelectorAll('.otp-input');
-        otpInputs.forEach((input, index) => {
-            input.oninput = function() {
-                this.value = this.value.replace(/\D/g, '').slice(0, 1);
-                if (this.value && index < otpInputs.length - 1) {
-                    otpInputs[index + 1].focus();
-                }
-            };
-            input.onkeydown = function(e) {
-                if (e.key === 'Backspace' && !this.value && index > 0) {
-                    otpInputs[index - 1].focus();
-                }
-            };
-        });
-        
-        // Verify & Spin
-        modal.querySelector('#verify-spin-btn').onclick = handleVerifyAndSpin;
-        
-        // Resend OTP
-        modal.querySelector('#resend-btn').onclick = handleResendOTP;
-        
-        // Shop Now
-        modal.querySelector('#shop-now-btn').onclick = function() {
-            hide();
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        };
-    }
-
-    // ══════════════════════════════════════════
-    // HANDLERS
-    // ══════════════════════════════════════════
-    async function handleSendOTP() {
-        const phoneInput = document.getElementById('phone-input');
-        const phone = phoneInput.value.trim();
-        const errorEl = document.getElementById('phone-error');
-        const btn = document.getElementById('send-otp-btn');
-        
-        errorEl.style.display = 'none';
-        
-        if (!/^[6-9]\d{9}$/.test(phone)) {
-            errorEl.textContent = 'Please enter a valid 10-digit mobile number';
-            errorEl.style.display = 'block';
-            return;
         }
-        
-        btn.disabled = true;
-        btn.textContent = 'Sending...';
-        
-        // *** CAPTURE PHONE IMMEDIATELY ***
-        const fullPhone = '+91' + phone;
-        localStorage.setItem('seasalt_phone', fullPhone);
-        localStorage.setItem('seasalt_user_phone', fullPhone);
-        localStorage.setItem('spinwheel_phone', fullPhone);
-        
-        // Save to Supabase immediately
+
+        // Center circle
+        ctx.beginPath();
+        ctx.arc(cx, cy, 22, 0, 2 * Math.PI);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fill();
+        ctx.strokeStyle = THEME.primaryOrange;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Center dot
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6, 0, 2 * Math.PI);
+        ctx.fillStyle = THEME.primaryOrange;
+        ctx.fill();
+    }
+
+    // ==================== PHONE CAPTURE (IMMEDIATE) ====================
+    function capturePhone(phone) {
+        var formatted = '+91' + phone;
+        state.phone = formatted;
+
+        // Save to ALL localStorage keys immediately
+        localStorage.setItem('seasalt_phone', formatted);
+        localStorage.setItem('seasalt_user_phone', formatted);
+
         try {
-            await savePhoneToSupabase(fullPhone);
+            var existingUser = localStorage.getItem('seasalt_user');
+            var userData = existingUser ? JSON.parse(existingUser) : {};
+            userData.phone = formatted;
+            localStorage.setItem('seasalt_user', JSON.stringify(userData));
         } catch (e) {
-            console.log('[SpinWheel] Phone save error:', e);
+            localStorage.setItem('seasalt_user', JSON.stringify({ phone: formatted }));
         }
-        
-        // Send OTP via Firebase
-        try {
-            if (typeof firebase !== 'undefined' && firebase.auth) {
-                window.confirmationResult = await firebase.auth().signInWithPhoneNumber(
-                    fullPhone,
-                    window.recaptchaVerifier || new firebase.auth.RecaptchaVerifier('send-otp-btn', { size: 'invisible' })
-                );
-            }
-            
-            verifiedPhone = fullPhone;
-            showOTPSection(phone);
-            startResendTimer();
-            
-        } catch (error) {
-            console.log('[SpinWheel] OTP Error:', error);
-            // Still proceed for testing
-            verifiedPhone = fullPhone;
-            showOTPSection(phone);
-            startResendTimer();
-        }
-        
-        btn.disabled = false;
-        btn.textContent = 'Send OTP';
+
+        // Upsert to Supabase users table immediately
+        upsertUserToSupabase(formatted);
+
+        console.log('[SpinWheel v17] Phone captured IMMEDIATELY:', formatted);
     }
 
-    async function savePhoneToSupabase(phone) {
-        const response = await fetch(`${SUPABASE_URL}/rest/v1/users?phone=eq.${encodeURIComponent(phone)}`, {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+    function upsertUserToSupabase(phone) {
+        // Check if user exists
+        fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone) + '&select=phone', {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': 'Bearer ' + SUPABASE_KEY
+            }
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(users) {
+            if (!users || users.length === 0) {
+                // Insert new user
+                return fetch(SUPABASE_URL + '/rest/v1/users', {
+                    method: 'POST',
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': 'Bearer ' + SUPABASE_KEY,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=minimal'
+                    },
+                    body: JSON.stringify({
+                        phone: phone,
+                        wallet_balance: 0,
+                        created_at: new Date().toISOString()
+                    })
+                });
+            }
+        })
+        .catch(function(err) {
+            console.error('[SpinWheel v17] Supabase upsert error:', err);
         });
-        
-        const existing = await response.json();
-        
-        if (!existing || existing.length === 0) {
-            await fetch(`${SUPABASE_URL}/rest/v1/users`, {
-                method: 'POST',
-                headers: {
-                    'apikey': SUPABASE_KEY,
-                    'Authorization': `Bearer ${SUPABASE_KEY}`,
-                    'Content-Type': 'application/json',
-                    'Prefer': 'return=minimal'
-                },
-                body: JSON.stringify({
-                    phone: phone,
-                    created_at: new Date().toISOString(),
-                    wallet_balance: 0
-                })
-            });
-            console.log('[SpinWheel] New user saved:', phone);
-        }
     }
 
-    function showOTPSection(phone) {
-        document.getElementById('phone-section').classList.remove('active');
-        document.getElementById('otp-section').classList.add('active');
-        document.getElementById('otp-phone').textContent = '+91 ' + phone;
-        document.querySelector('.otp-input').focus();
-    }
+    // ==================== OTP FLOW (Firebase) ====================
+    function sendOTP() {
+        var phoneInput = document.getElementById('spin-phone');
+        var errorEl = document.getElementById('phone-error');
+        var phone = phoneInput ? phoneInput.value.replace(/\D/g, '') : '';
 
-    let resendInterval;
-    function startResendTimer() {
-        let seconds = 30;
-        const timerEl = document.getElementById('resend-timer');
-        const resendBtn = document.getElementById('resend-btn');
-        
-        resendBtn.disabled = true;
-        
-        clearInterval(resendInterval);
-        resendInterval = setInterval(() => {
-            seconds--;
-            timerEl.textContent = seconds;
-            
-            if (seconds <= 0) {
-                clearInterval(resendInterval);
-                resendBtn.disabled = false;
-                resendBtn.innerHTML = 'Resend OTP';
-            }
-        }, 1000);
-    }
-
-    function handleResendOTP() {
-        handleSendOTP();
-    }
-
-    async function handleVerifyAndSpin() {
-        const otpInputs = document.querySelectorAll('.otp-input');
-        const otp = Array.from(otpInputs).map(i => i.value).join('');
-        const errorEl = document.getElementById('otp-error');
-        const btn = document.getElementById('verify-spin-btn');
-        
-        errorEl.style.display = 'none';
-        
-        if (otp.length !== 6) {
-            errorEl.textContent = 'Please enter the complete 6-digit OTP';
-            errorEl.style.display = 'block';
+        if (phone.length !== 10) {
+            showError(errorEl, 'Please enter a valid 10-digit phone number');
             return;
         }
-        
-        btn.disabled = true;
-        btn.textContent = 'Verifying...';
-        
-        try {
-            // Try Firebase verification
-            if (window.confirmationResult) {
-                await window.confirmationResult.confirm(otp);
-            }
-        } catch (error) {
-            console.log('[SpinWheel] OTP verify error:', error);
-            // Continue anyway for testing
+
+        // CAPTURE PHONE IMMEDIATELY (before OTP verification)
+        capturePhone(phone);
+
+        var btn = document.getElementById('btn-send-otp');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            btn.style.opacity = '0.7';
         }
-        
-        // Save user
-        localStorage.setItem('seasalt_user', JSON.stringify({ phone: verifiedPhone }));
-        
-        // Start spinning
-        btn.textContent = 'Spinning...';
-        spinWheel();
+
+        hideError(errorEl);
+
+        // Firebase OTP
+        if (window.firebase && firebase.auth) {
+            var appVerifier = window.recaptchaVerifier;
+            if (!appVerifier) {
+                try {
+                    window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('btn-send-otp', {
+                        size: 'invisible'
+                    });
+                    appVerifier = window.recaptchaVerifier;
+                } catch (e) {
+                    console.error('[SpinWheel v17] reCAPTCHA error:', e);
+                    // Fallback: skip OTP, go to wheel
+                    skipOTPAndSpin();
+                    return;
+                }
+            }
+
+            firebase.auth().signInWithPhoneNumber('+91' + phone, appVerifier)
+                .then(function(confirmationResult) {
+                    window.confirmationResult = confirmationResult;
+                    state.otpSent = true;
+                    showStep('step-otp');
+                    var subtitle = document.getElementById('otp-subtitle');
+                    if (subtitle) subtitle.textContent = 'Code sent to +91' + phone;
+                })
+                .catch(function(err) {
+                    console.error('[SpinWheel v17] OTP error:', err);
+                    showError(errorEl, 'Failed to send OTP. Try again.');
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = 'Send OTP';
+                        btn.style.opacity = '1';
+                    }
+                });
+        } else {
+            // No Firebase - skip OTP for testing
+            console.warn('[SpinWheel v17] Firebase not loaded, skipping OTP');
+            skipOTPAndSpin();
+        }
     }
 
-    // ══════════════════════════════════════════
-    // SPIN ANIMATION
-    // ══════════════════════════════════════════
-    function spinWheel() {
-        if (isSpinning) return;
-        isSpinning = true;
-        
-        const prize = calculatePrize();
-        const canvas = document.getElementById('spin-wheel');
-        
-        const segmentAngle = 360 / PRIZES.length;
-        const targetAngle = 360 - (prize.segmentIndex * segmentAngle + segmentAngle / 2);
-        const totalRotation = 360 * 5 + targetAngle; // 5 full rotations + target
-        
-        canvas.style.transition = 'transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
-        canvas.style.transform = `rotate(${totalRotation}deg)`;
-        
-        setTimeout(() => {
-            isSpinning = false;
-            hasSpun = true;
-            localStorage.setItem('seasalt_spin_completed', 'true');
-            
-            showResult(prize.value);
-            saveWallet(prize.value);
-            launchConfetti();
-        }, 4000);
+    function skipOTPAndSpin() {
+        state.otpVerified = true;
+        showStep('step-wheel');
     }
 
-    function showResult(amount) {
-        document.getElementById('otp-section').classList.remove('active');
-        document.getElementById('result-section').classList.add('active');
-        document.getElementById('result-amount').textContent = '₹' + amount;
+    function verifyOTP() {
+        var otpInput = document.getElementById('spin-otp');
+        var errorEl = document.getElementById('otp-error');
+        var otp = otpInput ? otpInput.value.trim() : '';
+
+        if (otp.length !== 6) {
+            showError(errorEl, 'Please enter the 6-digit OTP');
+            return;
+        }
+
+        var btn = document.getElementById('btn-verify-otp');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Verifying...';
+            btn.style.opacity = '0.7';
+        }
+
+        if (window.confirmationResult) {
+            window.confirmationResult.confirm(otp)
+                .then(function() {
+                    state.otpVerified = true;
+                    showStep('step-wheel');
+                })
+                .catch(function(err) {
+                    console.error('[SpinWheel v17] OTP verify error:', err);
+                    showError(errorEl, 'Invalid OTP. Please try again.');
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.textContent = 'Verify & Spin';
+                        btn.style.opacity = '1';
+                    }
+                });
+        } else {
+            // Fallback
+            state.otpVerified = true;
+            showStep('step-wheel');
+        }
     }
 
-    async function saveWallet(amount) {
-        const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
-        
-        // Save to localStorage
-        const walletData = {
-            amount: amount,
+    // ==================== SPIN LOGIC ====================
+    function spin() {
+        if (state.spinning || state.hasSpun) return;
+        state.spinning = true;
+
+        var canvas = document.getElementById('spin-canvas');
+        var btn = document.getElementById('btn-spin');
+        if (!canvas) return;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = 'Spinning...';
+            btn.style.opacity = '0.7';
+        }
+
+        var ctx = canvas.getContext('2d');
+        var prize = calculatePrize();
+        var numSegments = PRIZES.length;
+        var arc = (2 * Math.PI) / numSegments;
+
+        // Calculate target angle: align winning segment to top (pointer position)
+        // Pointer is at top (12 o'clock = -π/2)
+        // We need the center of the winning segment to land under the pointer
+        var targetSegmentCenter = prize.segmentIndex * arc + arc / 2;
+        // Total rotation: multiple full spins + offset to land on winning segment
+        var fullSpins = 5 + Math.floor(Math.random() * 3); // 5-7 full spins
+        var targetAngle = (fullSpins * 2 * Math.PI) + (2 * Math.PI - targetSegmentCenter);
+
+        var startTime = null;
+        var duration = 4000 + Math.random() * 1000; // 4-5 seconds
+        var startAngle = state.currentAngle;
+
+        function animate(timestamp) {
+            if (!startTime) startTime = timestamp;
+            var elapsed = timestamp - startTime;
+            var progress = Math.min(elapsed / duration, 1);
+
+            // Easing: cubic ease-out for natural deceleration
+            var eased = 1 - Math.pow(1 - progress, 3);
+            var currentRotation = startAngle + targetAngle * eased;
+
+            drawWheel(ctx, canvas, currentRotation);
+
+            if (progress < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                // Spin complete
+                state.currentAngle = currentRotation % (2 * Math.PI);
+                state.spinning = false;
+                state.hasSpun = true;
+                onSpinComplete(prize);
+            }
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    function onSpinComplete(prize) {
+        console.log('[SpinWheel v17] Won:', prize.value);
+
+        // Save wallet to localStorage
+        var expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + WALLET_EXPIRY_HOURS);
+
+        var walletData = {
+            amount: prize.value,
             expiresAt: expiresAt.toISOString(),
-            phone: verifiedPhone
+            phone: state.phone,
+            wonAt: new Date().toISOString()
         };
         localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify(walletData));
-        
+
+        // Mark as spun
+        localStorage.setItem('seasalt_has_spun', 'true');
+        localStorage.setItem('seasalt_spin_phone', state.phone);
+
         // Save to Supabase
-        try {
-            await fetch(`${SUPABASE_URL}/rest/v1/users?phone=eq.${encodeURIComponent(verifiedPhone)}`, {
+        saveWalletToSupabase(prize.value, expiresAt.toISOString());
+
+        // Show result after short delay
+        setTimeout(function() {
+            var prizeDisplay = document.getElementById('prize-display');
+            if (prizeDisplay) prizeDisplay.textContent = '₹' + prize.value;
+            showStep('step-result');
+        }, 600);
+    }
+
+    // ==================== SUPABASE WALLET SYNC ====================
+    function saveWalletToSupabase(amount, expiresAt) {
+        var phone = state.phone;
+        if (!phone) {
+            phone = localStorage.getItem('seasalt_phone') || '';
+        }
+        if (!phone) {
+            console.error('[SpinWheel v17] No phone to save wallet');
+            return;
+        }
+
+        // First try to get existing balance (admin may have sent credits)
+        fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone) + '&select=wallet_balance', {
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': 'Bearer ' + SUPABASE_KEY
+            }
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(users) {
+            var existingBalance = 0;
+            if (users && users[0] && users[0].wallet_balance) {
+                existingBalance = users[0].wallet_balance;
+            }
+            var newBalance = existingBalance + amount;
+
+            // Update with combined balance
+            return fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone), {
                 method: 'PATCH',
                 headers: {
                     'apikey': SUPABASE_KEY,
-                    'Authorization': `Bearer ${SUPABASE_KEY}`,
+                    'Authorization': 'Bearer ' + SUPABASE_KEY,
                     'Content-Type': 'application/json',
                     'Prefer': 'return=minimal'
                 },
                 body: JSON.stringify({
-                    wallet_balance: amount,
-                    wallet_expires_at: expiresAt.toISOString()
+                    wallet_balance: newBalance,
+                    wallet_expires_at: expiresAt
                 })
             });
-            console.log('[SpinWheel] Wallet saved to Supabase:', amount);
-        } catch (e) {
-            console.log('[SpinWheel] Wallet save error:', e);
-        }
-        
-        // Update UI
-        if (typeof UI !== 'undefined' && UI.updateCartUI) {
-            UI.updateCartUI();
+        })
+        .then(function() {
+            console.log('[SpinWheel v17] Wallet saved to Supabase');
+        })
+        .catch(function(err) {
+            console.error('[SpinWheel v17] Supabase save error:', err);
+        });
+
+        // Also log to spin_results if table exists
+        fetch(SUPABASE_URL + '/rest/v1/spin_results', {
+            method: 'POST',
+            headers: {
+                'apikey': SUPABASE_KEY,
+                'Authorization': 'Bearer ' + SUPABASE_KEY,
+                'Content-Type': 'application/json',
+                'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({
+                phone: phone,
+                prize_amount: amount,
+                spun_at: new Date().toISOString()
+            })
+        }).catch(function() {
+            // spin_results table may not exist - that's okay
+        });
+    }
+
+    // ==================== HELPERS ====================
+    function showStep(stepId) {
+        ['step-phone', 'step-otp', 'step-wheel', 'step-result'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.style.display = id === stepId ? 'block' : 'none';
+        });
+    }
+
+    function showError(el, msg) {
+        if (el) {
+            el.textContent = msg;
+            el.style.display = 'block';
         }
     }
 
-    // ══════════════════════════════════════════
-    // CONFETTI
-    // ══════════════════════════════════════════
-    function launchConfetti() {
-        const colors = ['#D4451A', '#166534', '#F59E0B', '#DC2626', '#16A34A'];
-        
-        for (let i = 0; i < 50; i++) {
-            setTimeout(() => {
-                const confetti = document.createElement('div');
-                confetti.className = 'confetti';
-                confetti.style.left = Math.random() * 100 + 'vw';
-                confetti.style.top = '-10px';
-                confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
-                confetti.style.borderRadius = Math.random() > 0.5 ? '50%' : '0';
-                document.body.appendChild(confetti);
-                
-                setTimeout(() => confetti.remove(), 3000);
-            }, i * 30);
+    function hideError(el) {
+        if (el) el.style.display = 'none';
+    }
+
+    function checkExistingSpin() {
+        var hasSpun = localStorage.getItem('seasalt_has_spun');
+        var walletData = localStorage.getItem(SPIN_WALLET_KEY);
+
+        if (hasSpun === 'true' && walletData) {
+            try {
+                var data = JSON.parse(walletData);
+                var expiry = new Date(data.expiresAt);
+                if (new Date() < expiry) {
+                    // Already spun and wallet still valid
+                    state.hasSpun = true;
+                    var prizeDisplay = document.getElementById('prize-display');
+                    if (prizeDisplay) prizeDisplay.textContent = '₹' + data.amount;
+                    showStep('step-result');
+                    return;
+                } else {
+                    // Wallet expired, allow re-spin
+                    localStorage.removeItem('seasalt_has_spun');
+                    localStorage.removeItem(SPIN_WALLET_KEY);
+                }
+            } catch (e) {}
         }
     }
 
-    // ══════════════════════════════════════════
-    // PUBLIC API
-    // ══════════════════════════════════════════
-    return {
-        init: init,
-        show: show,
-        hide: hide
+    function bindEvents() {
+        var phoneInput = document.getElementById('spin-phone');
+        if (phoneInput) {
+            phoneInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') sendOTP();
+            });
+        }
+        var otpInput = document.getElementById('spin-otp');
+        if (otpInput) {
+            otpInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') verifyOTP();
+            });
+        }
+    }
+
+    function goToShop() {
+        window.location.href = '/';
+    }
+
+    // ==================== PUBLIC API ====================
+    window.SpinWheel = {
+        init: renderSpinWheelPage,
+        sendOTP: sendOTP,
+        verifyOTP: verifyOTP,
+        spin: spin,
+        goToShop: goToShop
     };
-})();
 
-window.SpinWheel = SpinWheel;
+    // Auto-init if spin wheel page
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.location.pathname.includes('spin') ||
+                document.getElementById('spin-wheel-page')) {
+                renderSpinWheelPage();
+            }
+        });
+    } else {
+        if (window.location.pathname.includes('spin') ||
+            document.getElementById('spin-wheel-page')) {
+            renderSpinWheelPage();
+        }
+    }
+
+})();
