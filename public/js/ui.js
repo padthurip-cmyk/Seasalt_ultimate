@@ -39,6 +39,12 @@ const UI = (function() {
     }
 
     function syncWalletFromSupabase() {
+        // CRITICAL: Don't sync if cart.js just deducted wallet (prevents overwrite)
+        if (window._walletSyncPaused) {
+            console.log('[UI v10] Wallet sync paused (order in progress)');
+            return Promise.resolve(null);
+        }
+        
         var phone = getUserPhone();
         if (!phone) {
             console.log('[UI v10] No phone found for wallet sync');
