@@ -1,20 +1,18 @@
 /**
- * SeaSalt Pickles - Spin Wheel v15
+ * SeaSalt Pickles - Spin Wheel v16
  * =================================
- * Based on v14 (working) - ONLY changes:
- *   1. Pickle theme colors on wheel segments
- *   2. Updated prize odds (₹99 ~91%, ₹199 5%, ₹299 2%, ₹399 1%, ₹499 0.67%, ₹599 0.5%)
- *   3. Phone captured IMMEDIATELY on Send OTP click
- *   4. Supabase wallet sync for admin credits
- *   5. 48-hour wallet expiry (unchanged)
- * 
+ * 8-segment wheel: ⌚ Watch, ₹99, 6x Try Again
+ * Odds: Watch 1/20 (5%), ₹99 Wallet 1/20 (5%), Try Again 90%
+ * Watch winners get ₹300 prize claim + NO wallet (claimed via admin)
+ * ₹99 winners get wallet credit with 48hr timer
+ * Try Again: no prize, marked as done
  * TEST OTP: 123456
  */
 
 (function() {
     'use strict';
     
-    console.log('[SpinWheel] v15 loaded');
+    console.log('[SpinWheel] v16 loaded - Watch + ₹99 Wallet');
     
     var SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
     var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
@@ -34,23 +32,24 @@
     var auth = null;
     var recaptchaVerifier = null;
     var wonAmount = 0;
+    var wonType = 'lose'; // 'wallet', 'watch', or 'lose'
     
     var SEGMENTS = [
-        { label: '₹99', value: 99, color: '#D4451A' },
-        { label: '₹199', value: 199, color: '#166534' },
-        { label: '₹299', value: 299, color: '#DC2626' },
-        { label: '₹399', value: 399, color: '#16A34A' },
-        { label: '₹499', value: 499, color: '#EA580C' },
-        { label: '₹599', value: 599, color: '#F59E0B' }
+        { label: '⌚ Watch', value: 300, color: '#D4451A', type: 'watch' },
+        { label: 'Try Again', value: 0, color: '#166534', type: 'lose' },
+        { label: '₹99', value: 99, color: '#DC2626', type: 'wallet' },
+        { label: 'Try Again', value: 0, color: '#16A34A', type: 'lose' },
+        { label: 'Try Again', value: 0, color: '#EA580C', type: 'lose' },
+        { label: 'Try Again', value: 0, color: '#166534', type: 'lose' },
+        { label: 'Try Again', value: 0, color: '#F59E0B', type: 'lose' },
+        { label: 'Try Again', value: 0, color: '#16A34A', type: 'lose' }
     ];
     
+    // Odds: Watch 1 in 20 (5%), ₹99 Wallet 1 in 20 (5%), Try Again 90%
     var PRIZES = [
-        { value: 99, weight: 9083, segments: [0] },
-        { value: 199, weight: 500, segments: [1] },
-        { value: 299, weight: 200, segments: [2] },
-        { value: 399, weight: 100, segments: [3] },
-        { value: 499, weight: 67, segments: [4] },
-        { value: 599, weight: 50, segments: [5] }
+        { value: 300, weight: 500, segments: [0], type: 'watch' },
+        { value: 99, weight: 500, segments: [2], type: 'wallet' },
+        { value: 0, weight: 9000, segments: [1, 3, 4, 5, 6, 7], type: 'lose' }
     ];
     
     var STYLES = '.sw-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;visibility:hidden;transition:all 0.3s ease}.sw-overlay.active{opacity:1;visibility:visible}.sw-modal{background:linear-gradient(145deg,#EA580C 0%,#DC2626 100%);border-radius:24px;width:100%;max-width:360px;max-height:90vh;overflow-y:auto;position:relative;transform:scale(0.9);transition:transform 0.3s ease;box-shadow:0 20px 60px rgba(0,0,0,0.4)}.sw-overlay.active .sw-modal{transform:scale(1)}.sw-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.2);border:none;color:white;font-size:18px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center}.sw-header{text-align:center;padding:28px 20px 16px}.sw-badge{display:inline-block;background:#F59E0B;color:white;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:700;margin-bottom:10px;text-transform:uppercase}.sw-title{font-size:26px;font-weight:800;color:white;margin:0 0 6px 0}.sw-subtitle{font-size:14px;color:rgba(255,255,255,0.9);margin:0}.sw-content{padding:0 24px 28px}.sw-hidden{display:none!important}.sw-wheel-section{display:flex;flex-direction:column;align-items:center;gap:20px}.sw-wheel-wrap{position:relative;width:280px;height:280px}.sw-wheel-img{width:100%;height:100%;transition:transform 4s cubic-bezier(0.17,0.67,0.12,0.99)}.sw-pointer{position:absolute;top:-5px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:18px solid transparent;border-right:18px solid transparent;border-top:30px solid white;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.3));z-index:10}.sw-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;background:linear-gradient(180deg,#fff,#f0f0f0);border-radius:50%;border:4px solid #e5e7eb;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 15px rgba(0,0,0,0.2);z-index:5}.sw-btn-spin{padding:16px 40px;background:linear-gradient(135deg,#F97316,#EA580C);color:white;border:none;border-radius:14px;font-size:18px;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(249,115,22,0.5);text-transform:uppercase;transition:transform 0.2s}.sw-btn-spin:disabled{opacity:0.7;cursor:not-allowed}.sw-claim{display:flex;flex-direction:column;gap:12px}.sw-won-box{background:linear-gradient(135deg,#10B981,#059669);border-radius:16px;padding:20px;text-align:center;margin-bottom:8px}.sw-won-label{font-size:14px;color:rgba(255,255,255,0.9)}.sw-won-amount{font-size:48px;font-weight:900;color:white}.sw-won-note{font-size:12px;color:rgba(255,255,255,0.8);margin-top:4px}.sw-input-group{display:flex;flex-direction:column;gap:4px}.sw-label{font-size:13px;font-weight:600;color:rgba(255,255,255,0.9)}.sw-select,.sw-input{width:100%;padding:14px 16px;border:none;border-radius:12px;background:white;font-size:16px;font-weight:500;color:#333;outline:none;box-sizing:border-box}.sw-phone-row{display:flex;gap:8px}.sw-phone-code{width:85px;flex-shrink:0;text-align:center;font-weight:700;background:#f3f4f6}.sw-btn{width:100%;padding:16px;border:none;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;transition:transform 0.2s,opacity 0.2s}.sw-btn:disabled{opacity:0.6;cursor:not-allowed}.sw-btn-orange{background:linear-gradient(135deg,#F59E0B,#D97706);color:white;box-shadow:0 4px 15px rgba(245,158,11,0.4)}.sw-btn-green{background:linear-gradient(135deg,#10B981,#059669);color:white;box-shadow:0 4px 15px rgba(16,185,129,0.4)}.sw-helper{text-align:center;color:rgba(255,255,255,0.8);font-size:13px;margin-top:4px}.sw-demo-note{background:rgba(251,191,36,0.2);border:1px solid rgba(251,191,36,0.5);border-radius:8px;padding:10px;text-align:center;color:#FCD34D;font-size:13px;font-weight:600}.sw-error{background:#FEE2E2;color:#DC2626;padding:10px;border-radius:8px;font-size:13px;text-align:center}.sw-otp{display:flex;flex-direction:column;align-items:center;gap:16px}.sw-otp-label{color:white;font-size:14px;text-align:center}.sw-otp-phone{color:#FCD34D;font-weight:700}.sw-otp-boxes{display:flex;gap:8px;justify-content:center}.sw-otp-input{width:46px;height:56px;border:none;border-radius:10px;background:white;font-size:24px;font-weight:700;text-align:center;color:#333;outline:none}.sw-resend{color:rgba(255,255,255,0.8);font-size:13px;text-align:center}.sw-resend-link{color:#FCD34D;cursor:pointer;font-weight:600;background:none;border:none}.sw-resend-link:disabled{color:rgba(255,255,255,0.5);cursor:not-allowed}.sw-change-link{color:rgba(255,255,255,0.7);font-size:13px;cursor:pointer;background:none;border:none;text-decoration:underline;margin-top:8px}.sw-result{text-align:center;padding:20px 0}.sw-result-icon{font-size:70px;margin-bottom:16px}.sw-result-title{font-size:24px;font-weight:800;color:white;margin:0 0 8px 0}.sw-result-text{font-size:15px;color:rgba(255,255,255,0.9);margin-bottom:16px}.sw-timer-box{background:rgba(0,0,0,0.25);border-radius:12px;padding:14px;margin:16px 0}.sw-timer-label{font-size:12px;color:rgba(255,255,255,0.8);margin-bottom:4px}.sw-timer-value{font-size:28px;font-weight:800;color:#FCD34D;font-family:monospace}.sw-btn-continue{padding:14px 36px;background:white;color:#EA580C;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;width:100%}@media(max-width:380px){.sw-modal{max-width:340px}.sw-wheel-wrap{width:250px;height:250px}.sw-otp-input{width:40px;height:50px;font-size:20px}}';
@@ -81,7 +80,7 @@
             document.head.appendChild(style);
         }
         
-        var html = '<div class="sw-overlay" id="sw-overlay"><div class="sw-modal"><button class="sw-close" id="sw-close">✕</button><div id="sw-step-wheel"><div class="sw-header"><div class="sw-badge">🎁 Limited Time Offer</div><h2 class="sw-title">🎉 Welcome Gift!</h2><p class="sw-subtitle">Spin to win wallet cashback up to ₹599</p></div><div class="sw-content"><div class="sw-wheel-section"><div class="sw-wheel-wrap"><div class="sw-pointer"></div>'+createWheelSVG()+'<div class="sw-center">🎰</div></div><button class="sw-btn-spin" id="sw-spin">🎲 SPIN NOW! 🎲</button></div></div></div><div id="sw-step-claim" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">🎉 You Won!</h2></div><div class="sw-content"><div class="sw-claim"><div class="sw-won-box"><div class="sw-won-label">Your Prize</div><div class="sw-won-amount" id="sw-claim-amount">₹199</div><div class="sw-won-note">Verify phone to claim your reward</div></div><div id="sw-claim-error" class="sw-error sw-hidden"></div><div class="sw-input-group"><div class="sw-label">Your Name</div><input type="text" class="sw-input" id="sw-name" placeholder="Enter your name"></div><div class="sw-input-group"><div class="sw-label">Country</div><select class="sw-select" id="sw-country"><option value="+91" data-country="India">🇮🇳 India (+91)</option><option value="+1" data-country="USA">🇺🇸 USA (+1)</option><option value="+44" data-country="UK">🇬🇧 UK (+44)</option><option value="+971" data-country="UAE">🇦🇪 UAE (+971)</option><option value="+65" data-country="Singapore">🇸🇬 Singapore (+65)</option><option value="+61" data-country="Australia">🇦🇺 Australia (+61)</option></select></div><div class="sw-input-group"><div class="sw-label">Phone Number</div><div class="sw-phone-row"><input type="text" class="sw-input sw-phone-code" id="sw-phone-code" value="+91" readonly><input type="tel" class="sw-input" id="sw-phone" placeholder="9876543210" maxlength="10"></div></div><button class="sw-btn sw-btn-orange" id="sw-send-otp" disabled>Send OTP to Claim ✨</button><p class="sw-helper">We\'ll send a verification code</p><div id="sw-recaptcha"></div></div></div></div><div id="sw-step-otp" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">Verify OTP</h2></div><div class="sw-content"><div class="sw-won-box" style="padding:14px;margin-bottom:16px;"><div class="sw-won-label">Claiming</div><div class="sw-won-amount" id="sw-otp-amount" style="font-size:36px;">₹199</div></div><div class="sw-otp"><p class="sw-otp-label">Enter 6-digit code sent to <span class="sw-otp-phone" id="sw-otp-phone"></span></p><div id="sw-demo-hint" class="sw-demo-note">🔑 Test OTP: <strong>123456</strong></div><div class="sw-otp-boxes"><input type="tel" class="sw-otp-input" maxlength="1" data-i="0"><input type="tel" class="sw-otp-input" maxlength="1" data-i="1"><input type="tel" class="sw-otp-input" maxlength="1" data-i="2"><input type="tel" class="sw-otp-input" maxlength="1" data-i="3"><input type="tel" class="sw-otp-input" maxlength="1" data-i="4"><input type="tel" class="sw-otp-input" maxlength="1" data-i="5"></div><button class="sw-btn sw-btn-green" id="sw-verify" disabled>Verify & Claim 🎉</button><p class="sw-resend">Didn\'t receive? <button class="sw-resend-link" id="sw-resend" disabled>Resend (<span id="sw-resend-timer">30</span>s)</button></p><button class="sw-change-link" id="sw-change-num">← Change number</button></div></div></div><div id="sw-step-already" class="sw-hidden"><div class="sw-content" style="padding-top:40px;"><div class="sw-result"><div class="sw-result-icon">⏳</div><h3 class="sw-result-title">Already Claimed!</h3><p class="sw-result-text">This number has already spun the wheel this month.</p><div class="sw-timer-box"><div class="sw-timer-label">Next spin available in</div><div class="sw-timer-value" id="sw-next-spin">-- days</div></div><button class="sw-btn-continue" id="sw-close-already">Continue Shopping →</button></div></div></div></div></div>';
+        var html = '<div class="sw-overlay" id="sw-overlay"><div class="sw-modal"><button class="sw-close" id="sw-close">✕</button><div id="sw-step-wheel"><div class="sw-header"><div class="sw-badge">🎁 Limited Time Offer</div><h2 class="sw-title">🎉 Welcome Gift!</h2><p class="sw-subtitle">Spin to win a Free Watch or ₹99 wallet cash!</p></div><div class="sw-content"><div class="sw-wheel-section"><div class="sw-wheel-wrap"><div class="sw-pointer"></div>'+createWheelSVG()+'<div class="sw-center">🎰</div></div><button class="sw-btn-spin" id="sw-spin">🎲 SPIN NOW! 🎲</button></div></div></div><div id="sw-step-claim" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">🎉 You Won!</h2></div><div class="sw-content"><div class="sw-claim"><div class="sw-won-box"><div class="sw-won-label">Your Prize</div><div class="sw-won-amount" id="sw-claim-amount">₹199</div><div class="sw-won-note">Verify phone to claim your reward</div></div><div id="sw-claim-error" class="sw-error sw-hidden"></div><div class="sw-input-group"><div class="sw-label">Your Name</div><input type="text" class="sw-input" id="sw-name" placeholder="Enter your name"></div><div class="sw-input-group"><div class="sw-label">Country</div><select class="sw-select" id="sw-country"><option value="+91" data-country="India">🇮🇳 India (+91)</option><option value="+1" data-country="USA">🇺🇸 USA (+1)</option><option value="+44" data-country="UK">🇬🇧 UK (+44)</option><option value="+971" data-country="UAE">🇦🇪 UAE (+971)</option><option value="+65" data-country="Singapore">🇸🇬 Singapore (+65)</option><option value="+61" data-country="Australia">🇦🇺 Australia (+61)</option></select></div><div class="sw-input-group"><div class="sw-label">Phone Number</div><div class="sw-phone-row"><input type="text" class="sw-input sw-phone-code" id="sw-phone-code" value="+91" readonly><input type="tel" class="sw-input" id="sw-phone" placeholder="9876543210" maxlength="10"></div></div><button class="sw-btn sw-btn-orange" id="sw-send-otp" disabled>Send OTP to Claim ✨</button><p class="sw-helper">We\'ll send a verification code</p><div id="sw-recaptcha"></div></div></div></div><div id="sw-step-otp" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">Verify OTP</h2></div><div class="sw-content"><div class="sw-won-box" style="padding:14px;margin-bottom:16px;"><div class="sw-won-label">Claiming</div><div class="sw-won-amount" id="sw-otp-amount" style="font-size:36px;">₹199</div></div><div class="sw-otp"><p class="sw-otp-label">Enter 6-digit code sent to <span class="sw-otp-phone" id="sw-otp-phone"></span></p><div id="sw-demo-hint" class="sw-demo-note">🔑 Test OTP: <strong>123456</strong></div><div class="sw-otp-boxes"><input type="tel" class="sw-otp-input" maxlength="1" data-i="0"><input type="tel" class="sw-otp-input" maxlength="1" data-i="1"><input type="tel" class="sw-otp-input" maxlength="1" data-i="2"><input type="tel" class="sw-otp-input" maxlength="1" data-i="3"><input type="tel" class="sw-otp-input" maxlength="1" data-i="4"><input type="tel" class="sw-otp-input" maxlength="1" data-i="5"></div><button class="sw-btn sw-btn-green" id="sw-verify" disabled>Verify & Claim 🎉</button><p class="sw-resend">Didn\'t receive? <button class="sw-resend-link" id="sw-resend" disabled>Resend (<span id="sw-resend-timer">30</span>s)</button></p><button class="sw-change-link" id="sw-change-num">← Change number</button></div></div></div><div id="sw-step-already" class="sw-hidden"><div class="sw-content" style="padding-top:40px;"><div class="sw-result"><div class="sw-result-icon">⏳</div><h3 class="sw-result-title">Already Claimed!</h3><p class="sw-result-text">This number has already spun the wheel this month.</p><div class="sw-timer-box"><div class="sw-timer-label">Next spin available in</div><div class="sw-timer-value" id="sw-next-spin">-- days</div></div><button class="sw-btn-continue" id="sw-close-already">Continue Shopping →</button></div></div></div></div></div>';
         
         document.body.insertAdjacentHTML('beforeend', html);
         modal = document.getElementById('sw-overlay');
@@ -187,7 +186,7 @@
         var totalWeight = 0;
         for (var i = 0; i < PRIZES.length; i++) totalWeight += PRIZES[i].weight;
         var random = Math.random() * totalWeight;
-        var selectedPrize = PRIZES[0];
+        var selectedPrize = PRIZES[PRIZES.length - 1]; // default lose
         
         for (var i = 0; i < PRIZES.length; i++) {
             random -= PRIZES[i].weight;
@@ -196,6 +195,7 @@
         
         var segmentIndex = selectedPrize.segments[Math.floor(Math.random() * selectedPrize.segments.length)];
         wonAmount = selectedPrize.value;
+        wonType = selectedPrize.type || 'lose';
         
         var segAngle = 360 / SEGMENTS.length;
         var targetAngle = 360 - (segmentIndex * segAngle + segAngle / 2);
@@ -206,11 +206,72 @@
         
         setTimeout(function() {
             isSpinning = false;
-            document.getElementById('sw-claim-amount').textContent = '₹' + wonAmount;
-            document.getElementById('sw-otp-amount').textContent = '₹' + wonAmount;
-            goToStep('claim');
-            document.getElementById('sw-name').focus();
-            toast('🎉 You won ₹' + wonAmount + '!', 'success');
+            
+            if (wonType === 'lose') {
+                // Better luck - mark as done, show message, allow close
+                localStorage.setItem('seasalt_spin_done', 'true');
+                var claimAmt = document.getElementById('sw-claim-amount');
+                var otpAmt = document.getElementById('sw-otp-amount');
+                var wonBox = claimAmt ? claimAmt.closest('.sw-won-box') : null;
+                if (wonBox) {
+                    wonBox.style.background = 'linear-gradient(135deg, #6B7280, #4B5563)';
+                    if (wonBox.querySelector('.sw-won-label')) wonBox.querySelector('.sw-won-label').textContent = '😔 Better Luck Next Time!';
+                    if (claimAmt) { claimAmt.textContent = 'No Prize'; claimAmt.style.fontSize = '28px'; }
+                    if (wonBox.querySelector('.sw-won-note')) wonBox.querySelector('.sw-won-note').textContent = 'Check out our amazing products!';
+                }
+                goToStep('claim');
+                // Hide claim form inputs, show continue button
+                var claimForm = document.querySelector('#sw-step-claim .sw-claim');
+                if (claimForm) {
+                    var hideEls = claimForm.querySelectorAll('.sw-input-group, .sw-btn-orange, .sw-helper, #sw-recaptcha, #sw-claim-error');
+                    hideEls.forEach(function(el) { el.style.display = 'none'; });
+                    if (!claimForm.querySelector('.sw-btn-lose')) {
+                        var shopBtn = document.createElement('button');
+                        shopBtn.className = 'sw-btn-continue sw-btn-lose';
+                        shopBtn.textContent = 'Continue Shopping 🛒';
+                        shopBtn.style.marginTop = '16px';
+                        shopBtn.onclick = function() { hide(); };
+                        claimForm.appendChild(shopBtn);
+                    } else {
+                        claimForm.querySelector('.sw-btn-lose').style.display = '';
+                    }
+                }
+                toast('Better luck next time! 🛒', 'info');
+            } else {
+                // Won watch or ₹99 wallet
+                var wonBox = document.getElementById('sw-claim-amount').closest('.sw-won-box');
+                if (wonType === 'watch') {
+                    document.getElementById('sw-claim-amount').textContent = '⌚ Free Watch!';
+                    document.getElementById('sw-claim-amount').style.fontSize = '30px';
+                    document.getElementById('sw-otp-amount').textContent = '⌚ Free Watch';
+                    if (wonBox) {
+                        wonBox.style.background = 'linear-gradient(135deg, #D4451A, #9A3412)';
+                        if (wonBox.querySelector('.sw-won-label')) wonBox.querySelector('.sw-won-label').textContent = '🎉 You Won a Prize!';
+                        if (wonBox.querySelector('.sw-won-note')) wonBox.querySelector('.sw-won-note').textContent = 'Free watch worth ₹300! Verify to claim.';
+                    }
+                } else {
+                    document.getElementById('sw-claim-amount').textContent = '₹' + wonAmount;
+                    document.getElementById('sw-claim-amount').style.fontSize = '48px';
+                    document.getElementById('sw-otp-amount').textContent = '₹' + wonAmount;
+                    if (wonBox) {
+                        wonBox.style.background = 'linear-gradient(135deg, #10B981, #059669)';
+                        if (wonBox.querySelector('.sw-won-label')) wonBox.querySelector('.sw-won-label').textContent = 'Your Prize';
+                        if (wonBox.querySelector('.sw-won-note')) wonBox.querySelector('.sw-won-note').textContent = 'Verify phone to claim your reward';
+                    }
+                }
+                // Show claim form inputs
+                var claimForm = document.querySelector('#sw-step-claim .sw-claim');
+                if (claimForm) {
+                    var showEls = claimForm.querySelectorAll('.sw-input-group, .sw-btn-orange, .sw-helper');
+                    showEls.forEach(function(el) { el.style.display = ''; });
+                    var loseBtn = claimForm.querySelector('.sw-btn-lose');
+                    if (loseBtn) loseBtn.style.display = 'none';
+                }
+                goToStep('claim');
+                document.getElementById('sw-name').focus();
+                var winMsg = wonType === 'watch' ? '🎉 You won a Free Watch worth ₹300!' : '🎉 You won ₹' + wonAmount + '!';
+                toast(winMsg, 'success');
+            }
         }, 4200);
     }
     
@@ -346,7 +407,7 @@
     }
     
     function saveToWallet() {
-        console.log('[SpinWheel] Saving wallet with amount:', wonAmount);
+        console.log('[SpinWheel] Saving prize:', wonType, 'amount:', wonAmount);
         
         var now = new Date();
         var expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000); // 48 hours
@@ -358,53 +419,107 @@
         localStorage.setItem('seasalt_user_phone', userPhone);
         localStorage.setItem('seasalt_spin_phone', userPhone);
         
-        // ═══════════════════════════════════════════════════════════════
-        // KEY FIX: Save to 'seasalt_spin_wallet' (NOT 'seasalt_wallet')
-        // This avoids conflict with store.js
-        // ═══════════════════════════════════════════════════════════════
-        var walletData = { 
-            amount: wonAmount, 
-            addedAt: now.toISOString(), 
-            expiresAt: expiresAt.toISOString() 
-        };
-        localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify(walletData));
+        // Mark spin as done
         localStorage.setItem('seasalt_spin_done', 'true');
         
-        console.log('[SpinWheel] Saved to localStorage key:', SPIN_WALLET_KEY);
-        console.log('[SpinWheel] Wallet data:', walletData);
-        
-        // Save to Supabase
-        fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(userPhone), {
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        }).then(function(res) { return res.json(); }).then(function(existing) {
-            var dbData = {
-                name: userName,
-                selected_country: userCountry,
-                wallet_balance: wonAmount,
-                wallet_expires_at: expiresAt.toISOString(),
-                last_seen: now.toISOString()
+        if (wonType === 'watch') {
+            // WATCH PRIZE - save ₹300 to wallet as the free watch credit
+            var walletData = { 
+                amount: 300, 
+                addedAt: now.toISOString(), 
+                expiresAt: expiresAt.toISOString() 
             };
+            localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify(walletData));
+            localStorage.setItem('seasalt_spin_prize', JSON.stringify({
+                type: 'watch',
+                value: 300,
+                label: 'Free Watch worth ₹300',
+                claimedAt: now.toISOString(),
+                phone: userPhone,
+                name: userName
+            }));
             
-            if (existing && existing.length > 0) {
-                return fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(userPhone), {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-                    body: JSON.stringify(dbData)
-                });
-            } else {
-                return fetch(SUPABASE_URL + '/rest/v1/users', {
+            console.log('[SpinWheel] Watch prize claimed - ₹300 added to wallet');
+            wonAmount = 300; // wallet shows ₹300
+            
+            // Save to Supabase
+            fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(userPhone), {
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+            }).then(function(res) { return res.json(); }).then(function(existing) {
+                var dbData = {
+                    name: userName,
+                    selected_country: userCountry,
+                    wallet_balance: 300,
+                    wallet_expires_at: expiresAt.toISOString(),
+                    last_seen: now.toISOString(),
+                    spin_prize: 'Free Watch ₹300'
+                };
+                
+                if (existing && existing.length > 0) {
+                    return fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(userPhone), {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+                        body: JSON.stringify(dbData)
+                    });
+                } else {
+                    return fetch(SUPABASE_URL + '/rest/v1/users', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+                        body: JSON.stringify({ phone: userPhone, total_visits: 1, name: userName, selected_country: userCountry, wallet_balance: 300, wallet_expires_at: expiresAt.toISOString(), last_seen: now.toISOString(), spin_prize: 'Free Watch ₹300' })
+                    });
+                }
+            }).then(function() {
+                return fetch(SUPABASE_URL + '/rest/v1/wallet_transactions', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-                    body: JSON.stringify({ phone: userPhone, total_visits: 1, name: userName, selected_country: userCountry, wallet_balance: wonAmount, wallet_expires_at: expiresAt.toISOString(), last_seen: now.toISOString() })
+                    body: JSON.stringify({ user_phone: userPhone, amount: 300, type: 'spin_reward', description: 'Spin wheel - Free Watch worth ₹300', balance_after: 300 })
                 });
-            }
-        }).then(function() {
-            return fetch(SUPABASE_URL + '/rest/v1/wallet_transactions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
-                body: JSON.stringify({ user_phone: userPhone, amount: wonAmount, type: 'spin_reward', description: 'Spin wheel reward', balance_after: wonAmount })
-            });
-        }).catch(function(e) { console.warn('Supabase error:', e); });
+            }).catch(function(e) { console.warn('Supabase error:', e); });
+            
+        } else {
+            // WALLET PRIZE - save ₹99 to wallet as before
+            var walletData = { 
+                amount: wonAmount, 
+                addedAt: now.toISOString(), 
+                expiresAt: expiresAt.toISOString() 
+            };
+            localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify(walletData));
+            
+            console.log('[SpinWheel] Saved to localStorage key:', SPIN_WALLET_KEY);
+            
+            // Save to Supabase
+            fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(userPhone), {
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+            }).then(function(res) { return res.json(); }).then(function(existing) {
+                var dbData = {
+                    name: userName,
+                    selected_country: userCountry,
+                    wallet_balance: wonAmount,
+                    wallet_expires_at: expiresAt.toISOString(),
+                    last_seen: now.toISOString()
+                };
+                
+                if (existing && existing.length > 0) {
+                    return fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(userPhone), {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+                        body: JSON.stringify(dbData)
+                    });
+                } else {
+                    return fetch(SUPABASE_URL + '/rest/v1/users', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+                        body: JSON.stringify({ phone: userPhone, total_visits: 1, name: userName, selected_country: userCountry, wallet_balance: wonAmount, wallet_expires_at: expiresAt.toISOString(), last_seen: now.toISOString() })
+                    });
+                }
+            }).then(function() {
+                return fetch(SUPABASE_URL + '/rest/v1/wallet_transactions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Prefer': 'return=minimal' },
+                    body: JSON.stringify({ user_phone: userPhone, amount: wonAmount, type: 'spin_reward', description: 'Spin wheel reward ₹' + wonAmount, balance_after: wonAmount })
+                });
+            }).catch(function(e) { console.warn('Supabase error:', e); });
+        }
         
         // Update UI
         if (typeof UI !== 'undefined') {
@@ -446,7 +561,14 @@
         
         // Close modal and show toast
         hide();
-        toast('🎊 ₹' + wonAmount + ' added to wallet! Use within 48 hours.', 'success');
+        if (wonType === 'watch') {
+            toast('🎊 You won a Free Watch! + ₹99 wallet bonus added!', 'success');
+        } else {
+            var toastMsg = wonType === 'watch' 
+                ? '🎊 Free Watch claimed! ₹300 added to wallet. Use within 48 hours.' 
+                : '🎊 ₹' + wonAmount + ' added to wallet! Use within 48 hours.';
+            toast(toastMsg, 'success');
+        }
         
         // Retry UI update after modal closes (elements may be more accessible)
         setTimeout(function() {
@@ -522,7 +644,7 @@
     }
     
     function init() {
-        console.log('[SpinWheel] v15 Initializing...');
+        console.log('[SpinWheel] v16 Initializing...');
         
         // Inject wallet timer CSS if not already present (backup for UI module)
         if (!document.getElementById('wallet-timer-css')) {
