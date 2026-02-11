@@ -279,8 +279,42 @@ const App = (function() {
     
     function setupSearch() {
         var searchInput = document.getElementById('search-input');
-        if (!searchInput) return;
+        if (!searchInput) { console.warn('[Search] No search-input element found'); return; }
         var debounceTimer = null;
+        
+        // Self-contained search function that works even if Store.searchProducts is missing
+        function doSearch(query) {
+            var products = [];
+            try {
+                if (typeof Store !== 'undefined' && typeof Store.getProducts === 'function') {
+                    products = Store.getProducts() || [];
+                }
+            } catch(e) { console.error('[Search] Error getting products:', e); }
+            
+            if (!products.length) {
+                console.warn('[Search] No products loaded yet');
+                return [];
+            }
+            
+            var q = query.toLowerCase().trim();
+            var results = products.filter(function(p) {
+                var name = (p.name || '').toLowerCase();
+                var desc = (p.description || '').toLowerCase();
+                var cat = (p.category || '').toLowerCase();
+                var badge = (p.badge || '').toLowerCase();
+                // Also check variants for weight/price match
+                var variantStr = '';
+                try {
+                    var variants = p.variants || [];
+                    if (typeof variants === 'string') variants = JSON.parse(variants);
+                    variantStr = variants.map(function(v) { return (v.weight || '') + ' ' + (v.label || ''); }).join(' ').toLowerCase();
+                } catch(e) {}
+                return name.indexOf(q) !== -1 || desc.indexOf(q) !== -1 || cat.indexOf(q) !== -1 || badge.indexOf(q) !== -1 || variantStr.indexOf(q) !== -1;
+            });
+            
+            console.log('[Search] Query: "' + query + '" → ' + results.length + ' results from ' + products.length + ' products');
+            return results;
+        }
         
         searchInput.addEventListener('input', function(e) {
             var query = e.target.value.trim();
@@ -288,25 +322,38 @@ const App = (function() {
             var delay = (typeof CONFIG !== 'undefined' && CONFIG.UI && CONFIG.UI.SEARCH_DEBOUNCE) ? CONFIG.UI.SEARCH_DEBOUNCE : 300;
             debounceTimer = setTimeout(function() {
                 if (query.length > 0) {
+                    // Try Store.searchProducts first, fall back to our own
+                    var results;
                     if (typeof Store !== 'undefined' && typeof Store.searchProducts === 'function') {
-                        var results = Store.searchProducts(query);
+                        results = Store.searchProducts(query);
+                    } else {
+                        results = doSearch(query);
+                    }
+                    if (typeof UI !== 'undefined' && typeof UI.renderSearchResults === 'function') {
                         UI.renderSearchResults(results);
                     } else {
-                        console.warn('[Search] Store.searchProducts not available');
+                        console.warn('[Search] UI.renderSearchResults not available');
                     }
                     document.querySelectorAll('.category-pill').forEach(function(pill) { pill.classList.remove('active'); });
                 } else {
-                    Store.setActiveCategory('all');
-                    var allPill = document.querySelector('.category-pill[data-category="all"]');
-                    if (allPill) {
-                        document.querySelectorAll('.category-pill').forEach(function(p) {
-                            p.classList.remove('active', 'bg-pickle-500', 'text-white');
-                            p.classList.add('bg-gray-100', 'text-gray-700');
-                        });
-                        allPill.classList.add('active', 'bg-pickle-500', 'text-white');
-                        allPill.classList.remove('bg-gray-100', 'text-gray-700');
-                    }
-                    UI.renderCategorySections(Store.getCategories(), Store.getActiveProducts());
+                    // Clear search — go back to all products
+                    try {
+                        if (typeof Store !== 'undefined') {
+                            if (Store.setActiveCategory) Store.setActiveCategory('all');
+                        }
+                        var allPill = document.querySelector('.category-pill[data-category="all"]');
+                        if (allPill) {
+                            document.querySelectorAll('.category-pill').forEach(function(p) {
+                                p.classList.remove('active', 'bg-pickle-500', 'text-white');
+                                p.classList.add('bg-gray-100', 'text-gray-700');
+                            });
+                            allPill.classList.add('active', 'bg-pickle-500', 'text-white');
+                            allPill.classList.remove('bg-gray-100', 'text-gray-700');
+                        }
+                        if (typeof UI !== 'undefined' && typeof Store !== 'undefined') {
+                            UI.renderCategorySections(Store.getCategories(), Store.getActiveProducts());
+                        }
+                    } catch(e) { console.error('[Search] Reset error:', e); }
                 }
             }, delay);
         });
@@ -318,6 +365,8 @@ const App = (function() {
                 searchInput.blur();
             }
         });
+        
+        console.log('[Search] Setup complete ✅');
     }
     
     function setupBottomNav() {
