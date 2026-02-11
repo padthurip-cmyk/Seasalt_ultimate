@@ -138,6 +138,18 @@ const Cart = (function() {
     function showCheckoutForm() {
         var cart = typeof Store !== 'undefined' ? Store.getCart() : { items: [], subtotal: 0 };
         var user = typeof Store !== 'undefined' ? Store.getState().user || {} : {};
+        
+        // Also check localStorage for user data (from spinwheel/previous checkout)
+        if (!user.name || !user.phone) {
+            try {
+                var savedUser = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
+                if (savedUser.name && !user.name) user.name = savedUser.name;
+                if (savedUser.phone && !user.phone) user.phone = savedUser.phone;
+            } catch(e) {}
+            if (!user.phone) user.phone = localStorage.getItem('seasalt_phone') || '';
+        }
+        // Clean phone display (remove +91 for input field)
+        var displayPhone = (user.phone || '').replace(/^\+91/, '');
 
         var deliveryCharge = getDeliveryCharge(cart.subtotal);
         var spinWallet = getSpinWallet();
@@ -147,15 +159,18 @@ const Cart = (function() {
         var walletDiscount = walletChecked && availableWallet > 0 ? Math.min(availableWallet, cart.subtotal + deliveryCharge) : 0;
         var finalTotal = Math.max(0, cart.subtotal + deliveryCharge - walletDiscount);
 
+        var itemCount = 0;
+        for (var i = 0; i < cart.items.length; i++) itemCount += (cart.items[i].quantity || 1);
+
         var itemsHtml = cart.items.map(function(item) {
             return '<div class="flex justify-between text-sm py-1">' +
                 '<span class="text-gray-600">' + item.name + ' (' + (item.size || item.weight || '250g') + ') \u00d7 ' + item.quantity + '</span>' +
                 '<span class="font-medium">\u20b9' + (item.price * item.quantity) + '</span></div>';
         }).join('');
 
-        var walletHtml = availableWallet > 0 ? '<div class="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4 mt-4">' +
-            '<div class="flex items-center justify-between"><div class="flex items-center gap-3"><span class="text-2xl">\uD83D\uDCB0</span>' +
-            '<div><div class="font-semibold text-amber-800">Wallet: \u20b9' + availableWallet + '</div></div></div>' +
+        var walletHtml = availableWallet > 0 ? '<div class="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-3 mt-3">' +
+            '<div class="flex items-center justify-between"><div class="flex items-center gap-2"><span class="text-xl">\uD83D\uDCB0</span>' +
+            '<span class="font-semibold text-amber-800 text-sm">Wallet: \u20b9' + availableWallet + '</span></div>' +
             '<label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" id="checkout-use-wallet" ' + (walletChecked ? 'checked' : '') + 
             ' class="w-5 h-5 accent-amber-600"><span class="text-sm font-medium text-amber-700">Apply</span></label></div></div>' : '';
 
@@ -163,33 +178,70 @@ const Cart = (function() {
         modal.id = 'checkout-modal';
         modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center';
         modal.innerHTML = '<div class="bg-white w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl">' +
-            '<div class="sticky top-0 bg-white p-4 border-b flex items-center justify-between z-10">' +
+            // Sticky header
+            '<div class="sticky top-0 bg-white p-4 border-b flex items-center justify-between z-10 rounded-t-3xl">' +
             '<h3 class="text-xl font-bold text-gray-800">Checkout</h3>' +
             '<button id="close-checkout" class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200">\u2715</button></div>' +
-            '<div class="p-4 space-y-6"><div><h4 class="font-semibold text-gray-800 mb-3">\uD83D\uDCE6 Order Summary</h4>' +
-            '<div class="bg-gray-50 rounded-xl p-4">' + itemsHtml +
-            '<div class="border-t mt-3 pt-3 space-y-2">' +
-            '<div class="flex justify-between text-sm"><span class="text-gray-600">Subtotal</span><span class="font-medium">\u20b9' + cart.subtotal + '</span></div>' +
-            '<div class="flex justify-between text-sm"><span class="text-gray-600">Delivery</span><span class="font-medium ' + (deliveryCharge === 0 ? 'text-green-600' : '') + '">' + (deliveryCharge === 0 ? 'FREE' : '\u20b9' + deliveryCharge) + '</span></div>' +
-            (walletDiscount > 0 ? '<div class="flex justify-between text-sm text-green-600"><span>Wallet</span><span>-\u20b9' + walletDiscount + '</span></div>' : '') +
-            '<div class="flex justify-between text-lg font-bold mt-2 pt-2 border-t"><span>Total</span><span class="text-pickle-600">\u20b9' + finalTotal + '</span></div>' +
-            '</div></div></div>' + walletHtml +
-            '<div><h4 class="font-semibold text-gray-800 mb-3">\uD83D\uDCCD Delivery Address</h4>' +
+            
+            '<div class="p-4 space-y-5">' +
+            
+            // 1. DELIVERY ADDRESS (FIRST - most important, immediately visible)
+            '<div>' +
+            '<h4 class="font-semibold text-gray-800 mb-3">\uD83D\uDCCD Delivery Details</h4>' +
             '<div class="space-y-3">' +
-            '<input type="text" id="checkout-name" placeholder="Full Name *" value="' + (user.name || '') + '" class="w-full px-4 py-3 border rounded-xl focus:outline-none focus:border-pickle-500">' +
-            '<input type="tel" id="checkout-phone" placeholder="Phone *" value="' + (user.phone || '') + '" class="w-full px-4 py-3 border rounded-xl focus:outline-none focus:border-pickle-500">' +
-            '<textarea id="checkout-address" placeholder="Address *" rows="2" class="w-full px-4 py-3 border rounded-xl focus:outline-none focus:border-pickle-500 resize-none"></textarea>' +
-            '<input type="text" id="checkout-pincode" placeholder="Pincode *" maxlength="6" class="w-full px-4 py-3 border rounded-xl focus:outline-none focus:border-pickle-500">' +
-            '</div></div></div>' +
-            '<div class="sticky bottom-0 bg-white p-4 border-t">' +
-            '<button id="pay-now-btn" class="w-full py-4 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600">Pay \u20b9' + finalTotal + '</button></div></div>';
+            '<input type="text" id="checkout-name" placeholder="Full Name *" value="' + (user.name || '') + '" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800">' +
+            '<input type="tel" id="checkout-phone" placeholder="Phone Number *" value="' + displayPhone + '" maxlength="10" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800">' +
+            '<textarea id="checkout-address" placeholder="Full Address (House No, Street, Area) *" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 resize-none text-gray-800"></textarea>' +
+            '<input type="text" id="checkout-pincode" placeholder="Pincode *" maxlength="6" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800">' +
+            '</div></div>' +
+            
+            // 2. WALLET (if available)
+            walletHtml +
+            
+            // 3. ORDER SUMMARY (collapsible - starts collapsed on mobile)
+            '<div>' +
+            '<button id="toggle-summary" class="w-full flex items-center justify-between py-2" type="button">' +
+            '<h4 class="font-semibold text-gray-800">\uD83D\uDCE6 Order Summary (' + itemCount + ' items)</h4>' +
+            '<svg id="summary-arrow" class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>' +
+            '</button>' +
+            '<div id="order-summary-details" style="display:none;">' +
+            '<div class="bg-gray-50 rounded-xl p-3 mt-2">' + itemsHtml + '</div></div>' +
+            
+            // Price breakdown (always visible)
+            '<div class="bg-gray-50 rounded-xl p-3 mt-3 space-y-2">' +
+            '<div class="flex justify-between text-sm"><span class="text-gray-600">Subtotal (' + itemCount + ' items)</span><span class="font-medium">\u20b9' + cart.subtotal + '</span></div>' +
+            '<div class="flex justify-between text-sm"><span class="text-gray-600">Delivery</span><span class="font-medium ' + (deliveryCharge === 0 ? 'text-green-600' : '') + '">' + (deliveryCharge === 0 ? 'FREE' : '\u20b9' + deliveryCharge) + '</span></div>' +
+            (walletDiscount > 0 ? '<div class="flex justify-between text-sm text-green-600"><span>Wallet Credit</span><span>-\u20b9' + walletDiscount + '</span></div>' : '') +
+            '<div class="flex justify-between text-base font-bold mt-2 pt-2 border-t border-gray-200"><span>Total</span><span class="text-pickle-600">\u20b9' + finalTotal + '</span></div>' +
+            '</div></div>' +
+            
+            '</div>' +
+            
+            // Sticky PAY button at bottom
+            '<div class="sticky bottom-0 bg-white p-4 border-t shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">' +
+            '<button id="pay-now-btn" class="w-full py-4 bg-gradient-to-r from-pickle-500 to-pickle-600 text-white font-bold rounded-xl text-lg shadow-lg hover:shadow-xl transition-all active:scale-[0.98]">' +
+            '\uD83D\uDD12 Pay \u20b9' + finalTotal + '</button></div></div>';
 
         document.body.appendChild(modal);
         document.body.style.overflow = 'hidden';
 
+        // Close handlers
         modal.querySelector('#close-checkout').onclick = function() { modal.remove(); document.body.style.overflow = ''; };
         modal.onclick = function(e) { if (e.target === modal) { modal.remove(); document.body.style.overflow = ''; } };
         
+        // Toggle order summary
+        var toggleBtn = modal.querySelector('#toggle-summary');
+        var summaryDetails = modal.querySelector('#order-summary-details');
+        var summaryArrow = modal.querySelector('#summary-arrow');
+        if (toggleBtn && summaryDetails) {
+            toggleBtn.addEventListener('click', function() {
+                var isHidden = summaryDetails.style.display === 'none';
+                summaryDetails.style.display = isHidden ? 'block' : 'none';
+                if (summaryArrow) summaryArrow.style.transform = isHidden ? 'rotate(180deg)' : '';
+            });
+        }
+        
+        // Wallet checkbox
         var cwCheckbox = modal.querySelector('#checkout-use-wallet');
         if (cwCheckbox) {
             cwCheckbox.addEventListener('change', function(e) {
@@ -200,11 +252,26 @@ const Cart = (function() {
             });
         }
 
+        // Pincode input filter
         var pincodeInput = modal.querySelector('#checkout-pincode');
         if (pincodeInput) pincodeInput.oninput = function(e) { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); };
+        
+        // Phone input filter
+        var phoneInput = modal.querySelector('#checkout-phone');
+        if (phoneInput) phoneInput.oninput = function(e) { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10); };
 
         modal._orderData = { subtotal: cart.subtotal, deliveryCharge: deliveryCharge, walletDiscount: walletDiscount, total: finalTotal, useWallet: walletChecked && walletDiscount > 0 };
         modal.querySelector('#pay-now-btn').onclick = function() { processPayment(modal); };
+        
+        // Auto-focus first empty field
+        setTimeout(function() {
+            var nameInput = modal.querySelector('#checkout-name');
+            var phoneIn = modal.querySelector('#checkout-phone');
+            var addrIn = modal.querySelector('#checkout-address');
+            if (nameInput && !nameInput.value) nameInput.focus();
+            else if (phoneIn && !phoneIn.value) phoneIn.focus();
+            else if (addrIn && !addrIn.value) addrIn.focus();
+        }, 300);
     }
 
     function processPayment(modal) {
