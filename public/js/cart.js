@@ -224,6 +224,21 @@ const Cart = (function() {
         payBtn.disabled = true;
         payBtn.innerHTML = '<span class="animate-pulse">Processing...</span>';
 
+        // Save user info from checkout form to localStorage (for profile page)
+        try {
+            var existingUser = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
+            existingUser.name = name;
+            if (phone) {
+                var formattedPhone = phone.startsWith('+') ? phone : '+91' + phone.replace(/^0+/, '');
+                existingUser.phone = formattedPhone;
+            }
+            localStorage.setItem('seasalt_user', JSON.stringify(existingUser));
+            if (phone && !localStorage.getItem('seasalt_phone')) {
+                localStorage.setItem('seasalt_phone', phone.startsWith('+') ? phone : '+91' + phone.replace(/^0+/, ''));
+            }
+            console.log('[Cart] User info saved from checkout:', name, phone);
+        } catch(e) {}
+
         var cart = typeof Store !== 'undefined' ? Store.getCart() : { items: [] };
         var orderCalc = modal._orderData;
         var orderId = 'SS' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 4).toUpperCase();
