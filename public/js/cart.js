@@ -323,6 +323,7 @@ const Cart = (function() {
             
             // CRITICAL: Pause wallet sync so it doesn't overwrite our deduction
             window._walletSyncPaused = true;
+            window._walletLastDeductedAt = Date.now();
             
             var spinWallet = getSpinWallet();
             if (spinWallet) {
@@ -341,19 +342,47 @@ const Cart = (function() {
                     console.log('[Cart] Wallet reduced to:', remaining);
                 }
                 
-                // Update Supabase FIRST, then unpause sync
-                var userPhone = orderData.customer.phone;
+                // Get phone in correct format (must match Supabase users.phone)
+                // Priority: seasalt_phone (set by spinwheel with +91), then seasalt_user, then checkout form
+                var userPhone = localStorage.getItem('seasalt_phone') || localStorage.getItem('seasalt_user_phone') || localStorage.getItem('seasalt_spin_phone');
                 if (!userPhone) {
                     try { userPhone = JSON.parse(localStorage.getItem('seasalt_user') || '{}').phone; } catch(e) {}
-                    if (!userPhone) userPhone = localStorage.getItem('seasalt_phone');
                 }
+                if (!userPhone) {
+                    userPhone = orderData.customer.phone;
+                }
+                // Ensure +91 prefix for India
+                if (userPhone && !userPhone.startsWith('+')) {
+                    userPhone = '+91' + userPhone.replace(/^0+/, '');
+                }
+                
+                console.log('[Cart] Wallet deduct - using phone:', userPhone, 'new balance:', Math.max(0, remaining));
                 
                 if (userPhone) {
                     await updateWalletInSupabase(userPhone, Math.max(0, remaining));
-                    console.log('[Cart] Wallet updated in Supabase to:', Math.max(0, remaining));
+                    console.log('[Cart] Wallet PATCHED in Supabase to:', Math.max(0, remaining));
+                    
+                    // Verify the update actually worked
+                    try {
+                        var verifyRes = await fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(userPhone) + '&select=wallet_balance', {
+                            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+                        });
+                        var verifyData = await verifyRes.json();
+                        console.log('[Cart] Wallet verify after PATCH:', JSON.stringify(verifyData));
+                        if (verifyData && verifyData[0] && verifyData[0].wallet_balance > 0 && remaining <= 0) {
+                            // PATCH didn't work! Try again with different phone formats
+                            console.warn('[Cart] Wallet PATCH may have failed, retrying...');
+                            var altPhone = orderData.customer.phone;
+                            if (altPhone && !altPhone.startsWith('+')) altPhone = '+91' + altPhone.replace(/^0+/, '');
+                            if (altPhone !== userPhone) {
+                                await updateWalletInSupabase(altPhone, Math.max(0, remaining));
+                                console.log('[Cart] Wallet retry with:', altPhone);
+                            }
+                        }
+                    } catch(ve) { console.warn('[Cart] Wallet verify failed:', ve); }
                 }
                 
-                // Also log wallet transaction
+                // Log wallet transaction
                 if (userPhone) {
                     try {
                         await fetch(SUPABASE_URL + '/rest/v1/wallet_transactions', {
@@ -371,11 +400,11 @@ const Cart = (function() {
                 }
             }
             
-            // Unpause sync after a delay (let Supabase update propagate)
+            // Keep sync paused for 15 seconds (full sync cycle) to let Supabase propagate
             setTimeout(function() { 
                 window._walletSyncPaused = false; 
                 console.log('[Cart] Wallet sync unpaused');
-            }, 5000);
+            }, 16000);
         }
 
         // === CLEAR CART & UPDATE UI ===
