@@ -511,28 +511,75 @@ const Cart = (function() {
 
     async function saveOrderToSupabase(orderData) {
         try {
-            await fetch(SUPABASE_URL + '/rest/v1/orders', {
+            // Format phone with +91 prefix
+            var phone = orderData.customer.phone || '';
+            if (phone && !phone.startsWith('+')) phone = '+91' + phone.replace(/^0+/, '');
+            
+            var payload = {
+                id: orderData.orderId, 
+                customer_name: orderData.customer.name, 
+                customer_phone: phone,
+                customer_address: orderData.customer.address, 
+                customer_pincode: orderData.customer.pincode,
+                items: JSON.stringify(orderData.items), 
+                subtotal: orderData.subtotal, 
+                delivery_charge: orderData.deliveryCharge,
+                wallet_used: orderData.walletDiscount || 0, 
+                total: orderData.total, 
+                payment_method: orderData.paymentMethod,
+                payment_id: orderData.paymentId, 
+                status: 'confirmed', 
+                created_at: orderData.createdAt
+            };
+            
+            console.log('[Cart] Saving order to Supabase:', orderData.orderId, payload);
+            
+            var res = await fetch(SUPABASE_URL + '/rest/v1/orders', {
                 method: 'POST',
-                headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-                body: JSON.stringify({
-                    id: orderData.orderId, 
-                    customer_name: orderData.customer.name, 
-                    customer_phone: orderData.customer.phone,
-                    customer_address: orderData.customer.address, 
-                    customer_pincode: orderData.customer.pincode,
-                    items: JSON.stringify(orderData.items), 
-                    subtotal: orderData.subtotal, 
-                    delivery_charge: orderData.deliveryCharge,
-                    wallet_used: orderData.walletDiscount, 
-                    total: orderData.total, 
-                    payment_method: orderData.paymentMethod,
-                    payment_id: orderData.paymentId, 
-                    status: 'confirmed', 
-                    created_at: orderData.createdAt
-                })
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+                body: JSON.stringify(payload)
             });
-            console.log('[Cart] Order saved to Supabase:', orderData.orderId);
-        } catch (e) { console.error('[Cart] Supabase order save error:', e); }
+            
+            if (res.ok) {
+                var saved = await res.json();
+                console.log('[Cart] Order saved to Supabase:', orderData.orderId, saved);
+            } else {
+                var errText = await res.text();
+                console.error('[Cart] Supabase order save FAILED:', res.status, errText);
+                
+                // If 404 or column error, the orders table may not exist or have different columns
+                // Try a minimal payload with just the essential columns
+                if (res.status === 400 || res.status === 404 || res.status === 409) {
+                    console.log('[Cart] Retrying with minimal payload...');
+                    var minPayload = {
+                        order_id: orderData.orderId,
+                        customer_name: orderData.customer.name,
+                        customer_phone: phone,
+                        address: orderData.customer.address + ', ' + orderData.customer.pincode,
+                        items: JSON.stringify(orderData.items),
+                        total: orderData.total,
+                        status: 'confirmed',
+                        payment_id: orderData.paymentId,
+                        payment_method: orderData.paymentMethod
+                    };
+                    
+                    var res2 = await fetch(SUPABASE_URL + '/rest/v1/orders', {
+                        method: 'POST',
+                        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+                        body: JSON.stringify(minPayload)
+                    });
+                    
+                    if (res2.ok) {
+                        console.log('[Cart] Order saved with minimal payload');
+                    } else {
+                        var errText2 = await res2.text();
+                        console.error('[Cart] Minimal save also failed:', res2.status, errText2);
+                        console.error('[Cart] You may need to create the "orders" table in Supabase.');
+                        console.error('[Cart] Required columns: id (text PK), customer_name, customer_phone, customer_address, customer_pincode, items (jsonb), subtotal (numeric), delivery_charge (numeric), wallet_used (numeric), total (numeric), payment_method, payment_id, status, created_at (timestamptz)');
+                    }
+                }
+            }
+        } catch (e) { console.error('[Cart] Supabase order save network error:', e); }
     }
 
     async function updateWalletInSupabase(phone, balance) {
