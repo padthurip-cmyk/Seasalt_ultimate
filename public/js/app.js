@@ -422,35 +422,30 @@ const App = (function() {
         }
     }
     
-    function showAccountPage() {
-        // Try Store first, then fall back to localStorage (spinwheel/checkout saves here)
+    async function showAccountPage() {
+        // Gather user data from all sources
         var user = null;
+        
+        // 1. Try Store
         if (typeof Store !== 'undefined' && Store.getState) {
             user = Store.getState().user;
         }
-        
-        // If Store has no user, check localStorage directly
-        if (!user) {
+        // 2. Try seasalt_user localStorage
+        if (!user || (!user.name && !user.phone)) {
             try {
                 var savedUser = localStorage.getItem('seasalt_user');
                 if (savedUser) {
                     var parsed = JSON.parse(savedUser);
-                    if (parsed && (parsed.name || parsed.phone)) {
-                        user = parsed;
-                        // Also set it in Store so it persists this session
-                        if (typeof Store !== 'undefined' && Store.setState) {
-                            try { Store.setState({ user: user }); } catch(e) {}
-                        }
-                    }
+                    if (parsed && (parsed.name || parsed.phone)) user = parsed;
                 }
             } catch (e) {}
         }
-        
-        // Still no user? Check individual localStorage keys
-        if (!user) {
+        // 3. Try individual phone keys
+        if (!user || !user.phone) {
             var phone = localStorage.getItem('seasalt_phone') || localStorage.getItem('seasalt_user_phone') || localStorage.getItem('seasalt_spin_phone');
             if (phone) {
-                user = { phone: phone, name: '' };
+                if (!user) user = {};
+                user.phone = phone;
                 try {
                     var su = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
                     if (su.name) user.name = su.name;
@@ -459,15 +454,38 @@ const App = (function() {
             }
         }
         
+        console.log('[Account] User data:', JSON.stringify(user));
+        console.log('[Account] seasalt_user raw:', localStorage.getItem('seasalt_user'));
+        
+        // 4. If we have phone but no name, fetch from Supabase BEFORE rendering
+        if (user && user.phone && (!user.name || user.name.trim() === '')) {
+            try {
+                var supaUrl = 'https://yosjbsncvghpscsrvxds.supabase.co';
+                var supaKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
+                var res = await fetch(supaUrl + '/rest/v1/users?phone=eq.' + encodeURIComponent(user.phone) + '&select=name', {
+                    headers: { 'apikey': supaKey, 'Authorization': 'Bearer ' + supaKey }
+                });
+                var data = await res.json();
+                console.log('[Account] Supabase user data:', JSON.stringify(data));
+                if (data && data[0] && data[0].name && data[0].name.trim()) {
+                    user.name = data[0].name;
+                    // Also save to localStorage for next time
+                    try {
+                        var u = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
+                        u.name = data[0].name;
+                        u.phone = user.phone;
+                        localStorage.setItem('seasalt_user', JSON.stringify(u));
+                    } catch(e) {}
+                }
+            } catch (e) { console.warn('[Account] Supabase fetch failed:', e); }
+        }
+        
         var modal = document.createElement('div');
         modal.id = 'account-modal';
         modal.className = 'fixed inset-0 z-[85] flex items-end justify-center';
         
-        // Get wallet balance from spin wallet
         var walletBalance = 0;
-        if (typeof Store !== 'undefined' && Store.getWalletBalance) {
-            walletBalance = Store.getWalletBalance();
-        }
+        if (typeof Store !== 'undefined' && Store.getWalletBalance) walletBalance = Store.getWalletBalance();
         if (!walletBalance || walletBalance <= 0) {
             try {
                 var wData = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || '{}');
@@ -476,28 +494,34 @@ const App = (function() {
         }
         var walletText = '\u20b9' + (walletBalance || 0);
         
-        // Get real order count
         var orderCount = 0;
-        try {
-            var orders = JSON.parse(localStorage.getItem('seasalt_orders') || '[]');
-            orderCount = orders.length;
-        } catch(e) {}
+        try { orderCount = JSON.parse(localStorage.getItem('seasalt_orders') || '[]').length; } catch(e) {}
         
         var version = (typeof CONFIG !== 'undefined' && CONFIG.APP_VERSION) ? CONFIG.APP_VERSION : '1.0';
         
         var content = '';
         if (user) {
-            var displayName = user.name || 'User';
+            var displayName = user.name || '';
             var displayPhone = user.phone || '';
-            var displayCountry = user.country || '';
-            var initials = displayName.charAt(0).toUpperCase();
+            var hasName = displayName && displayName !== 'User' && displayName.trim() !== '';
+            var initials = hasName ? displayName.charAt(0).toUpperCase() : '\uD83D\uDC64';
             
-            content = '<div class="flex items-center gap-4 p-4 bg-pickle-50 rounded-xl mb-6">' +
-                '<div class="w-14 h-14 bg-pickle-500 rounded-full flex items-center justify-center text-white text-2xl font-bold">' + initials + '</div>' +
-                '<div><p class="font-semibold text-gray-800">' + displayName + '</p>' +
-                '<p class="text-sm text-gray-500">' + displayPhone + '</p>' +
-                (displayCountry ? '<p class="text-xs text-gray-400">' + displayCountry + '</p>' : '') +
-                '</div></div>' +
+            content = '<div class="p-4 bg-pickle-50 rounded-xl mb-6">' +
+                '<div class="flex items-center gap-4">' +
+                '<div id="profile-initial" class="w-14 h-14 bg-pickle-500 rounded-full flex items-center justify-center text-white text-2xl font-bold">' + initials + '</div>' +
+                '<div class="flex-1">' +
+                // Name section - editable
+                '<div class="flex items-center gap-2">' +
+                '<p id="profile-display-name" class="font-semibold text-gray-800">' + (hasName ? displayName : '<span class=\"text-gray-400 italic\">Tap to add name</span>') + '</p>' +
+                '<button id="edit-name-btn" class="text-pickle-500 hover:text-pickle-600" title="Edit name">' +
+                '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button></div>' +
+                // Name edit input (hidden by default)
+                '<div id="name-edit-row" style="display:none" class="mt-2 flex gap-2">' +
+                '<input type="text" id="edit-name-input" placeholder="Enter your name" value="' + (hasName ? displayName : '') + '" class="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-pickle-500">' +
+                '<button id="save-name-btn" class="px-3 py-2 bg-pickle-500 text-white rounded-lg text-sm font-semibold">Save</button></div>' +
+                '<p class="text-sm text-gray-500 mt-1">' + displayPhone + '</p>' +
+                '</div></div></div>' +
+                
                 '<div class="grid grid-cols-2 gap-3 mb-6">' +
                 '<div class="bg-spice-gold/10 rounded-xl p-4 text-center"><p class="text-2xl font-bold text-spice-gold">' + walletText + '</p><p class="text-sm text-gray-600">Wallet</p></div>' +
                 '<div class="bg-pickle-50 rounded-xl p-4 text-center cursor-pointer" onclick="document.getElementById(\'account-modal\').remove();document.body.style.overflow=\'\';if(typeof App!==\'undefined\')App.navigateTo(\'orders\');">' +
@@ -521,9 +545,63 @@ const App = (function() {
         var closeModal = function() { modal.remove(); document.body.style.overflow = ''; };
         modal.querySelectorAll('.close-modal').forEach(function(btn) { btn.addEventListener('click', closeModal); });
         
+        // Edit name functionality
+        var editNameBtn = modal.querySelector('#edit-name-btn');
+        var nameEditRow = modal.querySelector('#name-edit-row');
+        var editNameInput = modal.querySelector('#edit-name-input');
+        var saveNameBtn = modal.querySelector('#save-name-btn');
+        var profileDisplayName = modal.querySelector('#profile-display-name');
+        var profileInitial = modal.querySelector('#profile-initial');
+        
+        if (editNameBtn && nameEditRow) {
+            editNameBtn.addEventListener('click', function() {
+                nameEditRow.style.display = 'flex';
+                editNameInput.focus();
+            });
+        }
+        if (saveNameBtn && editNameInput) {
+            var saveName = function() {
+                var newName = editNameInput.value.trim();
+                if (!newName) { 
+                    if (typeof UI !== 'undefined') UI.showToast('Please enter a name', 'error'); 
+                    return; 
+                }
+                // Save to localStorage
+                try {
+                    var u = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
+                    u.name = newName;
+                    localStorage.setItem('seasalt_user', JSON.stringify(u));
+                } catch(e) {
+                    localStorage.setItem('seasalt_user', JSON.stringify({ name: newName, phone: user.phone }));
+                }
+                // Update Supabase
+                if (user.phone) {
+                    var supaUrl = 'https://yosjbsncvghpscsrvxds.supabase.co';
+                    var supaKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
+                    fetch(supaUrl + '/rest/v1/users?phone=eq.' + encodeURIComponent(user.phone), {
+                        method: 'PATCH',
+                        headers: { 'apikey': supaKey, 'Authorization': 'Bearer ' + supaKey, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+                        body: JSON.stringify({ name: newName })
+                    }).catch(function() {});
+                }
+                // Update UI
+                if (profileDisplayName) profileDisplayName.textContent = newName;
+                if (profileInitial) profileInitial.textContent = newName.charAt(0).toUpperCase();
+                nameEditRow.style.display = 'none';
+                if (typeof UI !== 'undefined') UI.showToast('Name updated!', 'success');
+            };
+            saveNameBtn.addEventListener('click', saveName);
+            editNameInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') saveName(); });
+        }
+        
+        // If no name set, auto-show the edit field
+        if (user && (!user.name || user.name === 'User' || user.name.trim() === '') && nameEditRow) {
+            nameEditRow.style.display = 'flex';
+            setTimeout(function() { if (editNameInput) editNameInput.focus(); }, 300);
+        }
+        
         var logoutBtn = modal.querySelector('#logout-btn');
         if (logoutBtn) logoutBtn.addEventListener('click', function() { 
-            // Clear all user data from localStorage
             localStorage.removeItem('seasalt_user');
             localStorage.removeItem('seasalt_phone');
             localStorage.removeItem('seasalt_user_phone');
