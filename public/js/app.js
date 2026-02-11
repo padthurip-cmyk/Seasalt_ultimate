@@ -5,6 +5,38 @@
  * FIXED: Added all missing event bindings for cart, product modal, checkout
  */
 
+// ── POLYFILL: Add searchProducts to Store if missing ──
+(function() {
+    function patchStore() {
+        if (typeof Store === 'undefined') return;
+        if (typeof Store.searchProducts === 'function') return;
+        
+        Store.searchProducts = function(query) {
+            if (!query || !query.trim()) return Store.getProducts ? Store.getProducts() : [];
+            var products = Store.getProducts ? Store.getProducts() : [];
+            var q = query.toLowerCase().trim();
+            return products.filter(function(p) {
+                var name = (p.name || '').toLowerCase();
+                var desc = (p.description || '').toLowerCase();
+                var cat = (p.category || '').toLowerCase();
+                var badge = (p.badge || '').toLowerCase();
+                return name.indexOf(q) !== -1 || desc.indexOf(q) !== -1 || cat.indexOf(q) !== -1 || badge.indexOf(q) !== -1;
+            });
+        };
+        console.log('[App] Store.searchProducts patched ✅');
+    }
+    
+    // Patch immediately if Store exists, otherwise patch after a short delay
+    patchStore();
+    if (typeof Store === 'undefined') {
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(patchStore, 100);
+            setTimeout(patchStore, 500);
+            setTimeout(patchStore, 1500);
+        });
+    }
+})();
+
 const App = (function() {
     let isInitialized = false;
     
@@ -256,8 +288,12 @@ const App = (function() {
             var delay = (typeof CONFIG !== 'undefined' && CONFIG.UI && CONFIG.UI.SEARCH_DEBOUNCE) ? CONFIG.UI.SEARCH_DEBOUNCE : 300;
             debounceTimer = setTimeout(function() {
                 if (query.length > 0) {
-                    var results = Store.searchProducts(query);
-                    UI.renderSearchResults(results);
+                    if (typeof Store !== 'undefined' && typeof Store.searchProducts === 'function') {
+                        var results = Store.searchProducts(query);
+                        UI.renderSearchResults(results);
+                    } else {
+                        console.warn('[Search] Store.searchProducts not available');
+                    }
                     document.querySelectorAll('.category-pill').forEach(function(pill) { pill.classList.remove('active'); });
                 } else {
                     Store.setActiveCategory('all');
