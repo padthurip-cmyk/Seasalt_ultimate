@@ -408,32 +408,103 @@ const App = (function() {
     }
     
     function showOrdersPage() {
-        if (typeof Orders !== 'undefined' && Orders.showOrdersPage) {
+        // Try all possible orders module exports
+        if (typeof OrdersFix !== 'undefined' && OrdersFix.showOrdersPage) {
+            OrdersFix.showOrdersPage();
+        } else if (typeof Orders !== 'undefined' && Orders.showOrdersPage) {
             Orders.showOrdersPage();
+        } else if (typeof OrdersPage !== 'undefined' && OrdersPage.init) {
+            OrdersPage.init();
+        } else if (typeof Cart !== 'undefined' && Cart.showOrdersPage) {
+            Cart.showOrdersPage();
+        } else {
+            UI.showToast('Orders page loading...', 'info');
         }
     }
     
     function showAccountPage() {
-        var user = Store.getState().user;
+        // Try Store first, then fall back to localStorage (spinwheel/checkout saves here)
+        var user = null;
+        if (typeof Store !== 'undefined' && Store.getState) {
+            user = Store.getState().user;
+        }
+        
+        // If Store has no user, check localStorage directly
+        if (!user) {
+            try {
+                var savedUser = localStorage.getItem('seasalt_user');
+                if (savedUser) {
+                    var parsed = JSON.parse(savedUser);
+                    if (parsed && (parsed.name || parsed.phone)) {
+                        user = parsed;
+                        // Also set it in Store so it persists this session
+                        if (typeof Store !== 'undefined' && Store.setState) {
+                            try { Store.setState({ user: user }); } catch(e) {}
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+        
+        // Still no user? Check individual localStorage keys
+        if (!user) {
+            var phone = localStorage.getItem('seasalt_phone') || localStorage.getItem('seasalt_user_phone') || localStorage.getItem('seasalt_spin_phone');
+            if (phone) {
+                user = { phone: phone, name: '' };
+                try {
+                    var su = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
+                    if (su.name) user.name = su.name;
+                    if (su.country) user.country = su.country;
+                } catch(e) {}
+            }
+        }
+        
         var modal = document.createElement('div');
         modal.id = 'account-modal';
         modal.className = 'fixed inset-0 z-[85] flex items-end justify-center';
         
-        var walletBalance = Store.getWalletBalance();
-        var walletText = (typeof CONFIG !== 'undefined' && CONFIG.formatPrice) ? CONFIG.formatPrice(walletBalance) : '₹' + walletBalance;
+        // Get wallet balance from spin wallet
+        var walletBalance = 0;
+        if (typeof Store !== 'undefined' && Store.getWalletBalance) {
+            walletBalance = Store.getWalletBalance();
+        }
+        if (!walletBalance || walletBalance <= 0) {
+            try {
+                var wData = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || '{}');
+                if (wData.amount && new Date(wData.expiresAt) > new Date()) walletBalance = wData.amount;
+            } catch(e) {}
+        }
+        var walletText = '\u20b9' + (walletBalance || 0);
+        
+        // Get real order count
+        var orderCount = 0;
+        try {
+            var orders = JSON.parse(localStorage.getItem('seasalt_orders') || '[]');
+            orderCount = orders.length;
+        } catch(e) {}
+        
         var version = (typeof CONFIG !== 'undefined' && CONFIG.APP_VERSION) ? CONFIG.APP_VERSION : '1.0';
         
         var content = '';
         if (user) {
+            var displayName = user.name || 'User';
+            var displayPhone = user.phone || '';
+            var displayCountry = user.country || '';
+            var initials = displayName.charAt(0).toUpperCase();
+            
             content = '<div class="flex items-center gap-4 p-4 bg-pickle-50 rounded-xl mb-6">' +
-                '<div class="w-14 h-14 bg-pickle-500 rounded-full flex items-center justify-center text-white text-2xl">👤</div>' +
-                '<div><p class="font-semibold text-gray-800">' + (user.name || 'User') + '</p><p class="text-sm text-gray-500">' + (user.phone || '') + '</p></div></div>' +
+                '<div class="w-14 h-14 bg-pickle-500 rounded-full flex items-center justify-center text-white text-2xl font-bold">' + initials + '</div>' +
+                '<div><p class="font-semibold text-gray-800">' + displayName + '</p>' +
+                '<p class="text-sm text-gray-500">' + displayPhone + '</p>' +
+                (displayCountry ? '<p class="text-xs text-gray-400">' + displayCountry + '</p>' : '') +
+                '</div></div>' +
                 '<div class="grid grid-cols-2 gap-3 mb-6">' +
                 '<div class="bg-spice-gold/10 rounded-xl p-4 text-center"><p class="text-2xl font-bold text-spice-gold">' + walletText + '</p><p class="text-sm text-gray-600">Wallet</p></div>' +
-                '<div class="bg-pickle-50 rounded-xl p-4 text-center"><p class="text-2xl font-bold text-pickle-600">0</p><p class="text-sm text-gray-600">Orders</p></div></div>' +
+                '<div class="bg-pickle-50 rounded-xl p-4 text-center cursor-pointer" onclick="document.getElementById(\'account-modal\').remove();document.body.style.overflow=\'\';if(typeof App!==\'undefined\')App.navigateTo(\'orders\');">' +
+                '<p class="text-2xl font-bold text-pickle-600">' + orderCount + '</p><p class="text-sm text-gray-600">Orders</p></div></div>' +
                 '<button id="logout-btn" class="w-full mt-4 py-3 text-red-500 font-semibold hover:bg-red-50 rounded-xl transition-colors">Logout</button>';
         } else {
-            content = '<div class="text-center py-8"><div class="text-6xl mb-4">👤</div><h4 class="font-semibold text-gray-800 mb-2">Not Logged In</h4><p class="text-gray-500 text-sm mb-6">Login to view orders and wallet</p>' +
+            content = '<div class="text-center py-8"><div class="text-6xl mb-4">\uD83D\uDC64</div><h4 class="font-semibold text-gray-800 mb-2">Not Logged In</h4><p class="text-gray-500 text-sm mb-6">Login to view orders and wallet</p>' +
                 '<button id="login-btn" class="px-8 py-3 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600 transition-colors">Login / Sign Up</button></div>';
         }
         
@@ -451,7 +522,17 @@ const App = (function() {
         modal.querySelectorAll('.close-modal').forEach(function(btn) { btn.addEventListener('click', closeModal); });
         
         var logoutBtn = modal.querySelector('#logout-btn');
-        if (logoutBtn) logoutBtn.addEventListener('click', function() { Store.logout(); closeModal(); UI.showToast('Logged out', 'success'); });
+        if (logoutBtn) logoutBtn.addEventListener('click', function() { 
+            // Clear all user data from localStorage
+            localStorage.removeItem('seasalt_user');
+            localStorage.removeItem('seasalt_phone');
+            localStorage.removeItem('seasalt_user_phone');
+            localStorage.removeItem('seasalt_spin_phone');
+            localStorage.removeItem('seasalt_spin_done');
+            if (typeof Store !== 'undefined' && Store.logout) Store.logout(); 
+            closeModal(); 
+            UI.showToast('Logged out', 'success'); 
+        });
         
         var loginBtn = modal.querySelector('#login-btn');
         if (loginBtn) loginBtn.addEventListener('click', function() { closeModal(); if (typeof SpinWheel !== 'undefined') SpinWheel.show(); });
