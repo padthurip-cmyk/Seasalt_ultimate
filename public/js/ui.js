@@ -668,12 +668,79 @@ const UI = (function() {
             elements.cartCount.classList.toggle('hidden', count === 0);
         }
         
+        // Update floating cart FAB
+        updateFloatingCartFab(count);
+        
         var spinWallet = getSpinWallet();
         if (spinWallet && spinWallet.amount > 0) {
             updateWalletDisplay(spinWallet);
             if (!walletTimerInterval) startWalletTimer();
         } else {
             updateWalletDisplay(null);
+        }
+    }
+    
+    // ============ FLOATING CART FAB ============
+    function createFloatingCartFab() {
+        // Don't create if already exists
+        if (document.getElementById('cart-fab')) return;
+        
+        var fab = document.createElement('div');
+        fab.id = 'cart-fab';
+        fab.style.cssText = 'display:none;position:fixed;bottom:80px;right:16px;z-index:80;' +
+            'background:linear-gradient(135deg,#D4451A,#B91C1C);color:#fff;' +
+            'border-radius:20px;padding:12px 20px;cursor:pointer;' +
+            'box-shadow:0 4px 20px rgba(212,69,26,0.4);' +
+            'transition:transform 0.2s,opacity 0.2s;transform:scale(0.9);opacity:0;' +
+            'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;';
+        fab.innerHTML = '<div style="display:flex;align-items:center;gap:10px;">' +
+            '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>' +
+            '<span id="cart-fab-text" style="font-weight:700;font-size:14px;">View Cart</span>' +
+            '<span id="cart-fab-count" style="background:#fff;color:#D4451A;font-weight:800;font-size:12px;' +
+            'min-width:22px;height:22px;border-radius:11px;display:flex;align-items:center;justify-content:center;">0</span>' +
+            '</div>';
+        
+        fab.addEventListener('click', function() {
+            openCart();
+        });
+        
+        document.body.appendChild(fab);
+    }
+    
+    function updateFloatingCartFab(count) {
+        var fab = document.getElementById('cart-fab');
+        if (!fab) {
+            if (count > 0) {
+                createFloatingCartFab();
+                fab = document.getElementById('cart-fab');
+            } else {
+                return;
+            }
+        }
+        
+        var fabCount = document.getElementById('cart-fab-count');
+        var fabText = document.getElementById('cart-fab-text');
+        
+        if (count > 0) {
+            fab.style.display = 'block';
+            // Small delay for animation
+            setTimeout(function() {
+                fab.style.transform = 'scale(1)';
+                fab.style.opacity = '1';
+            }, 50);
+            if (fabCount) fabCount.textContent = count;
+            
+            // Show subtotal if available
+            try {
+                var cart = Store.getCart();
+                if (cart && cart.subtotal > 0 && fabText) {
+                    fabText.textContent = '\u20b9' + cart.subtotal + ' \u2022 View Cart';
+                }
+            } catch(e) {}
+        } else {
+            fab.style.transform = 'scale(0.9)';
+            fab.style.opacity = '0';
+            setTimeout(function() { fab.style.display = 'none'; }, 200);
         }
     }
     
