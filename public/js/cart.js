@@ -17,6 +17,187 @@ const Cart = (function() {
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
     const SPIN_WALLET_KEY = 'seasalt_spin_wallet';
     const ORDERS_KEY = 'seasalt_orders';
+    const GOOGLE_PLACES_KEY = 'AIzaSyA33gWiI28GPZw2v-sOYYcyEyMTz9Lm5s8';
+    let googlePlacesLoaded = false;
+
+    // ── Load Google Maps Places Library ──
+    function loadGooglePlaces() {
+        if (googlePlacesLoaded || document.querySelector('script[src*="maps.googleapis.com"]')) {
+            googlePlacesLoaded = true;
+            return;
+        }
+        var script = document.createElement('script');
+        script.src = 'https://maps.googleapis.com/maps/api/js?key=' + GOOGLE_PLACES_KEY + '&libraries=places&callback=__gmapsReady';
+        script.async = true;
+        script.defer = true;
+        window.__gmapsReady = function() { googlePlacesLoaded = true; console.log('[Cart] Google Places API loaded'); };
+        document.head.appendChild(script);
+    }
+
+    // Load on module init
+    try { loadGooglePlaces(); } catch(e) {}
+
+    // ── Google Places Autocomplete for Address ──
+    function initPlacesAutocomplete(modal) {
+        var addressField = modal.querySelector('#checkout-address');
+        var suggestionsDiv = modal.querySelector('#places-suggestions');
+        var pincodeField = modal.querySelector('#checkout-pincode');
+        var cityField = modal.querySelector('#checkout-city');
+        var stateField = modal.querySelector('#checkout-state');
+        var areaWrap = modal.querySelector('#area-dropdown-wrap');
+        var areaSelect = modal.querySelector('#checkout-area');
+
+        if (!addressField || !suggestionsDiv) return;
+
+        var autocompleteService = null;
+        var placesService = null;
+        var sessionToken = null;
+        var debounceTimer = null;
+
+        function ensureServices() {
+            if (!window.google || !window.google.maps || !window.google.maps.places) return false;
+            if (!autocompleteService) autocompleteService = new google.maps.places.AutocompleteService();
+            if (!placesService) {
+                var dummyDiv = document.createElement('div');
+                placesService = new google.maps.places.PlacesService(dummyDiv);
+            }
+            if (!sessionToken) sessionToken = new google.maps.places.AutocompleteSessionToken();
+            return true;
+        }
+
+        function hideSuggestions() {
+            suggestionsDiv.style.display = 'none';
+            suggestionsDiv.innerHTML = '';
+        }
+
+        function showSuggestions(predictions) {
+            suggestionsDiv.innerHTML = '';
+            if (!predictions || predictions.length === 0) { hideSuggestions(); return; }
+
+            predictions.forEach(function(prediction) {
+                var item = document.createElement('div');
+                item.className = 'px-4 py-3 cursor-pointer hover:bg-pickle-50 border-b border-gray-100 last:border-0 text-sm text-gray-700 flex items-start gap-2';
+                item.innerHTML = '<span class="text-pickle-500 mt-0.5 flex-shrink-0">\uD83D\uDCCD</span>' +
+                    '<div><div class="font-medium text-gray-800">' + (prediction.structured_formatting ? prediction.structured_formatting.main_text : prediction.description.split(',')[0]) + '</div>' +
+                    '<div class="text-xs text-gray-500 mt-0.5">' + prediction.description + '</div></div>';
+
+                item.addEventListener('click', function() {
+                    selectPlace(prediction);
+                });
+                suggestionsDiv.appendChild(item);
+            });
+
+            // Add Google attribution
+            var attr = document.createElement('div');
+            attr.className = 'px-4 py-2 text-right';
+            attr.innerHTML = '<img src="https://developers.google.com/static/maps/documentation/images/powered_by_google_on_white.png" alt="Powered by Google" style="height:14px;display:inline;">';
+            suggestionsDiv.appendChild(attr);
+
+            suggestionsDiv.style.display = 'block';
+        }
+
+        function selectPlace(prediction) {
+            hideSuggestions();
+
+            if (!ensureServices()) {
+                addressField.value = prediction.description;
+                return;
+            }
+
+            placesService.getDetails({
+                placeId: prediction.place_id,
+                fields: ['address_components', 'formatted_address'],
+                sessionToken: sessionToken
+            }, function(place, status) {
+                // Reset session token after Place Details call (end of session)
+                sessionToken = new google.maps.places.AutocompleteSessionToken();
+
+                if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
+                    addressField.value = prediction.description;
+                    return;
+                }
+
+                var components = place.address_components || [];
+                var streetNumber = '', route = '', sublocality = '', locality = '', adminArea = '', postalCode = '', premise = '';
+
+                components.forEach(function(c) {
+                    var types = c.types;
+                    if (types.indexOf('street_number') !== -1) streetNumber = c.long_name;
+                    if (types.indexOf('route') !== -1) route = c.long_name;
+                    if (types.indexOf('premise') !== -1) premise = c.long_name;
+                    if (types.indexOf('sublocality_level_1') !== -1 || types.indexOf('sublocality') !== -1) sublocality = c.long_name;
+                    if (types.indexOf('locality') !== -1) locality = c.long_name;
+                    if (types.indexOf('administrative_area_level_1') !== -1) adminArea = c.long_name;
+                    if (types.indexOf('postal_code') !== -1) postalCode = c.long_name;
+                });
+
+                // Build clean address for the address field
+                var addressParts = [];
+                if (premise) addressParts.push(premise);
+                if (streetNumber) addressParts.push(streetNumber);
+                if (route) addressParts.push(route);
+                if (sublocality) addressParts.push(sublocality);
+                addressField.value = addressParts.join(', ') || prediction.description.split(',').slice(0, 2).join(',');
+
+                // Auto-fill city, state, pincode
+                if (locality && cityField) cityField.value = locality;
+                if (adminArea && stateField) stateField.value = adminArea;
+                if (postalCode && pincodeField && !pincodeField.value) pincodeField.value = postalCode;
+
+                // If pincode was filled, trigger its lookup for area dropdown
+                if (postalCode && pincodeField) {
+                    pincodeField.value = postalCode;
+                    pincodeField.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+
+                console.log('[Cart] Address auto-filled from Google Places:', {
+                    address: addressField.value, city: locality, state: adminArea, pincode: postalCode
+                });
+            });
+        }
+
+        // Listen for typing in address field
+        addressField.addEventListener('input', function() {
+            var query = addressField.value.trim();
+            clearTimeout(debounceTimer);
+
+            if (query.length < 3) { hideSuggestions(); return; }
+
+            debounceTimer = setTimeout(function() {
+                if (!ensureServices()) {
+                    console.warn('[Cart] Google Places not loaded yet');
+                    return;
+                }
+
+                autocompleteService.getPlacePredictions({
+                    input: query,
+                    sessionToken: sessionToken,
+                    componentRestrictions: { country: 'in' },
+                    types: ['geocode', 'establishment']
+                }, function(predictions, status) {
+                    if (status === google.maps.places.PlacesServiceStatus.OK) {
+                        showSuggestions(predictions);
+                    } else {
+                        hideSuggestions();
+                    }
+                });
+            }, 300);
+        });
+
+        // Hide suggestions on blur (with small delay for click)
+        addressField.addEventListener('blur', function() {
+            setTimeout(hideSuggestions, 250);
+        });
+
+        // Re-show on focus if there's text
+        addressField.addEventListener('focus', function() {
+            if (addressField.value.trim().length >= 3 && suggestionsDiv.children.length > 0) {
+                suggestionsDiv.style.display = 'block';
+            }
+        });
+
+        console.log('[Cart] Google Places Autocomplete initialized');
+    }
 
     const DEFAULT_FREE_ABOVE = 500;
     const DEFAULT_FLAT_FEE = 50;
@@ -145,8 +326,20 @@ const Cart = (function() {
                 var savedUser = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
                 if (savedUser.name && !user.name) user.name = savedUser.name;
                 if (savedUser.phone && !user.phone) user.phone = savedUser.phone;
+                if (savedUser.address) user.address = savedUser.address;
+                if (savedUser.pincode) user.pincode = savedUser.pincode;
             } catch(e) {}
             if (!user.phone) user.phone = localStorage.getItem('seasalt_phone') || '';
+        }
+        // Load address from localStorage if not in user object
+        if (!user.address) {
+            try {
+                var savedUser = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
+                if (savedUser.address) user.address = savedUser.address;
+                if (savedUser.pincode) user.pincode = savedUser.pincode;
+            } catch(e) {}
+            if (!user.address) user.address = localStorage.getItem('seasalt_address') || '';
+            if (!user.pincode) user.pincode = localStorage.getItem('seasalt_pincode') || '';
         }
         // Clean phone display (remove +91 for input field)
         var displayPhone = (user.phone || '').replace(/^\+91/, '');
@@ -185,14 +378,37 @@ const Cart = (function() {
             
             '<div class="p-4 space-y-5">' +
             
-            // 1. DELIVERY ADDRESS (FIRST - most important, immediately visible)
+            // 1. DELIVERY ADDRESS
             '<div>' +
             '<h4 class="font-semibold text-gray-800 mb-3">\uD83D\uDCCD Delivery Details</h4>' +
             '<div class="space-y-3">' +
             '<input type="text" id="checkout-name" placeholder="Full Name *" value="' + (user.name || '') + '" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800">' +
             '<input type="tel" id="checkout-phone" placeholder="Phone Number *" value="' + displayPhone + '" maxlength="10" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800">' +
-            '<textarea id="checkout-address" placeholder="Full Address (House No, Street, Area) *" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 resize-none text-gray-800"></textarea>' +
-            '<input type="text" id="checkout-pincode" placeholder="Pincode *" maxlength="6" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800">' +
+            
+            // Pincode with auto-lookup indicator
+            '<div class="relative">' +
+            '<input type="text" id="checkout-pincode" placeholder="Pincode *" value="' + (user.pincode || '') + '" maxlength="6" inputmode="numeric" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800 pr-10">' +
+            '<span id="pincode-status" class="absolute right-3 top-1/2 -translate-y-1/2 text-sm"></span>' +
+            '</div>' +
+            
+            // City & State (auto-filled from pincode)
+            '<div class="grid grid-cols-2 gap-3">' +
+            '<input type="text" id="checkout-city" placeholder="City *" value="' + (user.city || '') + '" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800">' +
+            '<input type="text" id="checkout-state" placeholder="State *" value="' + (user.state || '') + '" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800">' +
+            '</div>' +
+            
+            // Area/Post Office dropdown (populated from pincode)
+            '<div id="area-dropdown-wrap" style="display:none;">' +
+            '<select id="checkout-area" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800 bg-white">' +
+            '<option value="">Select Area / Post Office</option>' +
+            '</select></div>' +
+            
+            // Full address with Google Places Autocomplete
+            '<div class="relative">' +
+            '<textarea id="checkout-address" placeholder="Start typing your address... (House No, Street, Landmark) *" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 resize-none text-gray-800" autocomplete="off">' + (user.address || '') + '</textarea>' +
+            '<div id="places-suggestions" class="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto" style="display:none;"></div>' +
+            '</div>' +
+            
             '</div></div>' +
             
             // 2. WALLET (if available)
@@ -260,8 +476,80 @@ const Cart = (function() {
         var phoneInput = modal.querySelector('#checkout-phone');
         if (phoneInput) phoneInput.oninput = function(e) { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10); };
 
+        // ── GOOGLE PLACES AUTOCOMPLETE ──
+        initPlacesAutocomplete(modal);
+
         modal._orderData = { subtotal: cart.subtotal, deliveryCharge: deliveryCharge, walletDiscount: walletDiscount, total: finalTotal, useWallet: walletChecked && walletDiscount > 0 };
         modal.querySelector('#pay-now-btn').onclick = function() { processPayment(modal); };
+        
+        // ── AUTO-POPULATE from Supabase (last order's address) ──
+        // Only fetch if address or pincode is empty
+        var addrField = modal.querySelector('#checkout-address');
+        var pinField = modal.querySelector('#checkout-pincode');
+        var nameField = modal.querySelector('#checkout-name');
+        if (addrField && !addrField.value.trim()) {
+            var userPhone = displayPhone || (user.phone || '').replace(/^\+91/, '');
+            if (userPhone && userPhone.length >= 10) {
+                try {
+                    // Fetch last order for this phone from Supabase
+                    var phoneVariants = [userPhone, '+91' + userPhone, '91' + userPhone];
+                    var supaUrl = 'https://yosjbsncvghpscsrvxds.supabase.co';
+                    var supaKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
+                    
+                    // Try each phone variant
+                    (async function() {
+                        for (var v = 0; v < phoneVariants.length; v++) {
+                            try {
+                                var res = await fetch(supaUrl + '/rest/v1/orders?customer_phone=eq.' + encodeURIComponent(phoneVariants[v]) + '&order=created_at.desc&limit=1', {
+                                    headers: { 'apikey': supaKey, 'Authorization': 'Bearer ' + supaKey }
+                                });
+                                var orders = await res.json();
+                                if (orders && orders.length > 0) {
+                                    var lastOrder = orders[0];
+                                    var addr = lastOrder.customer_address || lastOrder.shipping_address || '';
+                                    var pin = lastOrder.customer_pincode || lastOrder.pincode || '';
+                                    var cname = lastOrder.customer_name || '';
+                                    
+                                    // Also try parsing from a JSON address field
+                                    if (!addr && lastOrder.address) {
+                                        try {
+                                            var addrObj = typeof lastOrder.address === 'string' ? JSON.parse(lastOrder.address) : lastOrder.address;
+                                            addr = addrObj.address || addrObj.street || addrObj.full_address || '';
+                                            pin = pin || addrObj.pincode || addrObj.zip || '';
+                                        } catch(pe) { addr = lastOrder.address; }
+                                    }
+                                    
+                                    // Fill empty fields
+                                    if (addr && addrField && !addrField.value.trim()) {
+                                        addrField.value = addr;
+                                        console.log('[Cart] Auto-filled address from last order');
+                                    }
+                                    if (pin && pinField && !pinField.value.trim()) {
+                                        pinField.value = pin;
+                                        console.log('[Cart] Auto-filled pincode from last order:', pin);
+                                    }
+                                    if (cname && nameField && !nameField.value.trim()) {
+                                        nameField.value = cname;
+                                    }
+                                    
+                                    // Save to localStorage for future use
+                                    if (addr) localStorage.setItem('seasalt_address', addr);
+                                    if (pin) localStorage.setItem('seasalt_pincode', pin);
+                                    try {
+                                        var su = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
+                                        if (addr) su.address = addr;
+                                        if (pin) su.pincode = pin;
+                                        localStorage.setItem('seasalt_user', JSON.stringify(su));
+                                    } catch(se) {}
+                                    
+                                    break; // Found an order, stop searching
+                                }
+                            } catch(fe) { console.warn('[Cart] Supabase address fetch error:', fe); }
+                        }
+                    })();
+                } catch(e) { console.warn('[Cart] Address auto-fill error:', e); }
+            }
+        }
         
         // Auto-focus first empty field
         setTimeout(function() {
@@ -282,6 +570,8 @@ const Cart = (function() {
         var phone = modal.querySelector('#checkout-phone').value.trim();
         var address = modal.querySelector('#checkout-address').value.trim();
         var pincode = modal.querySelector('#checkout-pincode').value.trim();
+        var city = modal.querySelector('#checkout-city') ? modal.querySelector('#checkout-city').value.trim() : '';
+        var state = modal.querySelector('#checkout-state') ? modal.querySelector('#checkout-state').value.trim() : '';
 
         if (!name || !phone || !address || !pincode) { if (typeof UI !== 'undefined') UI.showToast('Please fill all fields', 'error'); return; }
         if (phone.length < 10) { if (typeof UI !== 'undefined') UI.showToast('Enter valid phone', 'error'); return; }
@@ -291,19 +581,26 @@ const Cart = (function() {
         payBtn.disabled = true;
         payBtn.innerHTML = '<span class="animate-pulse">Processing...</span>';
 
-        // Save user info from checkout form to localStorage (for profile page)
+        // Save user info from checkout form to localStorage (for profile page + auto-fill)
         try {
             var existingUser = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
             existingUser.name = name;
+            existingUser.address = address;
+            existingUser.pincode = pincode;
+            existingUser.city = city;
+            existingUser.state = state;
             if (phone) {
                 var formattedPhone = phone.startsWith('+') ? phone : '+91' + phone.replace(/^0+/, '');
                 existingUser.phone = formattedPhone;
             }
             localStorage.setItem('seasalt_user', JSON.stringify(existingUser));
+            // Also save address separately for quick access
+            localStorage.setItem('seasalt_address', address);
+            localStorage.setItem('seasalt_pincode', pincode);
             if (phone && !localStorage.getItem('seasalt_phone')) {
                 localStorage.setItem('seasalt_phone', phone.startsWith('+') ? phone : '+91' + phone.replace(/^0+/, ''));
             }
-            console.log('[Cart] User info saved from checkout:', name, phone);
+            console.log('[Cart] User info saved from checkout:', name, phone, address, pincode);
         } catch(e) {}
 
         var cart = typeof Store !== 'undefined' ? Store.getCart() : { items: [] };
@@ -314,7 +611,7 @@ const Cart = (function() {
             orderId: orderId, 
             status: 'pending', 
             createdAt: new Date().toISOString(), 
-            customer: { name: name, phone: phone, address: address, pincode: pincode }, 
+            customer: { name: name, phone: phone, address: address, pincode: pincode, city: city, state: state }, 
             items: cart.items,
             subtotal: orderCalc.subtotal,
             deliveryCharge: orderCalc.deliveryCharge,
