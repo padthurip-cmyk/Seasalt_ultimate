@@ -692,13 +692,14 @@ const App = (function() {
             localStorage.removeItem('seasalt_user_phone');
             localStorage.removeItem('seasalt_spin_phone');
             localStorage.removeItem('seasalt_spin_done');
+            if (typeof SeaSaltAuth !== 'undefined') SeaSaltAuth.logout();
             if (typeof Store !== 'undefined' && Store.logout) Store.logout(); 
             closeModal(); 
             UI.showToast('Logged out', 'success'); 
         });
         
         var loginBtn = modal.querySelector('#login-btn');
-        if (loginBtn) loginBtn.addEventListener('click', function() { closeModal(); if (typeof SpinWheel !== 'undefined') SpinWheel.show(); });
+        if (loginBtn) loginBtn.addEventListener('click', function() { closeModal(); if (typeof SeaSaltAuth !== 'undefined') { SeaSaltAuth.showLogin(); } else if (typeof SpinWheel !== 'undefined') { SpinWheel.show(); } });
     }
     
     function setupScrollBehavior() {
