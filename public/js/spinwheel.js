@@ -1,12 +1,8 @@
 /**
- * SeaSalt Pickles - Spin Wheel v15
+ * SeaSalt Pickles - Spin Wheel v14
  * =================================
- * Based on v14 (working) - ONLY changes:
- *   1. Pickle theme colors on wheel segments
- *   2. Updated prize odds (₹99 ~91%, ₹199 5%, ₹299 2%, ₹399 1%, ₹499 0.67%, ₹599 0.5%)
- *   3. Phone captured IMMEDIATELY on Send OTP click
- *   4. Supabase wallet sync for admin credits
- *   5. 48-hour wallet expiry (unchanged)
+ * KEY FIX: Saves wallet to 'seasalt_spin_wallet' (not 'seasalt_wallet')
+ * This avoids conflict with store.js which uses 'seasalt_wallet'
  * 
  * TEST OTP: 123456
  */
@@ -14,7 +10,7 @@
 (function() {
     'use strict';
     
-    console.log('[SpinWheel] v15 loaded');
+    console.log('[SpinWheel] v14 loaded');
     
     var SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
     var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
@@ -36,21 +32,21 @@
     var wonAmount = 0;
     
     var SEGMENTS = [
-        { label: '₹99', value: 99, color: '#D4451A' },
-        { label: '₹199', value: 199, color: '#166534' },
-        { label: '₹299', value: 299, color: '#DC2626' },
-        { label: '₹399', value: 399, color: '#16A34A' },
-        { label: '₹499', value: 499, color: '#EA580C' },
-        { label: '₹599', value: 599, color: '#F59E0B' }
+        { label: '₹99', value: 99, color: '#10B981' },
+        { label: '₹199', value: 199, color: '#FBBF24' },
+        { label: '₹399', value: 399, color: '#8B5CF6' },
+        { label: '₹199', value: 199, color: '#34D399' },
+        { label: '₹599', value: 599, color: '#F87171' },
+        { label: '₹199', value: 199, color: '#FB923C' },
+        { label: '₹99', value: 99, color: '#60A5FA' },
+        { label: '₹199', value: 199, color: '#4ADE80' }
     ];
     
     var PRIZES = [
-        { value: 99, weight: 9083, segments: [0] },
-        { value: 199, weight: 500, segments: [1] },
-        { value: 299, weight: 200, segments: [2] },
-        { value: 399, weight: 100, segments: [3] },
-        { value: 499, weight: 67, segments: [4] },
-        { value: 599, weight: 50, segments: [5] }
+        { value: 99, weight: 20, segments: [0, 6] },
+        { value: 199, weight: 50, segments: [1, 3, 5, 7] },
+        { value: 399, weight: 20, segments: [2] },
+        { value: 599, weight: 10, segments: [4] }
     ];
     
     var STYLES = '.sw-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;visibility:hidden;transition:all 0.3s ease}.sw-overlay.active{opacity:1;visibility:visible}.sw-modal{background:linear-gradient(145deg,#EA580C 0%,#DC2626 100%);border-radius:24px;width:100%;max-width:360px;max-height:90vh;overflow-y:auto;position:relative;transform:scale(0.9);transition:transform 0.3s ease;box-shadow:0 20px 60px rgba(0,0,0,0.4)}.sw-overlay.active .sw-modal{transform:scale(1)}.sw-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.2);border:none;color:white;font-size:18px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center}.sw-header{text-align:center;padding:28px 20px 16px}.sw-badge{display:inline-block;background:#F59E0B;color:white;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:700;margin-bottom:10px;text-transform:uppercase}.sw-title{font-size:26px;font-weight:800;color:white;margin:0 0 6px 0}.sw-subtitle{font-size:14px;color:rgba(255,255,255,0.9);margin:0}.sw-content{padding:0 24px 28px}.sw-hidden{display:none!important}.sw-wheel-section{display:flex;flex-direction:column;align-items:center;gap:20px}.sw-wheel-wrap{position:relative;width:280px;height:280px}.sw-wheel-img{width:100%;height:100%;transition:transform 4s cubic-bezier(0.17,0.67,0.12,0.99)}.sw-pointer{position:absolute;top:-5px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:18px solid transparent;border-right:18px solid transparent;border-top:30px solid white;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.3));z-index:10}.sw-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;background:linear-gradient(180deg,#fff,#f0f0f0);border-radius:50%;border:4px solid #e5e7eb;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 15px rgba(0,0,0,0.2);z-index:5}.sw-btn-spin{padding:16px 40px;background:linear-gradient(135deg,#F97316,#EA580C);color:white;border:none;border-radius:14px;font-size:18px;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(249,115,22,0.5);text-transform:uppercase;transition:transform 0.2s}.sw-btn-spin:disabled{opacity:0.7;cursor:not-allowed}.sw-claim{display:flex;flex-direction:column;gap:12px}.sw-won-box{background:linear-gradient(135deg,#10B981,#059669);border-radius:16px;padding:20px;text-align:center;margin-bottom:8px}.sw-won-label{font-size:14px;color:rgba(255,255,255,0.9)}.sw-won-amount{font-size:48px;font-weight:900;color:white}.sw-won-note{font-size:12px;color:rgba(255,255,255,0.8);margin-top:4px}.sw-input-group{display:flex;flex-direction:column;gap:4px}.sw-label{font-size:13px;font-weight:600;color:rgba(255,255,255,0.9)}.sw-select,.sw-input{width:100%;padding:14px 16px;border:none;border-radius:12px;background:white;font-size:16px;font-weight:500;color:#333;outline:none;box-sizing:border-box}.sw-phone-row{display:flex;gap:8px}.sw-phone-code{width:85px;flex-shrink:0;text-align:center;font-weight:700;background:#f3f4f6}.sw-btn{width:100%;padding:16px;border:none;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;transition:transform 0.2s,opacity 0.2s}.sw-btn:disabled{opacity:0.6;cursor:not-allowed}.sw-btn-orange{background:linear-gradient(135deg,#F59E0B,#D97706);color:white;box-shadow:0 4px 15px rgba(245,158,11,0.4)}.sw-btn-green{background:linear-gradient(135deg,#10B981,#059669);color:white;box-shadow:0 4px 15px rgba(16,185,129,0.4)}.sw-helper{text-align:center;color:rgba(255,255,255,0.8);font-size:13px;margin-top:4px}.sw-demo-note{background:rgba(251,191,36,0.2);border:1px solid rgba(251,191,36,0.5);border-radius:8px;padding:10px;text-align:center;color:#FCD34D;font-size:13px;font-weight:600}.sw-error{background:#FEE2E2;color:#DC2626;padding:10px;border-radius:8px;font-size:13px;text-align:center}.sw-otp{display:flex;flex-direction:column;align-items:center;gap:16px}.sw-otp-label{color:white;font-size:14px;text-align:center}.sw-otp-phone{color:#FCD34D;font-weight:700}.sw-otp-boxes{display:flex;gap:8px;justify-content:center}.sw-otp-input{width:46px;height:56px;border:none;border-radius:10px;background:white;font-size:24px;font-weight:700;text-align:center;color:#333;outline:none}.sw-resend{color:rgba(255,255,255,0.8);font-size:13px;text-align:center}.sw-resend-link{color:#FCD34D;cursor:pointer;font-weight:600;background:none;border:none}.sw-resend-link:disabled{color:rgba(255,255,255,0.5);cursor:not-allowed}.sw-change-link{color:rgba(255,255,255,0.7);font-size:13px;cursor:pointer;background:none;border:none;text-decoration:underline;margin-top:8px}.sw-result{text-align:center;padding:20px 0}.sw-result-icon{font-size:70px;margin-bottom:16px}.sw-result-title{font-size:24px;font-weight:800;color:white;margin:0 0 8px 0}.sw-result-text{font-size:15px;color:rgba(255,255,255,0.9);margin-bottom:16px}.sw-timer-box{background:rgba(0,0,0,0.25);border-radius:12px;padding:14px;margin:16px 0}.sw-timer-label{font-size:12px;color:rgba(255,255,255,0.8);margin-bottom:4px}.sw-timer-value{font-size:28px;font-weight:800;color:#FCD34D;font-family:monospace}.sw-btn-continue{padding:14px 36px;background:white;color:#EA580C;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;width:100%}@media(max-width:380px){.sw-modal{max-width:340px}.sw-wheel-wrap{width:250px;height:250px}.sw-otp-input{width:40px;height:50px;font-size:20px}}';
@@ -219,20 +215,6 @@
         var phone = document.getElementById('sw-phone').value;
         userPhone = selectedCountryCode + phone;
         
-        // *** CAPTURE PHONE IMMEDIATELY (before OTP verification) ***
-        localStorage.setItem('seasalt_phone', userPhone);
-        localStorage.setItem('seasalt_user_phone', userPhone);
-        try {
-            var existingUser = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
-            existingUser.phone = userPhone;
-            existingUser.name = userName;
-            existingUser.country = userCountry;
-            localStorage.setItem('seasalt_user', JSON.stringify(existingUser));
-        } catch (e) {
-            localStorage.setItem('seasalt_user', JSON.stringify({ phone: userPhone, name: userName, country: userCountry }));
-        }
-        console.log('[SpinWheel] Phone captured IMMEDIATELY:', userPhone);
-        
         var btn = document.getElementById('sw-send-otp');
         btn.disabled = true;
         btn.textContent = 'Checking...';
@@ -349,14 +331,11 @@
         console.log('[SpinWheel] Saving wallet with amount:', wonAmount);
         
         var now = new Date();
-        var expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000); // 48 hours
+        var expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000);
         
-        // Save user data to ALL keys (for analytics + wallet sync)
+        // Save user data
         var userData = { name: userName, phone: userPhone, country: userCountry };
         localStorage.setItem('seasalt_user', JSON.stringify(userData));
-        localStorage.setItem('seasalt_phone', userPhone);
-        localStorage.setItem('seasalt_user_phone', userPhone);
-        localStorage.setItem('seasalt_spin_phone', userPhone);
         
         // ═══════════════════════════════════════════════════════════════
         // KEY FIX: Save to 'seasalt_spin_wallet' (NOT 'seasalt_wallet')
@@ -408,36 +387,12 @@
         
         // Update UI
         if (typeof UI !== 'undefined') {
-            console.log('[SpinWheel] Updating UI wallet display...');
-            try {
-                var wallet = UI.getSpinWallet ? UI.getSpinWallet() : null;
-                if (wallet) {
-                    UI.updateWalletDisplay(wallet);
-                }
-                UI.updateCartUI();
-                if (typeof UI.startWalletTimer === 'function') {
-                    UI.startWalletTimer();
-                }
-            } catch (e) {
-                console.warn('[SpinWheel] UI update error:', e);
+            console.log('[SpinWheel] Updating UI...');
+            UI.updateCartUI();
+            if (typeof UI.startWalletTimer === 'function') {
+                UI.startWalletTimer();
             }
         }
-        
-        // Direct DOM fallback - ensure wallet shows even if UI module has issues
-        try {
-            var walletBtn = document.getElementById('wallet-btn');
-            var walletBalance = document.getElementById('wallet-balance');
-            if (walletBtn && walletBalance) {
-                walletBtn.classList.add('has-timer');
-                var timeLeft = expiresAt - new Date();
-                var h = Math.floor(timeLeft / 3600000);
-                var m = Math.floor((timeLeft % 3600000) / 60000);
-                var s = Math.floor((timeLeft % 60000) / 1000);
-                var timeStr = h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-                walletBalance.innerHTML = '<span class="wallet-amount">₹' + wonAmount + '</span><span class="wallet-timer">⏱ ' + timeStr + '</span>';
-                console.log('[SpinWheel] Direct DOM wallet update done: ₹' + wonAmount);
-            }
-        } catch (e) {}
         
         // Dispatch event
         window.dispatchEvent(new CustomEvent('walletUpdated', {
@@ -447,58 +402,12 @@
         // Close modal and show toast
         hide();
         toast('🎊 ₹' + wonAmount + ' added to wallet! Use within 48 hours.', 'success');
-        
-        // Retry UI update after modal closes (elements may be more accessible)
-        setTimeout(function() {
-            if (typeof UI !== 'undefined') {
-                try {
-                    var wallet = UI.getSpinWallet ? UI.getSpinWallet() : null;
-                    if (wallet) {
-                        UI.updateWalletDisplay(wallet);
-                        UI.updateCartUI();
-                        if (typeof UI.startWalletTimer === 'function') UI.startWalletTimer();
-                    }
-                } catch (e) {}
-            }
-            
-            // Backup: start own countdown timer if UI timer isn't running
-            startBackupWalletTimer(expiresAt);
-        }, 600);
-    }
-    
-    // Backup wallet timer - updates DOM directly every second
-    var backupTimerInterval = null;
-    function startBackupWalletTimer(expiresAt) {
-        if (backupTimerInterval) clearInterval(backupTimerInterval);
-        
-        backupTimerInterval = setInterval(function() {
-            var walletBalance = document.getElementById('wallet-balance');
-            if (!walletBalance) return;
-            
-            var timeLeft = new Date(expiresAt) - new Date();
-            if (timeLeft <= 0) {
-                clearInterval(backupTimerInterval);
-                localStorage.removeItem(SPIN_WALLET_KEY);
-                var walletBtn = document.getElementById('wallet-btn');
-                if (walletBtn) walletBtn.classList.remove('has-timer');
-                walletBalance.textContent = '₹0';
-                return;
-            }
-            
-            // Only update if UI.startWalletTimer hasn't taken over
-            var timerEl = walletBalance.querySelector('.wallet-timer');
-            if (timerEl) {
-                var h = Math.floor(timeLeft / 3600000);
-                var m = Math.floor((timeLeft % 3600000) / 60000);
-                var s = Math.floor((timeLeft % 60000) / 1000);
-                timerEl.textContent = '⏱ ' + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-            }
-        }, 1000);
     }
     
     function shouldShow() {
-        if (localStorage.getItem('seasalt_spin_done')) return false;
-        return true;
+        // SpinWheel no longer auto-pops. Login is handled by Firebase OTP.
+        // SpinWheel can still be shown manually via SpinWheel.show()
+        return false;
     }
     
     function show() {
@@ -522,15 +431,7 @@
     }
     
     function init() {
-        console.log('[SpinWheel] v15 Initializing...');
-        
-        // Inject wallet timer CSS if not already present (backup for UI module)
-        if (!document.getElementById('wallet-timer-css')) {
-            var style = document.createElement('style');
-            style.id = 'wallet-timer-css';
-            style.textContent = '#wallet-btn.has-timer{background:linear-gradient(135deg,#f97316 0%,#ea580c 100%)!important;color:white!important;padding:6px 12px!important;animation:walletGlow 2s ease-in-out infinite}#wallet-btn.has-timer svg{stroke:white!important}#wallet-btn.has-timer #wallet-balance{display:flex!important;flex-direction:column!important;align-items:center!important;line-height:1.1!important;gap:1px!important}.wallet-amount{font-size:14px!important;font-weight:700!important;color:white!important}.wallet-timer{font-size:9px!important;font-weight:600!important;color:rgba(255,255,255,0.9)!important;font-family:monospace!important;background:rgba(0,0,0,0.2)!important;padding:1px 6px!important;border-radius:4px!important}@keyframes walletGlow{0%,100%{box-shadow:0 2px 10px rgba(249,115,22,0.4)}50%{box-shadow:0 2px 20px rgba(249,115,22,0.6)}}';
-            document.head.appendChild(style);
-        }
+        console.log('[SpinWheel] v14 Initializing...');
         
         // Check if user already has spin wallet
         var existingWallet = localStorage.getItem(SPIN_WALLET_KEY);
@@ -540,28 +441,13 @@
             try {
                 var data = JSON.parse(existingWallet);
                 if (data.amount > 0 && new Date(data.expiresAt) > new Date()) {
-                    console.log('[SpinWheel] Valid wallet found: ₹' + data.amount + ', updating UI');
+                    console.log('[SpinWheel] Valid wallet found, updating UI');
                     if (typeof UI !== 'undefined') {
                         UI.updateCartUI();
                         if (typeof UI.startWalletTimer === 'function') {
                             UI.startWalletTimer();
                         }
                     }
-                    // Direct DOM fallback
-                    try {
-                        var walletBtn = document.getElementById('wallet-btn');
-                        var walletBalance = document.getElementById('wallet-balance');
-                        if (walletBtn && walletBalance) {
-                            walletBtn.classList.add('has-timer');
-                            var timeLeft = new Date(data.expiresAt) - new Date();
-                            var h = Math.floor(timeLeft / 3600000);
-                            var m = Math.floor((timeLeft % 3600000) / 60000);
-                            var s = Math.floor((timeLeft % 60000) / 1000);
-                            walletBalance.innerHTML = '<span class="wallet-amount">₹' + data.amount + '</span><span class="wallet-timer">⏱ ' + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s + '</span>';
-                        }
-                    } catch (e2) {}
-                    // Start backup timer
-                    startBackupWalletTimer(new Date(data.expiresAt));
                 }
             } catch (e) {}
         }
