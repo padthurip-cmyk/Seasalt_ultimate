@@ -3,8 +3,7 @@
  * =================================
  * KEY FIX: Saves wallet to 'seasalt_spin_wallet' (not 'seasalt_wallet')
  * This avoids conflict with store.js which uses 'seasalt_wallet'
- * 
- * TEST OTP: 123456
+ * Uses Firebase Phone Auth for real OTP verification
  */
 
 (function() {
@@ -14,7 +13,7 @@
     
     var SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
     var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
-    var DEMO_OTP = '123456';
+
     
     // KEY: Use different localStorage key to avoid store.js conflict
     var SPIN_WALLET_KEY = 'seasalt_spin_wallet';
@@ -26,7 +25,6 @@
     var selectedCountryCode = '+91';
     var userCountry = 'India';
     var isSpinning = false;
-    var isDemoMode = true;
     var auth = null;
     var recaptchaVerifier = null;
     var wonAmount = 0;
@@ -49,7 +47,7 @@
         { value: 599, weight: 10, segments: [4] }
     ];
     
-    var STYLES = '.sw-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;visibility:hidden;transition:all 0.3s ease}.sw-overlay.active{opacity:1;visibility:visible}.sw-modal{background:linear-gradient(145deg,#EA580C 0%,#DC2626 100%);border-radius:24px;width:100%;max-width:360px;max-height:90vh;overflow-y:auto;position:relative;transform:scale(0.9);transition:transform 0.3s ease;box-shadow:0 20px 60px rgba(0,0,0,0.4)}.sw-overlay.active .sw-modal{transform:scale(1)}.sw-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.2);border:none;color:white;font-size:18px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center}.sw-header{text-align:center;padding:28px 20px 16px}.sw-badge{display:inline-block;background:#F59E0B;color:white;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:700;margin-bottom:10px;text-transform:uppercase}.sw-title{font-size:26px;font-weight:800;color:white;margin:0 0 6px 0}.sw-subtitle{font-size:14px;color:rgba(255,255,255,0.9);margin:0}.sw-content{padding:0 24px 28px}.sw-hidden{display:none!important}.sw-wheel-section{display:flex;flex-direction:column;align-items:center;gap:20px}.sw-wheel-wrap{position:relative;width:280px;height:280px}.sw-wheel-img{width:100%;height:100%;transition:transform 4s cubic-bezier(0.17,0.67,0.12,0.99)}.sw-pointer{position:absolute;top:-5px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:18px solid transparent;border-right:18px solid transparent;border-top:30px solid white;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.3));z-index:10}.sw-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;background:linear-gradient(180deg,#fff,#f0f0f0);border-radius:50%;border:4px solid #e5e7eb;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 15px rgba(0,0,0,0.2);z-index:5}.sw-btn-spin{padding:16px 40px;background:linear-gradient(135deg,#F97316,#EA580C);color:white;border:none;border-radius:14px;font-size:18px;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(249,115,22,0.5);text-transform:uppercase;transition:transform 0.2s}.sw-btn-spin:disabled{opacity:0.7;cursor:not-allowed}.sw-claim{display:flex;flex-direction:column;gap:12px}.sw-won-box{background:linear-gradient(135deg,#10B981,#059669);border-radius:16px;padding:20px;text-align:center;margin-bottom:8px}.sw-won-label{font-size:14px;color:rgba(255,255,255,0.9)}.sw-won-amount{font-size:48px;font-weight:900;color:white}.sw-won-note{font-size:12px;color:rgba(255,255,255,0.8);margin-top:4px}.sw-input-group{display:flex;flex-direction:column;gap:4px}.sw-label{font-size:13px;font-weight:600;color:rgba(255,255,255,0.9)}.sw-select,.sw-input{width:100%;padding:14px 16px;border:none;border-radius:12px;background:white;font-size:16px;font-weight:500;color:#333;outline:none;box-sizing:border-box}.sw-phone-row{display:flex;gap:8px}.sw-phone-code{width:85px;flex-shrink:0;text-align:center;font-weight:700;background:#f3f4f6}.sw-btn{width:100%;padding:16px;border:none;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;transition:transform 0.2s,opacity 0.2s}.sw-btn:disabled{opacity:0.6;cursor:not-allowed}.sw-btn-orange{background:linear-gradient(135deg,#F59E0B,#D97706);color:white;box-shadow:0 4px 15px rgba(245,158,11,0.4)}.sw-btn-green{background:linear-gradient(135deg,#10B981,#059669);color:white;box-shadow:0 4px 15px rgba(16,185,129,0.4)}.sw-helper{text-align:center;color:rgba(255,255,255,0.8);font-size:13px;margin-top:4px}.sw-demo-note{background:rgba(251,191,36,0.2);border:1px solid rgba(251,191,36,0.5);border-radius:8px;padding:10px;text-align:center;color:#FCD34D;font-size:13px;font-weight:600}.sw-error{background:#FEE2E2;color:#DC2626;padding:10px;border-radius:8px;font-size:13px;text-align:center}.sw-otp{display:flex;flex-direction:column;align-items:center;gap:16px}.sw-otp-label{color:white;font-size:14px;text-align:center}.sw-otp-phone{color:#FCD34D;font-weight:700}.sw-otp-boxes{display:flex;gap:8px;justify-content:center}.sw-otp-input{width:46px;height:56px;border:none;border-radius:10px;background:white;font-size:24px;font-weight:700;text-align:center;color:#333;outline:none}.sw-resend{color:rgba(255,255,255,0.8);font-size:13px;text-align:center}.sw-resend-link{color:#FCD34D;cursor:pointer;font-weight:600;background:none;border:none}.sw-resend-link:disabled{color:rgba(255,255,255,0.5);cursor:not-allowed}.sw-change-link{color:rgba(255,255,255,0.7);font-size:13px;cursor:pointer;background:none;border:none;text-decoration:underline;margin-top:8px}.sw-result{text-align:center;padding:20px 0}.sw-result-icon{font-size:70px;margin-bottom:16px}.sw-result-title{font-size:24px;font-weight:800;color:white;margin:0 0 8px 0}.sw-result-text{font-size:15px;color:rgba(255,255,255,0.9);margin-bottom:16px}.sw-timer-box{background:rgba(0,0,0,0.25);border-radius:12px;padding:14px;margin:16px 0}.sw-timer-label{font-size:12px;color:rgba(255,255,255,0.8);margin-bottom:4px}.sw-timer-value{font-size:28px;font-weight:800;color:#FCD34D;font-family:monospace}.sw-btn-continue{padding:14px 36px;background:white;color:#EA580C;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;width:100%}@media(max-width:380px){.sw-modal{max-width:340px}.sw-wheel-wrap{width:250px;height:250px}.sw-otp-input{width:40px;height:50px;font-size:20px}}';
+    var STYLES = '.sw-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;visibility:hidden;transition:all 0.3s ease}.sw-overlay.active{opacity:1;visibility:visible}.sw-modal{background:linear-gradient(145deg,#EA580C 0%,#DC2626 100%);border-radius:24px;width:100%;max-width:360px;max-height:90vh;overflow-y:auto;position:relative;transform:scale(0.9);transition:transform 0.3s ease;box-shadow:0 20px 60px rgba(0,0,0,0.4)}.sw-overlay.active .sw-modal{transform:scale(1)}.sw-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.2);border:none;color:white;font-size:18px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center}.sw-header{text-align:center;padding:28px 20px 16px}.sw-badge{display:inline-block;background:#F59E0B;color:white;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:700;margin-bottom:10px;text-transform:uppercase}.sw-title{font-size:26px;font-weight:800;color:white;margin:0 0 6px 0}.sw-subtitle{font-size:14px;color:rgba(255,255,255,0.9);margin:0}.sw-content{padding:0 24px 28px}.sw-hidden{display:none!important}.sw-wheel-section{display:flex;flex-direction:column;align-items:center;gap:20px}.sw-wheel-wrap{position:relative;width:280px;height:280px}.sw-wheel-img{width:100%;height:100%;transition:transform 4s cubic-bezier(0.17,0.67,0.12,0.99)}.sw-pointer{position:absolute;top:-5px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:18px solid transparent;border-right:18px solid transparent;border-top:30px solid white;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.3));z-index:10}.sw-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;background:linear-gradient(180deg,#fff,#f0f0f0);border-radius:50%;border:4px solid #e5e7eb;display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 15px rgba(0,0,0,0.2);z-index:5}.sw-btn-spin{padding:16px 40px;background:linear-gradient(135deg,#F97316,#EA580C);color:white;border:none;border-radius:14px;font-size:18px;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(249,115,22,0.5);text-transform:uppercase;transition:transform 0.2s}.sw-btn-spin:disabled{opacity:0.7;cursor:not-allowed}.sw-claim{display:flex;flex-direction:column;gap:12px}.sw-won-box{background:linear-gradient(135deg,#10B981,#059669);border-radius:16px;padding:20px;text-align:center;margin-bottom:8px}.sw-won-label{font-size:14px;color:rgba(255,255,255,0.9)}.sw-won-amount{font-size:48px;font-weight:900;color:white}.sw-won-note{font-size:12px;color:rgba(255,255,255,0.8);margin-top:4px}.sw-input-group{display:flex;flex-direction:column;gap:4px}.sw-label{font-size:13px;font-weight:600;color:rgba(255,255,255,0.9)}.sw-select,.sw-input{width:100%;padding:14px 16px;border:none;border-radius:12px;background:white;font-size:16px;font-weight:500;color:#333;outline:none;box-sizing:border-box}.sw-phone-row{display:flex;gap:8px}.sw-phone-code{width:85px;flex-shrink:0;text-align:center;font-weight:700;background:#f3f4f6}.sw-btn{width:100%;padding:16px;border:none;border-radius:12px;font-size:17px;font-weight:700;cursor:pointer;transition:transform 0.2s,opacity 0.2s}.sw-btn:disabled{opacity:0.6;cursor:not-allowed}.sw-btn-orange{background:linear-gradient(135deg,#F59E0B,#D97706);color:white;box-shadow:0 4px 15px rgba(245,158,11,0.4)}.sw-btn-green{background:linear-gradient(135deg,#10B981,#059669);color:white;box-shadow:0 4px 15px rgba(16,185,129,0.4)}.sw-helper{text-align:center;color:rgba(255,255,255,0.8);font-size:13px;margin-top:4px}.sw-hidden{background:rgba(251,191,36,0.2);border:1px solid rgba(251,191,36,0.5);border-radius:8px;padding:10px;text-align:center;color:#FCD34D;font-size:13px;font-weight:600}.sw-error{background:#FEE2E2;color:#DC2626;padding:10px;border-radius:8px;font-size:13px;text-align:center}.sw-otp{display:flex;flex-direction:column;align-items:center;gap:16px}.sw-otp-label{color:white;font-size:14px;text-align:center}.sw-otp-phone{color:#FCD34D;font-weight:700}.sw-otp-boxes{display:flex;gap:8px;justify-content:center}.sw-otp-input{width:46px;height:56px;border:none;border-radius:10px;background:white;font-size:24px;font-weight:700;text-align:center;color:#333;outline:none}.sw-resend{color:rgba(255,255,255,0.8);font-size:13px;text-align:center}.sw-resend-link{color:#FCD34D;cursor:pointer;font-weight:600;background:none;border:none}.sw-resend-link:disabled{color:rgba(255,255,255,0.5);cursor:not-allowed}.sw-change-link{color:rgba(255,255,255,0.7);font-size:13px;cursor:pointer;background:none;border:none;text-decoration:underline;margin-top:8px}.sw-result{text-align:center;padding:20px 0}.sw-result-icon{font-size:70px;margin-bottom:16px}.sw-result-title{font-size:24px;font-weight:800;color:white;margin:0 0 8px 0}.sw-result-text{font-size:15px;color:rgba(255,255,255,0.9);margin-bottom:16px}.sw-timer-box{background:rgba(0,0,0,0.25);border-radius:12px;padding:14px;margin:16px 0}.sw-timer-label{font-size:12px;color:rgba(255,255,255,0.8);margin-bottom:4px}.sw-timer-value{font-size:28px;font-weight:800;color:#FCD34D;font-family:monospace}.sw-btn-continue{padding:14px 36px;background:white;color:#EA580C;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;width:100%}@media(max-width:380px){.sw-modal{max-width:340px}.sw-wheel-wrap{width:250px;height:250px}.sw-otp-input{width:40px;height:50px;font-size:20px}}';
     
     function createWheelSVG() {
         var size = 280, cx = size/2, cy = size/2, r = size/2 - 10, n = SEGMENTS.length, angle = 360/n;
@@ -77,7 +75,7 @@
             document.head.appendChild(style);
         }
         
-        var html = '<div class="sw-overlay" id="sw-overlay"><div class="sw-modal"><button class="sw-close" id="sw-close">✕</button><div id="sw-step-wheel"><div class="sw-header"><div class="sw-badge">🎁 Limited Time Offer</div><h2 class="sw-title">🎉 Welcome Gift!</h2><p class="sw-subtitle">Spin to win wallet cashback up to ₹599</p></div><div class="sw-content"><div class="sw-wheel-section"><div class="sw-wheel-wrap"><div class="sw-pointer"></div>'+createWheelSVG()+'<div class="sw-center">🎰</div></div><button class="sw-btn-spin" id="sw-spin">🎲 SPIN NOW! 🎲</button></div></div></div><div id="sw-step-claim" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">🎉 You Won!</h2></div><div class="sw-content"><div class="sw-claim"><div class="sw-won-box"><div class="sw-won-label">Your Prize</div><div class="sw-won-amount" id="sw-claim-amount">₹199</div><div class="sw-won-note">Verify phone to claim your reward</div></div><div id="sw-claim-error" class="sw-error sw-hidden"></div><div class="sw-input-group"><div class="sw-label">Your Name</div><input type="text" class="sw-input" id="sw-name" placeholder="Enter your name"></div><div class="sw-input-group"><div class="sw-label">Country</div><select class="sw-select" id="sw-country"><option value="+91" data-country="India">🇮🇳 India (+91)</option><option value="+1" data-country="USA">🇺🇸 USA (+1)</option><option value="+44" data-country="UK">🇬🇧 UK (+44)</option><option value="+971" data-country="UAE">🇦🇪 UAE (+971)</option><option value="+65" data-country="Singapore">🇸🇬 Singapore (+65)</option><option value="+61" data-country="Australia">🇦🇺 Australia (+61)</option></select></div><div class="sw-input-group"><div class="sw-label">Phone Number</div><div class="sw-phone-row"><input type="text" class="sw-input sw-phone-code" id="sw-phone-code" value="+91" readonly><input type="tel" class="sw-input" id="sw-phone" placeholder="9876543210" maxlength="10"></div></div><button class="sw-btn sw-btn-orange" id="sw-send-otp" disabled>Send OTP to Claim ✨</button><p class="sw-helper">We\'ll send a verification code</p><div id="sw-recaptcha"></div></div></div></div><div id="sw-step-otp" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">Verify OTP</h2></div><div class="sw-content"><div class="sw-won-box" style="padding:14px;margin-bottom:16px;"><div class="sw-won-label">Claiming</div><div class="sw-won-amount" id="sw-otp-amount" style="font-size:36px;">₹199</div></div><div class="sw-otp"><p class="sw-otp-label">Enter 6-digit code sent to <span class="sw-otp-phone" id="sw-otp-phone"></span></p><div id="sw-demo-hint" class="sw-demo-note">🔑 Test OTP: <strong>123456</strong></div><div class="sw-otp-boxes"><input type="tel" class="sw-otp-input" maxlength="1" data-i="0"><input type="tel" class="sw-otp-input" maxlength="1" data-i="1"><input type="tel" class="sw-otp-input" maxlength="1" data-i="2"><input type="tel" class="sw-otp-input" maxlength="1" data-i="3"><input type="tel" class="sw-otp-input" maxlength="1" data-i="4"><input type="tel" class="sw-otp-input" maxlength="1" data-i="5"></div><button class="sw-btn sw-btn-green" id="sw-verify" disabled>Verify & Claim 🎉</button><p class="sw-resend">Didn\'t receive? <button class="sw-resend-link" id="sw-resend" disabled>Resend (<span id="sw-resend-timer">30</span>s)</button></p><button class="sw-change-link" id="sw-change-num">← Change number</button></div></div></div><div id="sw-step-already" class="sw-hidden"><div class="sw-content" style="padding-top:40px;"><div class="sw-result"><div class="sw-result-icon">⏳</div><h3 class="sw-result-title">Already Claimed!</h3><p class="sw-result-text">This number has already spun the wheel this month.</p><div class="sw-timer-box"><div class="sw-timer-label">Next spin available in</div><div class="sw-timer-value" id="sw-next-spin">-- days</div></div><button class="sw-btn-continue" id="sw-close-already">Continue Shopping →</button></div></div></div></div></div>';
+        var html = '<div class="sw-overlay" id="sw-overlay"><div class="sw-modal"><button class="sw-close" id="sw-close">✕</button><div id="sw-step-wheel"><div class="sw-header"><div class="sw-badge">🎁 Limited Time Offer</div><h2 class="sw-title">🎉 Welcome Gift!</h2><p class="sw-subtitle">Spin to win wallet cashback up to ₹599</p></div><div class="sw-content"><div class="sw-wheel-section"><div class="sw-wheel-wrap"><div class="sw-pointer"></div>'+createWheelSVG()+'<div class="sw-center">🎰</div></div><button class="sw-btn-spin" id="sw-spin">🎲 SPIN NOW! 🎲</button></div></div></div><div id="sw-step-claim" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">🎉 You Won!</h2></div><div class="sw-content"><div class="sw-claim"><div class="sw-won-box"><div class="sw-won-label">Your Prize</div><div class="sw-won-amount" id="sw-claim-amount">₹199</div><div class="sw-won-note">Verify phone to claim your reward</div></div><div id="sw-claim-error" class="sw-error sw-hidden"></div><div class="sw-input-group"><div class="sw-label">Your Name</div><input type="text" class="sw-input" id="sw-name" placeholder="Enter your name"></div><div class="sw-input-group"><div class="sw-label">Country</div><select class="sw-select" id="sw-country"><option value="+91" data-country="India">🇮🇳 India (+91)</option><option value="+1" data-country="USA">🇺🇸 USA (+1)</option><option value="+44" data-country="UK">🇬🇧 UK (+44)</option><option value="+971" data-country="UAE">🇦🇪 UAE (+971)</option><option value="+65" data-country="Singapore">🇸🇬 Singapore (+65)</option><option value="+61" data-country="Australia">🇦🇺 Australia (+61)</option></select></div><div class="sw-input-group"><div class="sw-label">Phone Number</div><div class="sw-phone-row"><input type="text" class="sw-input sw-phone-code" id="sw-phone-code" value="+91" readonly><input type="tel" class="sw-input" id="sw-phone" placeholder="9876543210" maxlength="10"></div></div><button class="sw-btn sw-btn-orange" id="sw-send-otp" disabled>Send OTP to Claim ✨</button><p class="sw-helper">We\'ll send a verification code</p><div id="sw-recaptcha"></div></div></div></div><div id="sw-step-otp" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">Verify OTP</h2></div><div class="sw-content"><div class="sw-won-box" style="padding:14px;margin-bottom:16px;"><div class="sw-won-label">Claiming</div><div class="sw-won-amount" id="sw-otp-amount" style="font-size:36px;">₹199</div></div><div class="sw-otp"><p class="sw-otp-label">Enter 6-digit code sent to <span class="sw-otp-phone" id="sw-otp-phone"></span></p><div id="sw-demo-hint" class="sw-hidden"></div><div class="sw-otp-boxes"><input type="tel" class="sw-otp-input" maxlength="1" data-i="0"><input type="tel" class="sw-otp-input" maxlength="1" data-i="1"><input type="tel" class="sw-otp-input" maxlength="1" data-i="2"><input type="tel" class="sw-otp-input" maxlength="1" data-i="3"><input type="tel" class="sw-otp-input" maxlength="1" data-i="4"><input type="tel" class="sw-otp-input" maxlength="1" data-i="5"></div><button class="sw-btn sw-btn-green" id="sw-verify" disabled>Verify & Claim 🎉</button><p class="sw-resend">Didn\'t receive? <button class="sw-resend-link" id="sw-resend" disabled>Resend (<span id="sw-resend-timer">30</span>s)</button></p><button class="sw-change-link" id="sw-change-num">← Change number</button></div></div></div><div id="sw-step-already" class="sw-hidden"><div class="sw-content" style="padding-top:40px;"><div class="sw-result"><div class="sw-result-icon">⏳</div><h3 class="sw-result-title">Already Claimed!</h3><p class="sw-result-text">This number has already spun the wheel this month.</p><div class="sw-timer-box"><div class="sw-timer-label">Next spin available in</div><div class="sw-timer-value" id="sw-next-spin">-- days</div></div><button class="sw-btn-continue" id="sw-close-already">Continue Shopping →</button></div></div></div></div></div>';
         
         document.body.insertAdjacentHTML('beforeend', html);
         modal = document.getElementById('sw-overlay');
@@ -87,7 +85,6 @@
     
     function initFirebase() {
         if (typeof firebase === 'undefined') {
-            isDemoMode = true;
             return;
         }
         try {
@@ -100,9 +97,11 @@
             }
             auth = firebase.auth();
             auth.languageCode = 'en';
-            isDemoMode = false;
+            // Sign out any existing session so OTP is always required
+            auth.signOut().catch(function() {});
+            console.log('[SpinWheel] Firebase auth ready');
         } catch (e) {
-            isDemoMode = true;
+            console.error('[SpinWheel] Firebase init error:', e);
         }
     }
     
@@ -227,26 +226,26 @@
             }
             
             btn.textContent = 'Sending OTP...';
-            document.getElementById('sw-demo-hint').classList.toggle('sw-hidden', !isDemoMode);
+            document.getElementById('sw-demo-hint').classList.add('sw-hidden');
             
-            if (isDemoMode) {
-                showOtpStep();
-                toast('Test mode: Use OTP 123456', 'info');
-            } else {
-                if (!recaptchaVerifier) {
-                    recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sw-recaptcha', { size: 'invisible' });
-                }
-                auth.signInWithPhoneNumber(userPhone, recaptchaVerifier).then(function(result) {
-                    confirmationResult = result;
-                    showOtpStep();
-                    toast('OTP sent!', 'success');
-                }).catch(function(err) {
-                    isDemoMode = true;
-                    document.getElementById('sw-demo-hint').classList.remove('sw-hidden');
-                    showOtpStep();
-                    toast('Using test OTP: 123456', 'info');
-                });
+            if (!recaptchaVerifier) {
+                recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sw-recaptcha', { size: 'invisible' });
             }
+            auth.signInWithPhoneNumber(userPhone, recaptchaVerifier).then(function(result) {
+                confirmationResult = result;
+                showOtpStep();
+                toast('OTP sent to ' + userPhone, 'success');
+            }).catch(function(err) {
+                console.error('[SpinWheel] OTP send error:', err);
+                var msg = 'Failed to send OTP. Please try again.';
+                if (err.code === 'auth/too-many-requests') msg = 'Too many attempts. Wait a few minutes.';
+                if (err.code === 'auth/invalid-phone-number') msg = 'Invalid phone number.';
+                toast(msg, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Send OTP to Claim ✨';
+                // Reset reCAPTCHA for retry
+                recaptchaVerifier = null;
+            });
         });
     }
     
@@ -293,25 +292,37 @@
         btn.disabled = true;
         btn.textContent = 'Verifying...';
         
-        if (isDemoMode) {
-            if (otp === DEMO_OTP) {
-                saveToWallet();
-            } else {
-                toast('Invalid OTP. Use 123456', 'error');
-                clearOtpInputs();
-                document.querySelector('.sw-otp-input').focus();
-                btn.textContent = 'Verify & Claim 🎉';
-            }
-        } else {
-            confirmationResult.confirm(otp).then(function() {
-                saveToWallet();
-            }).catch(function() {
-                toast('Invalid OTP', 'error');
-                clearOtpInputs();
-                document.querySelector('.sw-otp-input').focus();
-                btn.textContent = 'Verify & Claim 🎉';
-            });
+        if (!confirmationResult) {
+            toast('Session expired. Please try again.', 'error');
+            goToStep('claim');
+            btn.textContent = 'Verify & Claim 🎉';
+            return;
         }
+        
+        confirmationResult.confirm(otp).then(function(result) {
+            // Save Firebase user info to localStorage for account page
+            var firebaseUser = result.user;
+            var savedUser = {};
+            try { savedUser = JSON.parse(localStorage.getItem('seasalt_user') || '{}'); } catch(e) {}
+            savedUser.firebaseUid = firebaseUser.uid;
+            savedUser.phone = userPhone;
+            savedUser.name = userName;
+            localStorage.setItem('seasalt_user', JSON.stringify(savedUser));
+            localStorage.setItem('seasalt_phone', userPhone);
+            
+            // Sign out Firebase so OTP is always required next time
+            if (auth) auth.signOut().catch(function() {});
+            
+            saveToWallet();
+        }).catch(function(err) {
+            console.error('[SpinWheel] OTP verify error:', err);
+            var msg = 'Invalid OTP. Please try again.';
+            if (err.code === 'auth/code-expired') msg = 'OTP expired. Please request a new one.';
+            toast(msg, 'error');
+            clearOtpInputs();
+            document.querySelector('.sw-otp-input').focus();
+            btn.textContent = 'Verify & Claim 🎉';
+        });
     }
     
     function checkCanSpin(phone) {
@@ -405,9 +416,8 @@
     }
     
     function shouldShow() {
-        // SpinWheel no longer auto-pops. Login is handled by Firebase OTP.
-        // SpinWheel can still be shown manually via SpinWheel.show()
-        return false;
+        if (localStorage.getItem('seasalt_spin_done')) return false;
+        return true;
     }
     
     function show() {
