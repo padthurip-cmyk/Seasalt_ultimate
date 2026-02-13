@@ -1,9 +1,9 @@
 /**
- * SeaSalt Pickles - Spin Wheel v14
- * =================================
+ * SeaSalt Pickles - Spin Wheel v15 (Real Firebase OTP)
+ * =====================================================
  * KEY FIX: Saves wallet to 'seasalt_spin_wallet' (not 'seasalt_wallet')
- * This avoids conflict with store.js which uses 'seasalt_wallet'
- * Uses Firebase Phone Auth for real OTP verification
+ * FLOW: Spin wheel → Name + Phone + Real OTP → Reveal result → Add to wallet
+ * OTP: Real Firebase SMS to any country (no test/demo mode)
  */
 
 (function() {
@@ -13,7 +13,6 @@
     
     var SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
     var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
-
     
     // KEY: Use different localStorage key to avoid store.js conflict
     var SPIN_WALLET_KEY = 'seasalt_spin_wallet';
@@ -75,7 +74,7 @@
             document.head.appendChild(style);
         }
         
-        var html = '<div class="sw-overlay" id="sw-overlay"><div class="sw-modal"><button class="sw-close" id="sw-close">✕</button><div id="sw-step-wheel"><div class="sw-header"><div class="sw-badge">🎁 Limited Time Offer</div><h2 class="sw-title">🎉 Welcome Gift!</h2><p class="sw-subtitle">Spin to win wallet cashback up to ₹599</p></div><div class="sw-content"><div class="sw-wheel-section"><div class="sw-wheel-wrap"><div class="sw-pointer"></div>'+createWheelSVG()+'<div class="sw-center">🎰</div></div><button class="sw-btn-spin" id="sw-spin">🎲 SPIN NOW! 🎲</button></div></div></div><div id="sw-step-claim" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">🎉 You Won!</h2></div><div class="sw-content"><div class="sw-claim"><div class="sw-won-box"><div class="sw-won-label">Your Prize</div><div class="sw-won-amount" id="sw-claim-amount">₹199</div><div class="sw-won-note">Verify phone to claim your reward</div></div><div id="sw-claim-error" class="sw-error sw-hidden"></div><div class="sw-input-group"><div class="sw-label">Your Name</div><input type="text" class="sw-input" id="sw-name" placeholder="Enter your name"></div><div class="sw-input-group"><div class="sw-label">Country</div><select class="sw-select" id="sw-country"><option value="+91" data-country="India">🇮🇳 India (+91)</option><option value="+1" data-country="USA">🇺🇸 USA (+1)</option><option value="+44" data-country="UK">🇬🇧 UK (+44)</option><option value="+971" data-country="UAE">🇦🇪 UAE (+971)</option><option value="+65" data-country="Singapore">🇸🇬 Singapore (+65)</option><option value="+61" data-country="Australia">🇦🇺 Australia (+61)</option></select></div><div class="sw-input-group"><div class="sw-label">Phone Number</div><div class="sw-phone-row"><input type="text" class="sw-input sw-phone-code" id="sw-phone-code" value="+91" readonly><input type="tel" class="sw-input" id="sw-phone" placeholder="9876543210" maxlength="10"></div></div><button class="sw-btn sw-btn-orange" id="sw-send-otp" disabled>Send OTP to Claim ✨</button><p class="sw-helper">We\'ll send a verification code</p><div id="sw-recaptcha"></div></div></div></div><div id="sw-step-otp" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">Verify OTP</h2></div><div class="sw-content"><div class="sw-won-box" style="padding:14px;margin-bottom:16px;"><div class="sw-won-label">Claiming</div><div class="sw-won-amount" id="sw-otp-amount" style="font-size:36px;">₹199</div></div><div class="sw-otp"><p class="sw-otp-label">Enter 6-digit code sent to <span class="sw-otp-phone" id="sw-otp-phone"></span></p><div id="sw-demo-hint" class="sw-hidden"></div><div class="sw-otp-boxes"><input type="tel" class="sw-otp-input" maxlength="1" data-i="0"><input type="tel" class="sw-otp-input" maxlength="1" data-i="1"><input type="tel" class="sw-otp-input" maxlength="1" data-i="2"><input type="tel" class="sw-otp-input" maxlength="1" data-i="3"><input type="tel" class="sw-otp-input" maxlength="1" data-i="4"><input type="tel" class="sw-otp-input" maxlength="1" data-i="5"></div><button class="sw-btn sw-btn-green" id="sw-verify" disabled>Verify & Claim 🎉</button><p class="sw-resend">Didn\'t receive? <button class="sw-resend-link" id="sw-resend" disabled>Resend (<span id="sw-resend-timer">30</span>s)</button></p><button class="sw-change-link" id="sw-change-num">← Change number</button></div></div></div><div id="sw-step-already" class="sw-hidden"><div class="sw-content" style="padding-top:40px;"><div class="sw-result"><div class="sw-result-icon">⏳</div><h3 class="sw-result-title">Already Claimed!</h3><p class="sw-result-text">This number has already spun the wheel this month.</p><div class="sw-timer-box"><div class="sw-timer-label">Next spin available in</div><div class="sw-timer-value" id="sw-next-spin">-- days</div></div><button class="sw-btn-continue" id="sw-close-already">Continue Shopping →</button></div></div></div></div></div>';
+        var html = '<div class="sw-overlay" id="sw-overlay"><div class="sw-modal"><button class="sw-close" id="sw-close">✕</button><div id="sw-step-wheel"><div class="sw-header"><div class="sw-badge">🎁 Limited Time Offer</div><h2 class="sw-title">🎉 Welcome Gift!</h2><p class="sw-subtitle">Spin to win wallet cashback up to ₹599</p></div><div class="sw-content"><div class="sw-wheel-section"><div class="sw-wheel-wrap"><div class="sw-pointer"></div>'+createWheelSVG()+'<div class="sw-center">🎰</div></div><button class="sw-btn-spin" id="sw-spin">🎲 SPIN NOW! 🎲</button></div></div></div><div id="sw-step-claim" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">🎁 Claim Your Reward</h2></div><div class="sw-content"><div class="sw-claim"><div class="sw-won-box"><div class="sw-won-label">Verify to Reveal Prize</div><div class="sw-won-amount" id="sw-claim-amount">₹199</div><div class="sw-won-note">Verify phone to claim your reward</div></div><div id="sw-claim-error" class="sw-error sw-hidden"></div><div class="sw-input-group"><div class="sw-label">Your Name</div><input type="text" class="sw-input" id="sw-name" placeholder="Enter your name"></div><div class="sw-input-group"><div class="sw-label">Country</div><select class="sw-select" id="sw-country"><option value="+91" data-country="India">🇮🇳 India (+91)</option><option value="+1" data-country="USA">🇺🇸 USA (+1)</option><option value="+44" data-country="UK">🇬🇧 UK (+44)</option><option value="+971" data-country="UAE">🇦🇪 UAE (+971)</option><option value="+65" data-country="Singapore">🇸🇬 Singapore (+65)</option><option value="+61" data-country="Australia">🇦🇺 Australia (+61)</option></select></div><div class="sw-input-group"><div class="sw-label">Phone Number</div><div class="sw-phone-row"><input type="text" class="sw-input sw-phone-code" id="sw-phone-code" value="+91" readonly><input type="tel" class="sw-input" id="sw-phone" placeholder="9876543210" maxlength="10"></div></div><button class="sw-btn sw-btn-orange" id="sw-send-otp" disabled>Send OTP to Claim ✨</button><p class="sw-helper">We\'ll send a verification code</p><div id="sw-recaptcha"></div></div></div></div><div id="sw-step-otp" class="sw-hidden"><div class="sw-header" style="padding-bottom:10px;"><h2 class="sw-title">Verify OTP</h2></div><div class="sw-content"><div class="sw-won-box" style="padding:14px;margin-bottom:16px;"><div class="sw-won-label">Verifying for</div><div class="sw-won-amount" id="sw-otp-amount" style="font-size:36px;">₹199</div></div><div class="sw-otp"><p class="sw-otp-label">Enter 6-digit code sent to <span class="sw-otp-phone" id="sw-otp-phone"></span></p><div id="sw-demo-hint" class="sw-hidden"></div><div class="sw-otp-boxes"><input type="tel" class="sw-otp-input" maxlength="1" data-i="0"><input type="tel" class="sw-otp-input" maxlength="1" data-i="1"><input type="tel" class="sw-otp-input" maxlength="1" data-i="2"><input type="tel" class="sw-otp-input" maxlength="1" data-i="3"><input type="tel" class="sw-otp-input" maxlength="1" data-i="4"><input type="tel" class="sw-otp-input" maxlength="1" data-i="5"></div><button class="sw-btn sw-btn-green" id="sw-verify" disabled>Verify & Claim 🎉</button><p class="sw-resend">Didn\'t receive? <button class="sw-resend-link" id="sw-resend" disabled>Resend (<span id="sw-resend-timer">30</span>s)</button></p><button class="sw-change-link" id="sw-change-num">← Change number</button></div></div></div><div id="sw-step-already" class="sw-hidden"><div class="sw-content" style="padding-top:40px;"><div class="sw-result"><div class="sw-result-icon">⏳</div><h3 class="sw-result-title">Already Claimed!</h3><p class="sw-result-text">This number has already spun the wheel this month.</p><div class="sw-timer-box"><div class="sw-timer-label">Next spin available in</div><div class="sw-timer-value" id="sw-next-spin">-- days</div></div><button class="sw-btn-continue" id="sw-close-already">Continue Shopping →</button></div></div></div></div></div>';
         
         document.body.insertAdjacentHTML('beforeend', html);
         modal = document.getElementById('sw-overlay');
@@ -85,21 +84,24 @@
     
     function initFirebase() {
         if (typeof firebase === 'undefined') {
+            console.error('[SpinWheel] Firebase SDK not loaded!');
             return;
         }
         try {
             if (!firebase.apps.length) {
                 firebase.initializeApp({
-                    apiKey: "AIzaSyBxOXkOWqH_l4Moyp9CK5GKWeCDi9N3pWo",
+                    apiKey: "AIzaSyBxFGj5F3JQw9RMYvRUqV18LGoZ62ereEE",
                     authDomain: "seasaltpickles-c058e.firebaseapp.com",
-                    projectId: "seasaltpickles-c058e"
+                    projectId: "seasaltpickles-c058e",
+                    storageBucket: "seasaltpickles-c058e.firebasestorage.app",
+                    messagingSenderId: "110925953869",
+                    appId: "1:110925953869:web:b47246f06a91ce1bf35504"
                 });
             }
             auth = firebase.auth();
             auth.languageCode = 'en';
-            // Sign out any existing session so OTP is always required
             auth.signOut().catch(function() {});
-            console.log('[SpinWheel] Firebase auth ready');
+            console.log('[SpinWheel] Firebase auth ready (real OTP)');
         } catch (e) {
             console.error('[SpinWheel] Firebase init error:', e);
         }
@@ -201,11 +203,11 @@
         
         setTimeout(function() {
             isSpinning = false;
-            document.getElementById('sw-claim-amount').textContent = '₹' + wonAmount;
-            document.getElementById('sw-otp-amount').textContent = '₹' + wonAmount;
+            // DON'T reveal amount yet — go to name+phone step first
+            // Amount stays hidden until OTP is verified
             goToStep('claim');
             document.getElementById('sw-name').focus();
-            toast('🎉 You won ₹' + wonAmount + '!', 'success');
+            toast('Verify your phone to claim your reward!', 'info');
         }, 4200);
     }
     
@@ -226,11 +228,22 @@
             }
             
             btn.textContent = 'Sending OTP...';
-            document.getElementById('sw-demo-hint').classList.add('sw-hidden');
+            
+            // Always use real Firebase OTP
+            if (!auth) {
+                toast('Authentication not ready. Please refresh.', 'error');
+                btn.disabled = false;
+                btn.textContent = 'Send OTP to Claim ✨';
+                return;
+            }
             
             if (!recaptchaVerifier) {
-                recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sw-recaptcha', { size: 'invisible' });
+                recaptchaVerifier = new firebase.auth.RecaptchaVerifier('sw-recaptcha', { 
+                    size: 'invisible',
+                    callback: function() { console.log('[SpinWheel] reCAPTCHA solved'); }
+                });
             }
+            
             auth.signInWithPhoneNumber(userPhone, recaptchaVerifier).then(function(result) {
                 confirmationResult = result;
                 showOtpStep();
@@ -239,7 +252,8 @@
                 console.error('[SpinWheel] OTP send error:', err);
                 var msg = 'Failed to send OTP. Please try again.';
                 if (err.code === 'auth/too-many-requests') msg = 'Too many attempts. Wait a few minutes.';
-                if (err.code === 'auth/invalid-phone-number') msg = 'Invalid phone number.';
+                if (err.code === 'auth/invalid-phone-number') msg = 'Invalid phone number. Check country code.';
+                if (err.code === 'auth/captcha-check-failed') msg = 'Verification failed. Refresh the page.';
                 toast(msg, 'error');
                 btn.disabled = false;
                 btn.textContent = 'Send OTP to Claim ✨';
@@ -276,6 +290,10 @@
     }
     
     function handleResend() {
+        // Reset reCAPTCHA and resend OTP
+        recaptchaVerifier = null;
+        var container = document.getElementById('sw-recaptcha');
+        if (container) container.innerHTML = '';
         goToStep('claim');
         clearOtpInputs();
         document.getElementById('sw-send-otp').textContent = 'Send OTP to Claim ✨';
@@ -300,7 +318,7 @@
         }
         
         confirmationResult.confirm(otp).then(function(result) {
-            // Save Firebase user info to localStorage for account page
+            // OTP verified! Save Firebase user info
             var firebaseUser = result.user;
             var savedUser = {};
             try { savedUser = JSON.parse(localStorage.getItem('seasalt_user') || '{}'); } catch(e) {}
@@ -310,9 +328,11 @@
             localStorage.setItem('seasalt_user', JSON.stringify(savedUser));
             localStorage.setItem('seasalt_phone', userPhone);
             
-            // Sign out Firebase so OTP is always required next time
+            // Sign out Firebase (OTP always required next time)
             if (auth) auth.signOut().catch(function() {});
             
+            // NOW reveal the result and save to wallet
+            toast('🎉 You won ₹' + wonAmount + '!', 'success');
             saveToWallet();
         }).catch(function(err) {
             console.error('[SpinWheel] OTP verify error:', err);
@@ -321,6 +341,7 @@
             toast(msg, 'error');
             clearOtpInputs();
             document.querySelector('.sw-otp-input').focus();
+            btn.disabled = false;
             btn.textContent = 'Verify & Claim 🎉';
         });
     }
