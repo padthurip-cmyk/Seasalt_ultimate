@@ -12,7 +12,7 @@ const Cart = (function() {
     let checkoutInProgress = false;
     let deliveryChargesCache = [];
 
-    const RAZORPAY_KEY = 'rzp_test_SC97Hjqvf4LjoW';
+    const RAZORPAY_KEY = 'rzp_live_SG5C0aU9GncpVi';
     const SUPABASE_URL = 'https://yosjbsncvghpscsrvxds.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
     const SPIN_WALLET_KEY = 'seasalt_spin_wallet';
