@@ -405,6 +405,10 @@
             localStorage.setItem('seasalt_phone', userPhone);
             if (auth) auth.signOut().catch(function(){});
 
+            // Mark as done IMMEDIATELY — even before final spin animation
+            // This prevents re-show if user refreshes during the 4s spin animation
+            localStorage.setItem('seasalt_spin_done', 'true');
+
             // Now do the FINAL spin to the prize segment
             doFinalSpin();
         }).catch(function(err) {
@@ -455,11 +459,12 @@
     /* ═══════════ RESEND ═══════════ */
     function startResend() {
         var c = 30, btn = document.getElementById('sw-resend'), t = document.getElementById('sw-resend-timer');
+        if (!btn || !t) return;
         btn.disabled = true; t.textContent = c;
         if (resendInterval) clearInterval(resendInterval);
         resendInterval = setInterval(function() {
-            c--; t.textContent = c;
-            if (c <= 0) { clearInterval(resendInterval); btn.disabled = false; btn.innerHTML = 'Resend OTP'; }
+            c--; if (t) t.textContent = c;
+            if (c <= 0) { clearInterval(resendInterval); if (btn) { btn.disabled = false; btn.innerHTML = 'Resend OTP'; } }
         }, 1000);
     }
 
@@ -501,9 +506,33 @@
     }
 
     /* ═══════════ SHOW / HIDE ═══════════ */
-    function shouldShow(){return !localStorage.getItem('seasalt_spin_done');}
+    function shouldShow(){
+        // Don't show if user already completed a spin
+        if(localStorage.getItem('seasalt_spin_done')==='true') return false;
+        // Don't show if wallet exists (spin was completed)
+        if(localStorage.getItem(SPIN_WALLET_KEY)) return false;
+        // Don't show if user already has a phone saved (completed OTP flow)
+        if(localStorage.getItem('seasalt_phone')) return false;
+        // Don't show if user dismissed the wheel this session (respect their choice)
+        if(sessionStorage.getItem('seasalt_spin_dismissed')) return false;
+        // Don't show if user dismissed 3+ times total (stop annoying them permanently)
+        var dc = parseInt(localStorage.getItem('seasalt_spin_dismiss_count') || '0', 10);
+        if(dc >= 3){ localStorage.setItem('seasalt_spin_done', 'true'); return false; }
+        return true;
+    }
     function show(){if(!modal)createModal();modal.classList.add('active');document.body.style.overflow='hidden';}
-    function hide(){if(!modal)return;modal.classList.remove('active');document.body.style.overflow='';if(resendInterval)clearInterval(resendInterval);}
+    function hide(){
+        if(!modal)return;
+        modal.classList.remove('active');
+        document.body.style.overflow='';
+        if(resendInterval)clearInterval(resendInterval);
+        // Track dismissal so wheel doesn't re-pop on refresh
+        if(!localStorage.getItem('seasalt_spin_done')){
+            sessionStorage.setItem('seasalt_spin_dismissed', 'true');
+            var dc = parseInt(localStorage.getItem('seasalt_spin_dismiss_count') || '0', 10);
+            localStorage.setItem('seasalt_spin_dismiss_count', String(dc + 1));
+        }
+    }
     function toast(m,t){var e=document.createElement('div');e.style.cssText='position:fixed;bottom:100px;left:50%;transform:translateX(-50%);padding:12px 24px;border-radius:12px;color:#fff;font-weight:600;z-index:99999;max-width:90%;text-align:center;background:'+(t==='success'?'#10B981':t==='error'?'#EF4444':'#F59E0B');e.textContent=m;document.body.appendChild(e);setTimeout(function(){e.remove()},4e3);}
 
     /* ═══════════ INIT ═══════════ */
