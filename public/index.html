@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Caveat:wght@600;700&display=swap" rel="stylesheet">
     
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -74,41 +75,808 @@
     </script>
     
     <style>
-        /* Prevent layout shift */
-        html {
-            overflow-y: scroll;
-        }
-        body {
-            overflow-x: hidden;
-        }
-        
-        /* Simple fade for modals - no sliding */
-        .modal-fade-in {
-            animation: fadeIn 0.2s ease-out;
-        }
+        html { overflow-y: scroll; }
+        body { overflow-x: hidden; }
+        .modal-fade-in { animation: fadeIn 0.2s ease-out; }
     </style>
     
+
+    <!-- SeaSalt Animated Loader Styles -->
+    <style>
+      #loading-overlay {
+        position: fixed; inset: 0; z-index: 100; background: #fff;
+      }
+      #loading-overlay.done {
+        opacity: 0; pointer-events: none; transition: opacity 0.8s ease;
+      }
+  @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;500&family=Caveat:wght@600;700&display=swap');
+
+  :root {
+    --red: #D4291E;
+    --red-deep: #B51F15;
+    --bark: #3D2B1F;
+    --bark-light: #8C7668;
+  }
+
+
+  #loading-overlay #scene { position: fixed; inset: 0; z-index: 1; pointer-events: none; }
+
+  /* ═══ WATER ═══ */
+  #loading-overlay .water {
+    position: fixed; bottom: 0; left: 0; width: 100%; height: 140px;
+    z-index: 2; pointer-events: none; overflow: hidden;
+    opacity: 0; animation: waterIn 2s ease-out 0.3s forwards;
+  }
+  @keyframes waterIn {
+    0% { opacity: 0; transform: translateY(60px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+  #loading-overlay .water svg { position: absolute; bottom: 0; left: -5%; width: 110%; height: 100%; }
+
+  #loading-overlay .foam {
+    position: absolute; border-radius: 50%; background: rgba(255,255,255,0.8);
+    animation: foamF 4.5s ease-in-out infinite;
+  }
+  @keyframes foamF {
+    0%,100% { opacity: 0; transform: scale(0.4); }
+    35% { opacity: 0.8; transform: scale(1); }
+    75% { opacity: 0.3; transform: scale(0.6) translateX(6px); }
+  }
+
+  #loading-overlay .wshim {
+    position: absolute; height: 1.5px; border-radius: 2px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent);
+    animation: shim 6s ease-in-out infinite;
+  }
+  @keyframes shim {
+    0%,100% { opacity: 0; transform: translateX(0) scaleX(0.4); }
+    50% { opacity: 1; transform: translateX(25px) scaleX(1); }
+  }
+
+  /* ═══ LOADER ═══ */
+  #loading-overlay .ss-loader {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; z-index: 10;
+  }
+  #loading-overlay .ss-loader.exit { animation: fadeO 0.8s ease-in forwards; }
+  @keyframes fadeO { to { opacity: 0; } }
+
+  /* ═══ LOGO — matched to real brand ═══ */
+  #loading-overlay .logo-box {
+    position: relative; width: 130px; height: 130px;
+    opacity: 0; animation: lIn 0.9s cubic-bezier(0.16,1,0.3,1) 0.3s forwards;
+  }
+  @keyframes lIn {
+    0% { opacity: 0; transform: scale(0.7) translateY(12px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  #loading-overlay .rsq {
+    position: absolute; inset: 4px; background: var(--red); border-radius: 4px;
+    opacity: 0; animation: stmp 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.45s forwards;
+    box-shadow: 3px 4px 0 var(--red-deep), 0 6px 20px rgba(212,41,30,0.15);
+  }
+  @keyframes stmp {
+    0% { opacity:0; transform: scale(1.2) translateY(-20px) rotate(-2deg); }
+    60% { opacity:1; transform: scale(0.98) translateY(1px); }
+    100% { opacity:1; transform: scale(1) translateY(0); }
+  }
+
+  #loading-overlay .lsvg { position: absolute; inset: 4px; z-index: 2; }
+
+  /* Logo SVG bird animations */
+  #loading-overlay .lb { opacity: 0; }
+  #loading-overlay .lb1 { animation: lbin 0.5s ease-out 1.15s forwards; }
+  #loading-overlay .lb2 { animation: lbin 0.5s ease-out 1.3s forwards; }
+  @keyframes lbin {
+    0% { opacity:0; transform: translate(-10px, 4px); }
+    100% { opacity:1; transform: translate(0,0); }
+  }
+
+  /* Logo sun */
+  #loading-overlay .lsun { opacity: 0; animation: lsp 0.6s cubic-bezier(0.16,1,0.3,1) 1.0s forwards; }
+  @keyframes lsp { 0%{opacity:0;transform:scale(0)}100%{opacity:1;transform:scale(1)} }
+  #loading-overlay .lsun-r { transform-origin: 88px 28px; animation: lsr 14s linear 2s infinite; }
+  @keyframes lsr { to { transform: rotate(360deg); } }
+
+  /* Oval stroke draw */
+  #loading-overlay .lo { stroke-dasharray: 180; stroke-dashoffset: 180; animation: lod 0.8s ease-out 0.7s forwards; }
+  @keyframes lod { to { stroke-dashoffset: 0; } }
+  #loading-overlay .lln { stroke-dasharray: 36; stroke-dashoffset: 36; }
+  #loading-overlay .lln1 { animation: lod 0.35s ease-out 1.0s forwards; }
+  #loading-overlay .lln2 { animation: lod 0.35s ease-out 1.12s forwards; }
+  #loading-overlay .lln3 { animation: lod 0.35s ease-out 1.24s forwards; }
+
+  /* ═══ BRAND ═══ */
+  #loading-overlay .brand { margin-top: 22px; text-align: center; }
+  #loading-overlay .nc { overflow: hidden; }
+  #loading-overlay .bn {
+    font-family: 'Libre Baskerville', serif; font-weight: 700; font-style: italic;
+    font-size: 34px; color: var(--red); letter-spacing: 4px;
+    opacity: 0; transform: translateY(100%);
+    animation: slu 0.6s cubic-bezier(0.16,1,0.3,1) 1.6s forwards;
+  }
+  @keyframes slu { to { opacity:1; transform: translateY(0); } }
+
+  .ss-br {
+    width: 0; height: 1px; margin: 7px auto 0;
+    background: linear-gradient(90deg, transparent, rgba(212,41,30,0.22), transparent);
+    animation: gw 0.7s ease-out 2.0s forwards;
+  }
+  @keyframes gw { to { width: 140px; } }
+
+  #loading-overlay .bt {
+    font-family: 'Caveat', cursive; font-size: 15px; color: var(--bark-light);
+    margin-top: 5px; opacity: 0;
+    animation: fu 0.5s ease-out 2.15s forwards;
+  }
+  @keyframes fu {
+    0% { opacity:0; transform: translateY(6px); }
+    100% { opacity:0.6; transform: translateY(0); }
+  }
+
+  /* ═══ FLAVOUR ═══ */
+  #loading-overlay .fl { margin-top: 26px; text-align: center; opacity: 0; animation: fu 0.5s ease-out 2.4s forwards; }
+  #loading-overlay .fl-l {
+    font-family: 'Outfit', sans-serif; font-size: 9px; text-transform: uppercase;
+    letter-spacing: 4px; color: var(--bark-light); opacity: 0.35;
+  }
+  #loading-overlay .fl-r { position: relative; height: 24px; overflow: hidden; margin-top: 4px; }
+  #loading-overlay .fi {
+    position: absolute; width: 100%;
+    font-family: 'Libre Baskerville', serif; font-size: 15px; font-style: italic;
+    color: var(--bark); opacity: 0; transform: translateY(24px);
+    transition: all 0.45s cubic-bezier(0.16,1,0.3,1);
+    white-space: nowrap; text-align: center;
+  }
+  #loading-overlay .fi.on { opacity: 1; transform: translateY(0); }
+  #loading-overlay .fi.off { opacity: 0; transform: translateY(-24px); }
+
+  /* ═══ PROGRESS ═══ */
+  #loading-overlay .pg { margin-top: 22px; width: 170px; opacity: 0; animation: fu 0.4s ease-out 2.6s forwards; }
+  #loading-overlay .pgt { width: 100%; height: 2px; background: #f0ece8; border-radius: 2px; overflow: hidden; }
+  #loading-overlay .pgf {
+    height: 100%; width: 0; border-radius: 2px;
+    background: linear-gradient(90deg, var(--red-deep), var(--red));
+    transition: width 0.15s ease-out;
+  }
+  #loading-overlay .pgm {
+    text-align: center; margin-top: 9px;
+    font-family: 'Outfit', sans-serif; font-size: 10px; font-weight: 400;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--bark-light); opacity: 0.25; transition: all 0.3s;
+  }
+
+  @media (max-width: 420px) {
+    #loading-overlay .logo-box { width: 108px; height: 108px; }
+    #loading-overlay .bn { font-size: 26px; letter-spacing: 3px; }
+    #loading-overlay .fi { font-size: 13px; }
+  }
+</style>
+
+    </style>
     <link rel="stylesheet" href="css/main.css">
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </head>
 <body class="font-body bg-pickle-50 text-gray-900 antialiased">
     
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="fixed inset-0 z-[100] bg-pickle-500 flex items-center justify-center transition-opacity duration-500">
-        <div class="text-center">
-            <div class="relative w-24 h-24 mx-auto mb-4">
-                <div class="absolute inset-0 border-4 border-white/30 rounded-full"></div>
-                <div class="absolute inset-0 border-4 border-t-white rounded-full animate-spin"></div>
-                <span class="absolute inset-0 flex items-center justify-center text-4xl">🫙</span>
-            </div>
-            <p class="text-white font-semibold text-lg">Loading Flavors...</p>
-        </div>
+    <!-- Animated Loading Screen -->
+    <div id="loading-overlay">
+      <canvas id="scene"></canvas>
+<canvas id="scene"></canvas>
+
+<!-- ═══ BLUE WATER ═══ -->
+<div class="water">
+  <svg viewBox="0 0 1440 140" preserveAspectRatio="none">
+    <defs>
+      <linearGradient id="d1" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#3B7DD8" stop-opacity="0.10"/>
+        <stop offset="100%" stop-color="#1B4F8A" stop-opacity="0.20"/>
+      </linearGradient>
+      <linearGradient id="d2" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#5A9FE6" stop-opacity="0.08"/>
+        <stop offset="100%" stop-color="#3B7DD8" stop-opacity="0.14"/>
+      </linearGradient>
+      <linearGradient id="d3" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#7FBEF0" stop-opacity="0.06"/>
+        <stop offset="100%" stop-color="#5A9FE6" stop-opacity="0.10"/>
+      </linearGradient>
+    </defs>
+    <!-- Deep -->
+    <path fill="url(#d1)">
+      <animate attributeName="d" dur="9s" repeatCount="indefinite" values="
+        M0,42 C120,26 240,56 360,38 C480,18 600,52 720,34 C840,16 960,48 1080,30 C1200,14 1320,46 1440,28 L1440,140 L0,140 Z;
+        M0,34 C120,52 240,20 360,46 C480,56 600,24 720,48 C840,54 960,22 1080,42 C1200,52 1320,24 1440,38 L1440,140 L0,140 Z;
+        M0,42 C120,26 240,56 360,38 C480,18 600,52 720,34 C840,16 960,48 1080,30 C1200,14 1320,46 1440,28 L1440,140 L0,140 Z"/>
+    </path>
+    <!-- Mid -->
+    <path fill="url(#d2)">
+      <animate attributeName="d" dur="6s" repeatCount="indefinite" values="
+        M0,52 C180,36 360,66 540,46 C720,28 900,60 1080,40 C1260,22 1380,54 1440,42 L1440,140 L0,140 Z;
+        M0,44 C180,62 360,30 540,54 C720,66 900,34 1080,56 C1260,64 1380,36 1440,50 L1440,140 L0,140 Z;
+        M0,52 C180,36 360,66 540,46 C720,28 900,60 1080,40 C1260,22 1380,54 1440,42 L1440,140 L0,140 Z"/>
+    </path>
+    <!-- Surface -->
+    <path fill="url(#d3)">
+      <animate attributeName="d" dur="4.5s" repeatCount="indefinite" values="
+        M0,60 C160,48 320,72 480,54 C640,36 800,68 960,50 C1120,32 1280,64 1440,48 L1440,140 L0,140 Z;
+        M0,52 C160,68 320,40 480,62 C640,74 800,42 960,64 C1120,72 1280,44 1440,58 L1440,140 L0,140 Z;
+        M0,60 C160,48 320,72 480,54 C640,36 800,68 960,50 C1120,32 1280,64 1440,48 L1440,140 L0,140 Z"/>
+    </path>
+  </svg>
+
+  <!-- Foam & shimmer -->
+  <div class="foam" style="width:4px;height:4px;bottom:82px;left:8%;animation-delay:0s"></div>
+  <div class="foam" style="width:3px;height:3px;bottom:88px;left:24%;animation-delay:1.4s"></div>
+  <div class="foam" style="width:5px;height:5px;bottom:78px;left:42%;animation-delay:0.7s"></div>
+  <div class="foam" style="width:3px;height:3px;bottom:84px;left:58%;animation-delay:2.2s"></div>
+  <div class="foam" style="width:4px;height:4px;bottom:76px;left:74%;animation-delay:0.3s"></div>
+  <div class="foam" style="width:3px;height:3px;bottom:86px;left:88%;animation-delay:1.8s"></div>
+  <div class="wshim" style="width:50px;bottom:90px;left:18%;animation-delay:0s"></div>
+  <div class="wshim" style="width:35px;bottom:82px;left:50%;animation-delay:2.2s"></div>
+  <div class="wshim" style="width:45px;bottom:86px;left:76%;animation-delay:3.8s"></div>
+</div>
+
+<!-- ═══ LOADER ═══ -->
+<div class="ss-loader" id="ss-loader">
+  <div class="logo-box">
+    <div class="rsq"></div>
+    <!--
+      Logo SVG — matched to actual brand:
+      - Birds: upper-LEFT, two seagull "m" shapes stacked
+      - Sun: upper-RIGHT with rays
+      - Oval + lines: center-bottom half
+    -->
+    <svg class="lsvg" viewBox="0 0 122 122" fill="none">
+      <!-- Bird top-left: two "m" gulls stacked -->
+      <g class="lb lb1">
+        <path d="M24,30 Q28,24 32,30 Q36,24 40,30" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <g class="lb lb2">
+        <path d="M30,38 Q34,32 38,38 Q42,32 46,38" stroke="#fff" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+
+      <!-- Sun upper-right -->
+      <g class="lsun">
+        <circle cx="88" cy="28" r="7" stroke="#fff" stroke-width="2" fill="none"/>
+        <g class="lsun-r">
+          <line x1="88" y1="16.5" x2="88" y2="13" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="96.1" y1="19.9" x2="98.6" y2="17.4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="99.5" y1="28" x2="103" y2="28" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="96.1" y1="36.1" x2="98.6" y2="38.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="88" y1="39.5" x2="88" y2="43" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="79.9" y1="36.1" x2="77.4" y2="38.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="76.5" y1="28" x2="73" y2="28" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+          <line x1="79.9" y1="19.9" x2="77.4" y2="17.4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+        </g>
+      </g>
+
+      <!-- Oval center-bottom -->
+      <ellipse class="lo" cx="61" cy="80" rx="36" ry="20" stroke="#fff" stroke-width="2.8" fill="none"/>
+      <line class="lln lln1" x1="42" y1="75" x2="70" y2="75" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <line class="lln lln2" x1="38" y1="82" x2="82" y2="82" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <line class="lln lln3" x1="46" y1="88" x2="72" y2="88" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  </div>
+
+  <div class="brand">
+    <div class="nc"><div class="bn">SEA SALT</div></div>
+    <div class="ss-br"></div>
+    <div class="bt">Epic Flavours, Timeless Taste</div>
+  </div>
+
+  <div class="fl">
+    <div class="fl-l">Now Preparing</div>
+    <div class="fl-r">
+      <div class="fi">Avakaya Mango Pickle</div>
+      <div class="fi">Gongura Red Chilli</div>
+      <div class="fi">Garlic Pachadi</div>
+      <div class="fi">Tomato Thokku</div>
+      <div class="fi">Lemon Spice Pickle</div>
+      <div class="fi">Mixed Vegetable Pickle</div>
     </div>
+  </div>
+
+  <div class="pg">
+    <div class="pgt"><div class="pgf" id="pf"></div></div>
+    <div class="pgm" id="pm">Preparing flavours</div>
+  </div>
+</div>
+
+    </div>
+    <script>
+(function() {
+  'use strict';
+
+  var cv = document.getElementById('scene');
+  var ctx = cv.getContext('2d');
+  var W, H;
+
+  function resize() { W = cv.width = window.innerWidth; H = cv.height = window.innerHeight; }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ═══════════════════════════════════════
+  //  SUN — warm golden orb, upper right
+  // ═══════════════════════════════════════
+  var sun = {
+    alpha: 0,
+    rayAng: 0,
+    get x() { return W * 0.80; },
+    get y() { return H * 0.12; },
+    r: 30,
+
+    update: function() {
+      if (this.alpha < 1) this.alpha += 0.008;
+      this.rayAng += 0.002;
+    },
+
+    draw: function() {
+      var a = this.alpha;
+      if (a < 0.01) return;
+      var x = this.x, y = this.y, r = this.r;
+
+      // Large warm ambient
+      var g0 = ctx.createRadialGradient(x, y, 0, x, y, r * 8);
+      g0.addColorStop(0, 'rgba(255,225,130,' + (a * 0.06) + ')');
+      g0.addColorStop(1, 'rgba(255,220,100,0)');
+      ctx.fillStyle = g0;
+      ctx.fillRect(x - r * 8, y - r * 8, r * 16, r * 16);
+
+      // Corona
+      var g1 = ctx.createRadialGradient(x, y, r * 0.3, x, y, r * 2.2);
+      g1.addColorStop(0, 'rgba(255,235,160,' + (a * 0.25) + ')');
+      g1.addColorStop(0.5, 'rgba(255,215,100,' + (a * 0.08) + ')');
+      g1.addColorStop(1, 'rgba(255,200,80,0)');
+      ctx.fillStyle = g1;
+      ctx.beginPath(); ctx.arc(x, y, r * 2.2, 0, Math.PI * 2); ctx.fill();
+
+      // Body
+      var g2 = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g2.addColorStop(0, 'rgba(255,240,180,' + (a * 0.95) + ')');
+      g2.addColorStop(0.6, 'rgba(255,218,110,' + (a * 0.8) + ')');
+      g2.addColorStop(1, 'rgba(248,195,60,' + (a * 0.35) + ')');
+      ctx.fillStyle = g2;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+
+      // Rays
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(this.rayAng);
+      for (var i = 0; i < 12; i++) {
+        var ang = (i / 12) * Math.PI * 2;
+        var ir = r * 1.12;
+        var or = r * 1.7 + Math.sin(this.rayAng * 3 + i * 0.8) * 3;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(ang) * ir, Math.sin(ang) * ir);
+        ctx.lineTo(Math.cos(ang) * or, Math.sin(ang) * or);
+        ctx.strokeStyle = 'rgba(255,225,130,' + (a * 0.2) + ')';
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  };
+
+  // ═══════════════════════════════════════
+  //  BIRDS — large, natural, soaring
+  //  Organic wing physics with:
+  //  - Slow deep wingbeats
+  //  - Long glide phases
+  //  - Wing flex / feather-tip curl
+  //  - Gentle thermal riding (vertical drift)
+  //  - Each bird unique in size and rhythm
+  // ═══════════════════════════════════════
+  var birds = [];
+
+  function Bird(delay, big) {
+    this.delay = delay;
+    this.big = big;
+    this.active = false;
+    this.t0 = 0;
+  }
+
+  Bird.prototype.spawn = function() {
+    this.active = true;
+    this.x = -60 - Math.random() * 120;
+    this.y = H * 0.08 + Math.random() * H * 0.2;
+    this.size = this.big ? 16 + Math.random() * 8 : 10 + Math.random() * 5;
+    this.speed = 0.6 + Math.random() * 0.35;
+    this.flapPeriod = 2200 + Math.random() * 1200; // ms per full flap cycle — slow
+    this.flapPhase = Math.random() * Math.PI * 2;
+    this.glideRatio = 0.55 + Math.random() * 0.2; // fraction of cycle spent gliding
+    this.glideTilt = 0.12 + Math.random() * 0.08;
+    this.thermalAmp = 0.12 + Math.random() * 0.15;
+    this.thermalFreq = 0.0006 + Math.random() * 0.0004;
+    this.alpha = 0;
+    this.wingSpan = 1.3 + Math.random() * 0.3;
+  };
+
+  Bird.prototype.update = function(t) {
+    if (!this.active) {
+      if (t > this.delay) { this.spawn(); this.t0 = t; }
+      return;
+    }
+
+    // Smooth fade in over 2s
+    var age = t - this.t0;
+    this.alpha = Math.min(1, age / 2000);
+
+    // Horizontal
+    this.x += this.speed;
+
+    // Thermal riding — very smooth long sine
+    this.y += Math.sin(t * this.thermalFreq + this.flapPhase) * this.thermalAmp;
+
+    // Wrap
+    if (this.x > W + 120) {
+      this.x = -80 - Math.random() * 100;
+      this.y = H * 0.08 + Math.random() * H * 0.2;
+    }
+  };
+
+  Bird.prototype.draw = function(t) {
+    if (!this.active || this.alpha < 0.01) return;
+
+    var s = this.size;
+    var a = this.alpha * 0.38;
+
+    // Wing angle calculation — organic flap + glide
+    var cyclePos = ((t + this.flapPhase * 300) % this.flapPeriod) / this.flapPeriod;
+    var wingAngle;
+
+    if (cyclePos < (1 - this.glideRatio)) {
+      // Flapping phase — smooth sine downstroke/upstroke
+      var flapT = cyclePos / (1 - this.glideRatio);
+      wingAngle = Math.sin(flapT * Math.PI * 2) * 0.55;
+    } else {
+      // Gliding — wings held slightly raised, tiny oscillation
+      wingAngle = this.glideTilt + Math.sin(t * 0.003 + this.flapPhase) * 0.03;
+    }
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+
+    // Slight body tilt with flight
+    var tilt = Math.sin(t * this.thermalFreq + this.flapPhase) * 0.04;
+    ctx.rotate(tilt);
+
+    ctx.strokeStyle = 'rgba(40,35,30,' + a + ')';
+    ctx.lineWidth = s > 14 ? 1.6 : 1.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    var ws = s * this.wingSpan;
+
+    // ─── LEFT WING ───
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    // Shoulder to mid-wing
+    ctx.bezierCurveTo(
+      -ws * 0.25, -s * wingAngle * 0.4,
+      -ws * 0.5,  -s * wingAngle * 0.75,
+      -ws * 0.75, -s * wingAngle * 0.95
+    );
+    // Mid-wing to tip with feather curl
+    ctx.bezierCurveTo(
+      -ws * 0.88, -s * wingAngle * 1.0,
+      -ws * 0.97, -s * wingAngle * 0.85,
+      -ws * 1.0,  -s * wingAngle * 0.7
+    );
+    ctx.stroke();
+
+    // Secondary feather line (inner wing)
+    ctx.beginPath();
+    ctx.moveTo(-ws * 0.1, s * 0.04);
+    ctx.quadraticCurveTo(
+      -ws * 0.4, -s * wingAngle * 0.35,
+      -ws * 0.65, -s * wingAngle * 0.55
+    );
+    ctx.strokeStyle = 'rgba(40,35,30,' + (a * 0.3) + ')';
+    ctx.lineWidth = s > 14 ? 1.0 : 0.7;
+    ctx.stroke();
+
+    // ─── RIGHT WING ───
+    ctx.strokeStyle = 'rgba(40,35,30,' + a + ')';
+    ctx.lineWidth = s > 14 ? 1.6 : 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.bezierCurveTo(
+      ws * 0.25, -s * wingAngle * 0.4,
+      ws * 0.5,  -s * wingAngle * 0.75,
+      ws * 0.75, -s * wingAngle * 0.95
+    );
+    ctx.bezierCurveTo(
+      ws * 0.88, -s * wingAngle * 1.0,
+      ws * 0.97, -s * wingAngle * 0.85,
+      ws * 1.0,  -s * wingAngle * 0.7
+    );
+    ctx.stroke();
+
+    // Secondary feather right
+    ctx.beginPath();
+    ctx.moveTo(ws * 0.1, s * 0.04);
+    ctx.quadraticCurveTo(
+      ws * 0.4, -s * wingAngle * 0.35,
+      ws * 0.65, -s * wingAngle * 0.55
+    );
+    ctx.strokeStyle = 'rgba(40,35,30,' + (a * 0.3) + ')';
+    ctx.lineWidth = s > 14 ? 1.0 : 0.7;
+    ctx.stroke();
+
+    // Body — elongated
+    ctx.fillStyle = 'rgba(40,35,30,' + (a * 0.45) + ')';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, s * 0.15, s * 0.06, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Head
+    ctx.beginPath();
+    ctx.arc(s * 0.18, -s * 0.02, s * 0.05, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Tail
+    ctx.strokeStyle = 'rgba(40,35,30,' + (a * 0.5) + ')';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.12, s * 0.02);
+    ctx.quadraticCurveTo(-s * 0.22, s * 0.06, -s * 0.3, s * 0.1);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-s * 0.12, s * 0.02);
+    ctx.quadraticCurveTo(-s * 0.22, -s * 0.01, -s * 0.3, s * 0.0);
+    ctx.stroke();
+
+    ctx.restore();
+  };
+
+  // Flock 1 — big soaring birds, staggered
+  for (var i = 0; i < 5; i++) {
+    birds.push(new Bird(700 + i * 450 + Math.random() * 300, true));
+  }
+  // Flock 2 — smaller, later
+  for (var i = 0; i < 3; i++) {
+    birds.push(new Bird(5000 + i * 600 + Math.random() * 400, false));
+  }
+
+  // ═══════════════════════════════════════
+  //  BOAT — small sailboat on the water
+  // ═══════════════════════════════════════
+  // ═══════════════════════════════════════
+  //  BOATS — two sailboats with sailors
+  // ═══════════════════════════════════════
+  function SailBoat(startX, speed, delay, waterOffset, scale) {
+    this.x = startX;
+    this.speed = speed;
+    this.delay = delay;
+    this.waterOff = waterOffset;
+    this.sc = scale;
+    this.alpha = 0;
+    this.bobPhase = Math.random() * Math.PI * 2;
+    this.sailorLean = Math.random() * Math.PI * 2;
+  }
+
+  SailBoat.prototype.getWaterY = function() { return H - 88 + this.waterOff; };
+
+  SailBoat.prototype.update = function(t) {
+    if (t < this.delay) return;
+    if (this.alpha < 1) this.alpha += 0.005;
+    this.x += this.speed;
+    if (this.x > W + 100) this.x = -80;
+  };
+
+  SailBoat.prototype.draw = function(t) {
+    if (this.alpha < 0.01) return;
+    var a = this.alpha;
+    var s = this.sc;
+    var bob = Math.sin(t * 0.0015 + this.bobPhase) * 3 * s;
+    var tilt = Math.sin(t * 0.001 + this.bobPhase) * 0.04;
+    var y = this.getWaterY() + bob;
+
+    ctx.save();
+    ctx.translate(this.x, y);
+    ctx.rotate(tilt);
+    ctx.scale(s, s);
+
+    // Hull
+    ctx.fillStyle = 'rgba(90, 65, 45, ' + (a * 0.5) + ')';
+    ctx.beginPath();
+    ctx.moveTo(-14, 0);
+    ctx.quadraticCurveTo(-12, 6, 0, 7);
+    ctx.quadraticCurveTo(12, 6, 14, 0);
+    ctx.lineTo(12, -1);
+    ctx.lineTo(-12, -1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(70, 50, 35, ' + (a * 0.4) + ')';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // ─── SAILOR sitting in boat ───
+    var sailorLean = Math.sin(t * 0.001 + this.sailorLean) * 0.06;
+    ctx.save();
+    ctx.translate(4, -2);
+    ctx.rotate(sailorLean);
+
+    // Body (torso)
+    ctx.fillStyle = 'rgba(60, 100, 160, ' + (a * 0.5) + ')';
+    ctx.beginPath();
+    ctx.moveTo(-3, 0);
+    ctx.quadraticCurveTo(-3.5, -8, -2, -11);
+    ctx.lineTo(2, -11);
+    ctx.quadraticCurveTo(3.5, -8, 3, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    // Head
+    ctx.fillStyle = 'rgba(180, 140, 110, ' + (a * 0.55) + ')';
+    ctx.beginPath();
+    ctx.arc(0, -13.5, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Hat / cap
+    ctx.fillStyle = 'rgba(40, 60, 100, ' + (a * 0.5) + ')';
+    ctx.beginPath();
+    ctx.ellipse(0, -16, 4, 1.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-2.5, -16);
+    ctx.quadraticCurveTo(-2, -20, 0, -20.5);
+    ctx.quadraticCurveTo(2, -20, 2.5, -16);
+    ctx.closePath();
+    ctx.fill();
+
+    // Arm reaching toward sail rope
+    ctx.strokeStyle = 'rgba(180, 140, 110, ' + (a * 0.45) + ')';
+    ctx.lineWidth = 1.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(2, -9);
+    ctx.quadraticCurveTo(5, -12, 3, -16);
+    ctx.stroke();
+
+    // Other arm resting on side
+    ctx.beginPath();
+    ctx.moveTo(-2, -8);
+    ctx.quadraticCurveTo(-5, -5, -6, -3);
+    ctx.stroke();
+
+    ctx.restore(); // sailor
+
+    // Mast
+    ctx.strokeStyle = 'rgba(80, 60, 40, ' + (a * 0.5) + ')';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-2, -1);
+    ctx.lineTo(-2, -30);
+    ctx.stroke();
+
+    // Sail — billowing
+    var billowX = 6 + Math.sin(t * 0.002 + this.bobPhase) * 1.5;
+    ctx.fillStyle = 'rgba(255, 255, 255, ' + (a * 0.85) + ')';
+    ctx.strokeStyle = 'rgba(180, 160, 140, ' + (a * 0.35) + ')';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(-1, -28);
+    ctx.quadraticCurveTo(billowX + 4, -18, billowX + 1, -4);
+    ctx.lineTo(-1, -4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Sail rope from sailor's hand to sail
+    ctx.strokeStyle = 'rgba(120, 100, 70, ' + (a * 0.2) + ')';
+    ctx.lineWidth = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(7, -18);
+    ctx.quadraticCurveTo(5, -14, billowX - 1, -10);
+    ctx.stroke();
+
+    // Flag
+    ctx.fillStyle = 'rgba(212, 41, 30, ' + (a * 0.6) + ')';
+    ctx.beginPath();
+    ctx.moveTo(-2, -30);
+    ctx.lineTo(4 + Math.sin(t * 0.003 + this.bobPhase) * 0.8, -28);
+    ctx.lineTo(-2, -26);
+    ctx.closePath();
+    ctx.fill();
+
+    // Wake lines
+    ctx.strokeStyle = 'rgba(120, 170, 220, ' + (a * 0.15) + ')';
+    ctx.lineWidth = 0.5;
+    for (var i = 1; i <= 3; i++) {
+      var wx = -14 - i * 10;
+      var wy = 2 + i * 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-13, 2);
+      ctx.quadraticCurveTo(wx + 5, wy + Math.sin(t * 0.002 + i + this.bobPhase) * 1, wx, wy + 1);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  };
+
+  // Boat 1 — closer, slightly larger, enters earlier from left
+  var boat1 = new SailBoat(-60, 0.35, 1800, 0, 1.0);
+  // Boat 2 — further away (smaller, higher on water), enters later from further left
+  var boat2 = new SailBoat(W * 0.6, 0.25, 3000, -10, 0.75);
+
+  // ═══════════════════════════════════════
+  //  MAIN LOOP
+  // ═══════════════════════════════════════
+  function frame(t) {
+    ctx.clearRect(0, 0, W, H);
+
+    sun.update();
+    sun.draw();
+
+    for (var i = 0; i < birds.length; i++) {
+      birds[i].update(t);
+      birds[i].draw(t);
+    }
+
+    // Draw farther boat first (behind)
+    boat2.update(t);
+    boat2.draw(t);
+
+    boat1.update(t);
+    boat1.draw(t);
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ═══ FLAVOUR REEL ═══
+  var items = document.querySelectorAll('.fi');
+  var idx = 0;
+  function cycle() {
+    var p = idx;
+    idx = (idx + 1) % items.length;
+    items[p].classList.remove('on');
+    items[p].classList.add('off');
+    setTimeout(function() { items[p].classList.remove('off'); }, 450);
+    items[idx].classList.add('on');
+  }
+  setTimeout(function() { items[0].classList.add('on'); setInterval(cycle, 2000); }, 2800);
+
+  // ═══ PROGRESS ═══
+  var fill = document.getElementById('pf');
+  var msg = document.getElementById('pm');
+  var pr = 0;
+  var stp = [
+    {at:0,t:'Preparing flavours'},{at:18,t:'Crushing fresh spices'},
+    {at:35,t:'Slow-mixing traditions'},{at:55,t:'Adding sea salt crystals'},
+    {at:75,t:'Sealing in the aroma'},{at:90,t:'Final touches'},{at:98,t:'Ready to serve'}
+  ];
+  function tick() {
+    if (pr >= 100) {
+      msg.textContent = 'Welcome';
+      msg.style.opacity = '0.5';
+      msg.style.color = 'var(--red)';
+      setTimeout(function() { document.getElementById('ss-loader').classList.add('exit');
+        // Reveal the app
+        var appEl = document.getElementById('app');
+        if (appEl) appEl.classList.remove('hidden');
+        // Remove overlay after animation
+        var ov = document.getElementById('loading-overlay');
+        if (ov) setTimeout(function(){ ov.style.transition='opacity 0.8s'; ov.style.opacity='0'; setTimeout(function(){ ov.remove(); }, 900); }, 800); }, 500);
+      return;
+    }
+    var sp = pr<25?Math.random()*2.5+1.2:pr<55?Math.random()*1.8+0.8:pr<80?Math.random()*1.2+0.4:Math.random()*0.6+0.2;
+    pr = Math.min(100, pr + sp);
+    fill.style.width = pr + '%';
+    for (var i = stp.length-1; i >= 0; i--) { if (pr >= stp[i].at) { msg.textContent = stp[i].t; break; } }
+    setTimeout(tick, 70 + Math.random() * 100);
+  }
+  setTimeout(tick, 3000);
+})();
+
+    </script>
 
     <!-- Main App Container -->
     <div id="app" class="min-h-screen pb-20 hidden">
         
-        <!-- Sticky Header -->
         <header id="main-header" class="sticky top-0 z-50 bg-white shadow-sm">
             <div class="max-w-lg mx-auto px-4 py-3">
                 <div class="flex items-center justify-between">
@@ -140,32 +908,23 @@
                 
                 <div class="mt-3">
                     <div class="relative">
-                        <input type="text" id="search-input" placeholder="Search pickles, masalas, sweets..." 
-                            class="w-full py-3 pl-11 pr-4 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pickle-500/50 focus:bg-white transition-all">
+                        <input type="text" id="search-input" placeholder="Search pickles, masalas, sweets..." class="w-full py-3 pl-11 pr-4 bg-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-pickle-500/50 focus:bg-white transition-all">
                         <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                     </div>
                 </div>
             </div>
         </header>
 
-        <!-- Hero Banner Section -->
         <section id="hero-banner" class="relative overflow-hidden">
             <div class="max-w-lg mx-auto">
                 <div class="relative h-48 bg-gradient-to-br from-pickle-600 via-pickle-500 to-spice-chilli overflow-hidden">
                     <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
                     <div class="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
-                    
                     <div class="relative z-10 h-full flex items-center px-6">
                         <div class="flex-1">
-                            <span class="inline-block px-3 py-1 bg-white/20 backdrop-blur rounded-full text-xs text-white font-medium mb-2">
-                                🌿 100% Natural
-                            </span>
-                            <h2 class="font-display text-2xl text-white font-bold leading-tight mb-2">
-                                Authentic Andhra<br>Pickles & Masalas
-                            </h2>
-                            <p class="text-white/80 text-sm">
-                                Traditional recipes, homemade taste
-                            </p>
+                            <span class="inline-block px-3 py-1 bg-white/20 backdrop-blur rounded-full text-xs text-white font-medium mb-2">🌿 100% Natural</span>
+                            <h2 class="font-display text-2xl text-white font-bold leading-tight mb-2">Authentic Andhra<br>Pickles & Masalas</h2>
+                            <p class="text-white/80 text-sm">Traditional recipes, homemade taste</p>
                         </div>
                         <div class="w-28 h-28 relative animate-float">
                             <div class="absolute inset-0 bg-white/20 rounded-full blur-xl"></div>
@@ -176,14 +935,12 @@
             </div>
         </section>
 
-        <!-- Category Pills -->
         <section id="category-pills" class="sticky top-[120px] z-40 bg-white/95 backdrop-blur border-b border-gray-100">
             <div class="max-w-lg mx-auto px-4 py-3">
                 <div class="flex gap-2 overflow-x-auto scrollbar-hide pb-1" id="category-scroll"></div>
             </div>
         </section>
 
-        <!-- Featured Section -->
         <section id="featured-section" class="py-6">
             <div class="max-w-lg mx-auto px-4">
                 <div class="flex items-center justify-between mb-4">
@@ -194,71 +951,37 @@
             </div>
         </section>
 
-        <!-- Category Sections -->
         <section id="category-sections" class="py-4"></section>
     </div>
 
-    <!-- SPIN WHEEL MODAL -->
     <div id="spin-modal" class="fixed inset-0 z-[90] hidden">
         <div class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
         <div class="relative h-full flex items-center justify-center p-4">
             <div class="bg-gradient-to-br from-pickle-600 via-pickle-700 to-pickle-800 rounded-3xl p-6 w-full max-w-sm shadow-2xl modal-fade-in relative overflow-hidden">
-                
                 <div class="absolute top-0 left-0 w-32 h-32 bg-white/5 rounded-full -translate-x-1/2 -translate-y-1/2"></div>
                 <div class="absolute bottom-0 right-0 w-40 h-40 bg-white/5 rounded-full translate-x-1/2 translate-y-1/2"></div>
-                
                 <button id="spin-close-btn" class="absolute top-4 right-4 w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-white hover:bg-white/30 transition-colors z-20 hidden">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
-                
                 <div class="relative z-10">
                     <div class="text-center mb-6">
-                        <div class="inline-block px-4 py-1 bg-spice-gold/20 rounded-full mb-3">
-                            <span class="text-spice-gold text-sm font-semibold">🎁 Limited Time Offer</span>
-                        </div>
+                        <div class="inline-block px-4 py-1 bg-spice-gold/20 rounded-full mb-3"><span class="text-spice-gold text-sm font-semibold">🎁 Limited Time Offer</span></div>
                         <h2 class="font-display text-2xl text-white font-bold mb-2">🎉 Welcome Gift!</h2>
                         <p class="text-white/80 text-sm">Spin to win wallet cashback up to ₹599</p>
                     </div>
-                    
                     <div id="phone-section" class="space-y-4">
                         <div class="flex gap-2">
                             <div class="relative">
                                 <select id="country-code" class="appearance-none w-28 py-4 pl-3 pr-8 bg-white rounded-xl text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-spice-gold cursor-pointer text-sm">
-                                    <option value="+91">🇮🇳 +91</option>
-                                    <option value="+1">🇺🇸 +1</option>
-                                    <option value="+44">🇬🇧 +44</option>
-                                    <option value="+61">🇦🇺 +61</option>
-                                    <option value="+971">🇦🇪 +971</option>
-                                    <option value="+65">🇸🇬 +65</option>
-                                    <option value="+60">🇲🇾 +60</option>
-                                    <option value="+966">🇸🇦 +966</option>
-                                    <option value="+974">🇶🇦 +974</option>
-                                    <option value="+968">🇴🇲 +968</option>
-                                    <option value="+973">🇧🇭 +973</option>
-                                    <option value="+965">🇰🇼 +965</option>
-                                    <option value="+64">🇳🇿 +64</option>
-                                    <option value="+27">🇿🇦 +27</option>
-                                    <option value="+49">🇩🇪 +49</option>
-                                    <option value="+33">🇫🇷 +33</option>
-                                    <option value="+81">🇯🇵 +81</option>
-                                    <option value="+86">🇨🇳 +86</option>
-                                    <option value="+92">🇵🇰 +92</option>
-                                    <option value="+880">🇧🇩 +880</option>
-                                    <option value="+94">🇱🇰 +94</option>
-                                    <option value="+977">🇳🇵 +977</option>
+                                    <option value="+91">🇮🇳 +91</option><option value="+1">🇺🇸 +1</option><option value="+44">🇬🇧 +44</option><option value="+61">🇦🇺 +61</option><option value="+971">🇦🇪 +971</option><option value="+65">🇸🇬 +65</option><option value="+60">🇲🇾 +60</option><option value="+966">🇸🇦 +966</option><option value="+974">🇶🇦 +974</option><option value="+968">🇴🇲 +968</option><option value="+973">🇧🇭 +973</option><option value="+965">🇰🇼 +965</option><option value="+64">🇳🇿 +64</option><option value="+27">🇿🇦 +27</option><option value="+49">🇩🇪 +49</option><option value="+33">🇫🇷 +33</option><option value="+81">🇯🇵 +81</option><option value="+86">🇨🇳 +86</option><option value="+92">🇵🇰 +92</option><option value="+880">🇧🇩 +880</option><option value="+94">🇱🇰 +94</option><option value="+977">🇳🇵 +977</option>
                                 </select>
-                                <svg class="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                                </svg>
+                                <svg class="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
                             </div>
                             <input type="tel" id="phone-input" maxlength="15" placeholder="Enter mobile number" class="flex-1 py-4 px-4 bg-white rounded-xl text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-spice-gold">
                         </div>
-                        <button id="send-otp-btn" disabled class="w-full py-4 bg-gradient-to-r from-spice-gold to-yellow-500 text-white font-bold rounded-xl hover:from-yellow-500 hover:to-spice-gold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-spice-gold/30">
-                            Send OTP ✨
-                        </button>
+                        <button id="send-otp-btn" disabled class="w-full py-4 bg-gradient-to-r from-spice-gold to-yellow-500 text-white font-bold rounded-xl hover:from-yellow-500 hover:to-spice-gold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-spice-gold/30">Send OTP ✨</button>
                         <p class="text-center text-white/50 text-xs">We'll send a verification code to your phone</p>
                     </div>
-                    
                     <div id="otp-section" class="space-y-4 hidden">
                         <p class="text-center text-white/80 text-sm mb-2">Enter the 6-digit code sent to your phone</p>
                         <div class="flex gap-2 justify-center">
@@ -269,83 +992,53 @@
                             <input type="text" maxlength="1" class="otp-input w-12 h-14 text-center text-xl font-bold bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-spice-gold">
                             <input type="text" maxlength="1" class="otp-input w-12 h-14 text-center text-xl font-bold bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-spice-gold">
                         </div>
-                        <button id="verify-otp-btn" disabled class="w-full py-4 bg-gradient-to-r from-spice-gold to-yellow-500 text-white font-bold rounded-xl hover:from-yellow-500 hover:to-spice-gold transition-all disabled:opacity-50 shadow-lg shadow-spice-gold/30">
-                            Verify & Spin 🎰
-                        </button>
+                        <button id="verify-otp-btn" disabled class="w-full py-4 bg-gradient-to-r from-spice-gold to-yellow-500 text-white font-bold rounded-xl hover:from-yellow-500 hover:to-spice-gold transition-all disabled:opacity-50 shadow-lg shadow-spice-gold/30">Verify & Spin 🎰</button>
                     </div>
-                    
                     <div id="wheel-section" class="hidden">
                         <div class="relative w-72 h-72 mx-auto mb-6">
                             <div class="absolute inset-0 rounded-full bg-gradient-to-r from-spice-gold via-yellow-400 to-spice-gold animate-pulse opacity-30 blur-xl"></div>
-                            <div class="absolute -top-2 left-1/2 -translate-x-1/2 z-20">
-                                <div class="w-0 h-0 border-l-[15px] border-r-[15px] border-t-[25px] border-l-transparent border-r-transparent border-t-white drop-shadow-lg"></div>
-                            </div>
-                            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-gradient-to-br from-white to-gray-200 rounded-full z-10 shadow-lg flex items-center justify-center">
-                                <span class="text-2xl">🎰</span>
-                            </div>
+                            <div class="absolute -top-2 left-1/2 -translate-x-1/2 z-20"><div class="w-0 h-0 border-l-[15px] border-r-[15px] border-t-[25px] border-l-transparent border-r-transparent border-t-white drop-shadow-lg"></div></div>
+                            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-gradient-to-br from-white to-gray-200 rounded-full z-10 shadow-lg flex items-center justify-center"><span class="text-2xl">🎰</span></div>
                             <svg id="spin-wheel" class="w-full h-full drop-shadow-2xl" viewBox="0 0 300 300" style="transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);">
-                                <path d="M150,150 L150,10 A140,140 0 0,1 271.24,71.24 Z" fill="#DAA520"/>
-                                <text x="190" y="70" fill="white" font-size="18" font-weight="bold" transform="rotate(22.5, 150, 150)">₹99</text>
-                                <path d="M150,150 L271.24,71.24 A140,140 0 0,1 290,150 Z" fill="#2E7D32"/>
-                                <text x="230" y="130" fill="white" font-size="10" font-weight="bold" transform="rotate(67.5, 150, 150)">TRY AGAIN</text>
-                                <path d="M150,150 L290,150 A140,140 0 0,1 271.24,228.76 Z" fill="#E53935"/>
-                                <text x="225" y="185" fill="white" font-size="16" font-weight="bold" transform="rotate(112.5, 150, 150)">₹299</text>
-                                <path d="M150,150 L271.24,228.76 A140,140 0 0,1 150,290 Z" fill="#388E3C"/>
-                                <text x="180" y="245" fill="white" font-size="10" font-weight="bold" transform="rotate(157.5, 150, 150)">TRY AGAIN</text>
-                                <path d="M150,150 L150,290 A140,140 0 0,1 28.76,228.76 Z" fill="#7B1FA2"/>
-                                <text x="85" y="245" fill="white" font-size="16" font-weight="bold" transform="rotate(202.5, 150, 150)">₹599</text>
-                                <path d="M150,150 L28.76,228.76 A140,140 0 0,1 10,150 Z" fill="#43A047"/>
-                                <text x="35" y="185" fill="white" font-size="10" font-weight="bold" transform="rotate(247.5, 150, 150)">TRY AGAIN</text>
-                                <path d="M150,150 L10,150 A140,140 0 0,1 28.76,71.24 Z" fill="#FFA000"/>
-                                <text x="50" y="115" fill="white" font-size="18" font-weight="bold" transform="rotate(292.5, 150, 150)">₹99</text>
-                                <path d="M150,150 L28.76,71.24 A140,140 0 0,1 150,10 Z" fill="#2E7D32"/>
-                                <text x="95" y="55" fill="white" font-size="10" font-weight="bold" transform="rotate(337.5, 150, 150)">TRY AGAIN</text>
-                                <circle cx="150" cy="150" r="140" fill="none" stroke="white" stroke-width="8"/>
-                                <circle cx="150" cy="150" r="130" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+                                <path d="M150,150 L150,10 A140,140 0 0,1 271.24,71.24 Z" fill="#DAA520"/><text x="190" y="70" fill="white" font-size="18" font-weight="bold" transform="rotate(22.5, 150, 150)">₹99</text>
+                                <path d="M150,150 L271.24,71.24 A140,140 0 0,1 290,150 Z" fill="#2E7D32"/><text x="230" y="130" fill="white" font-size="10" font-weight="bold" transform="rotate(67.5, 150, 150)">TRY AGAIN</text>
+                                <path d="M150,150 L290,150 A140,140 0 0,1 271.24,228.76 Z" fill="#E53935"/><text x="225" y="185" fill="white" font-size="16" font-weight="bold" transform="rotate(112.5, 150, 150)">₹299</text>
+                                <path d="M150,150 L271.24,228.76 A140,140 0 0,1 150,290 Z" fill="#388E3C"/><text x="180" y="245" fill="white" font-size="10" font-weight="bold" transform="rotate(157.5, 150, 150)">TRY AGAIN</text>
+                                <path d="M150,150 L150,290 A140,140 0 0,1 28.76,228.76 Z" fill="#7B1FA2"/><text x="85" y="245" fill="white" font-size="16" font-weight="bold" transform="rotate(202.5, 150, 150)">₹599</text>
+                                <path d="M150,150 L28.76,228.76 A140,140 0 0,1 10,150 Z" fill="#43A047"/><text x="35" y="185" fill="white" font-size="10" font-weight="bold" transform="rotate(247.5, 150, 150)">TRY AGAIN</text>
+                                <path d="M150,150 L10,150 A140,140 0 0,1 28.76,71.24 Z" fill="#FFA000"/><text x="50" y="115" fill="white" font-size="18" font-weight="bold" transform="rotate(292.5, 150, 150)">₹99</text>
+                                <path d="M150,150 L28.76,71.24 A140,140 0 0,1 150,10 Z" fill="#2E7D32"/><text x="95" y="55" fill="white" font-size="10" font-weight="bold" transform="rotate(337.5, 150, 150)">TRY AGAIN</text>
+                                <circle cx="150" cy="150" r="140" fill="none" stroke="white" stroke-width="8"/><circle cx="150" cy="150" r="130" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
                             </svg>
                         </div>
-                        <button id="spin-btn" class="w-full py-4 bg-gradient-to-r from-white to-gray-100 text-pickle-600 font-bold rounded-xl hover:from-gray-100 hover:to-white transition-all shadow-lg flex items-center justify-center gap-2">
-                            <span class="text-2xl">🎰</span>
-                            <span>SPIN NOW!</span>
-                            <span class="text-2xl">🎰</span>
-                        </button>
+                        <button id="spin-btn" class="w-full py-4 bg-gradient-to-r from-white to-gray-100 text-pickle-600 font-bold rounded-xl hover:from-gray-100 hover:to-white transition-all shadow-lg flex items-center justify-center gap-2"><span class="text-2xl">🎰</span><span>SPIN NOW!</span><span class="text-2xl">🎰</span></button>
                     </div>
-                    
                     <div id="result-section" class="hidden text-center">
                         <div id="win-result" class="hidden">
-                            <div class="relative">
-                                <div class="text-7xl mb-4 animate-bounce">🎊</div>
-                            </div>
+                            <div class="relative"><div class="text-7xl mb-4 animate-bounce">🎊</div></div>
                             <h3 class="font-display text-3xl text-spice-gold font-bold mb-2">Congratulations!</h3>
                             <p class="text-white/80 mb-2">You won</p>
                             <p class="text-6xl font-bold text-white mb-4" id="win-amount">₹299</p>
-                            <div class="inline-block px-4 py-2 bg-spice-gold/20 rounded-full mb-6">
-                                <span class="text-spice-gold text-sm">💰 Added to your wallet!</span>
-                            </div>
+                            <div class="inline-block px-4 py-2 bg-spice-gold/20 rounded-full mb-6"><span class="text-spice-gold text-sm">💰 Added to your wallet!</span></div>
                         </div>
                         <div id="lose-result" class="hidden">
                             <div class="text-6xl mb-4">😔</div>
                             <h3 class="font-display text-2xl text-white font-bold mb-2">Better luck next time!</h3>
                             <p class="text-white/80 mb-6">Don't worry, check out our amazing products!</p>
                         </div>
-                        <button id="continue-btn" class="w-full py-4 bg-gradient-to-r from-spice-gold to-yellow-500 text-white font-bold rounded-xl hover:from-yellow-500 hover:to-spice-gold transition-all shadow-lg shadow-spice-gold/30">
-                            Start Shopping 🛒
-                        </button>
+                        <button id="continue-btn" class="w-full py-4 bg-gradient-to-r from-spice-gold to-yellow-500 text-white font-bold rounded-xl hover:from-yellow-500 hover:to-spice-gold transition-all shadow-lg shadow-spice-gold/30">Start Shopping 🛒</button>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Product Detail Modal - NO ANIMATION -->
     <div id="product-modal" class="fixed inset-0 z-[80] hidden">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" id="product-modal-overlay"></div>
         <div class="absolute bottom-0 left-0 right-0 max-w-lg mx-auto bg-white rounded-t-3xl max-h-[90vh] overflow-y-auto">
             <div class="sticky top-0 bg-white p-4 border-b border-gray-100 flex items-center justify-between z-10">
                 <h3 class="font-display text-lg font-bold text-gray-800" id="modal-product-name">Product Name</h3>
-                <button id="close-product-modal" class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                </button>
+                <button id="close-product-modal" class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"><svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </div>
             <div class="p-4">
                 <div class="relative aspect-square bg-pickle-50 rounded-2xl overflow-hidden mb-4">
@@ -362,19 +1055,14 @@
                 </div>
                 <div class="sticky bottom-0 bg-white pt-4 pb-6 border-t border-gray-100">
                     <div class="flex items-center justify-between">
-                        <div>
-                            <p class="text-sm text-gray-500">Total Price</p>
-                            <p class="text-2xl font-bold text-pickle-600" id="modal-total-price">₹0</p>
-                        </div>
+                        <div><p class="text-sm text-gray-500">Total Price</p><p class="text-2xl font-bold text-pickle-600" id="modal-total-price">₹0</p></div>
                         <div class="flex items-center gap-3">
                             <div class="flex items-center bg-gray-100 rounded-xl">
                                 <button id="qty-decrease" class="w-10 h-10 flex items-center justify-center text-pickle-600 font-bold text-xl">-</button>
                                 <span id="qty-value" class="w-8 text-center font-semibold">1</span>
                                 <button id="qty-increase" class="w-10 h-10 flex items-center justify-center text-pickle-600 font-bold text-xl">+</button>
                             </div>
-                            <button id="add-to-cart-btn" class="px-6 py-3 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600 transition-colors">
-                                Add to Cart
-                            </button>
+                            <button id="add-to-cart-btn" class="px-6 py-3 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600 transition-colors">Add to Cart</button>
                         </div>
                     </div>
                 </div>
@@ -382,16 +1070,13 @@
         </div>
     </div>
 
-    <!-- Cart Sidebar - NO ANIMATION -->
     <div id="cart-sidebar" class="fixed inset-0 z-[85] hidden">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" id="cart-overlay"></div>
         <div class="absolute top-0 right-0 bottom-0 w-full max-w-md bg-white shadow-2xl">
             <div class="h-full flex flex-col">
                 <div class="p-4 border-b border-gray-100 flex items-center justify-between">
                     <h2 class="font-display text-xl font-bold text-gray-800">Your Cart</h2>
-                    <button id="close-cart" class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
+                    <button id="close-cart" class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center"><svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
                 </div>
                 <div class="flex-1 overflow-y-auto p-4" id="cart-items">
                     <div id="empty-cart" class="h-full flex flex-col items-center justify-center text-center">
@@ -411,22 +1096,10 @@
                         </label>
                     </div>
                     <div class="space-y-2 mb-4 text-sm">
-                        <div class="flex justify-between">
-                            <span class="text-gray-500">Subtotal</span>
-                            <span class="font-medium" id="cart-subtotal">₹0</span>
-                        </div>
-                        <div class="flex justify-between" id="wallet-discount-row" style="display: none;">
-                            <span class="text-spice-gold">Wallet Discount</span>
-                            <span class="font-medium text-spice-gold" id="wallet-discount">-₹0</span>
-                        </div>
-                        <div class="flex justify-between">
-                            <span class="text-gray-500">Delivery</span>
-                            <span class="font-medium" id="delivery-charge">₹50</span>
-                        </div>
-                        <div class="flex justify-between text-lg font-bold pt-2 border-t">
-                            <span>Total</span>
-                            <span class="text-pickle-600" id="cart-total">₹0</span>
-                        </div>
+                        <div class="flex justify-between"><span class="text-gray-500">Subtotal</span><span class="font-medium" id="cart-subtotal">₹0</span></div>
+                        <div class="flex justify-between" id="wallet-discount-row" style="display: none;"><span class="text-spice-gold">Wallet Discount</span><span class="font-medium text-spice-gold" id="wallet-discount">-₹0</span></div>
+                        <div class="flex justify-between"><span class="text-gray-500">Delivery</span><span class="font-medium" id="delivery-charge">₹50</span></div>
+                        <div class="flex justify-between text-lg font-bold pt-2 border-t"><span>Total</span><span class="text-pickle-600" id="cart-total">₹0</span></div>
                     </div>
                     <button id="checkout-btn" class="w-full py-4 bg-pickle-500 text-white font-bold rounded-xl hover:bg-pickle-600 transition-colors flex items-center justify-center gap-2">
                         <span>Proceed to Checkout</span>
@@ -437,38 +1110,22 @@
         </div>
     </div>
 
-    <!-- Bottom Navigation -->
     <nav id="bottom-nav" class="fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-gray-100 shadow-lg">
         <div class="max-w-lg mx-auto px-4">
             <div class="flex items-center justify-around py-2">
-                <button class="nav-item active flex flex-col items-center py-2 px-4" data-page="home">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-                    <span class="text-xs mt-1 font-medium">Home</span>
-                </button>
-                <button class="nav-item flex flex-col items-center py-2 px-4" data-page="categories">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
-                    <span class="text-xs mt-1 font-medium">Categories</span>
-                </button>
-                <button class="nav-item flex flex-col items-center py-2 px-4" data-page="orders">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
-                    <span class="text-xs mt-1 font-medium">Orders</span>
-                </button>
-                <button class="nav-item flex flex-col items-center py-2 px-4" data-page="account">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                    <span class="text-xs mt-1 font-medium">Account</span>
-                </button>
+                <button class="nav-item active flex flex-col items-center py-2 px-4" data-page="home"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg><span class="text-xs mt-1 font-medium">Home</span></button>
+                <button class="nav-item flex flex-col items-center py-2 px-4" data-page="categories"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg><span class="text-xs mt-1 font-medium">Categories</span></button>
+                <button class="nav-item flex flex-col items-center py-2 px-4" data-page="orders"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg><span class="text-xs mt-1 font-medium">Orders</span></button>
+                <button class="nav-item flex flex-col items-center py-2 px-4" data-page="account"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg><span class="text-xs mt-1 font-medium">Account</span></button>
             </div>
         </div>
     </nav>
 
-    <!-- Toast Notifications -->
     <div id="toast-container" class="fixed top-20 right-4 z-[95] space-y-2"></div>
 
-    <!-- Firebase SDK (single version - v10) -->
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     
-    <!-- Main Application JavaScript -->
     <script src="js/config.js"></script>
     <script src="js/store.js"></script>
     <script src="js/api.js"></script>
