@@ -860,20 +860,27 @@
         if (appEl) appEl.classList.remove('hidden');
         // Remove overlay after animation
         var ov = document.getElementById('loading-overlay');
-        if (ov) setTimeout(function(){ ov.style.transition='opacity 0.8s'; ov.style.opacity='0'; setTimeout(function(){ ov.remove(); }, 900); }, 800); }, 500);
+        if (ov) setTimeout(function(){ ov.style.transition='opacity 0.8s'; ov.style.opacity='0'; setTimeout(function(){ ov.remove(); }, 900); }, 800); }, 600);
       return;
     }
-    // 3-second total loader: progress starts at 0.5s, fills over ~2.5s
+    // Slow eased progress: takes ~4.5 seconds to fill
     var elapsed = Date.now() - loaderStart;
-    var duration = 2500; // ms to fill bar (after initial 0.5s delay)
-    pr = Math.min(100, (elapsed / duration) * 100);
+    var duration = 4500;
+    // Ease-out curve so it starts faster and slows at the end
+    var t = Math.min(1, elapsed / duration);
+    var eased = 1 - Math.pow(1 - t, 2.5);
+    pr = Math.min(100, eased * 100);
     fill.style.width = pr + '%';
     for (var i = stp.length-1; i >= 0; i--) { if (pr >= stp[i].at) { msg.textContent = stp[i].t; break; } }
-    if (pr < 100) setTimeout(tick, 50);
-    else tick(); // triggers the exit
+    if (pr < 100) {
+      requestAnimationFrame(tick);
+    } else {
+      tick();
+    }
   }
-  var loaderStart = Date.now();
-  setTimeout(tick, 500);
+  // Don't start progress until 1.5s in (let logo animate first)
+  var loaderStart;
+  setTimeout(function() { loaderStart = Date.now(); tick(); }, 1500);
 })();
 
     </script>
