@@ -84,7 +84,7 @@
     <!-- SeaSalt Animated Loader Styles -->
     <style>
       #loading-overlay {
-        position: fixed; inset: 0; z-index: 100; background: #fff;
+        position: fixed; inset: 0; z-index: 10000; background: #fff;
       }
       #loading-overlay.done {
         opacity: 0; pointer-events: none; transition: opacity 0.8s ease;
@@ -855,24 +855,18 @@
       msg.style.opacity = '0.5';
       msg.style.color = 'var(--red)';
       setTimeout(function() {
-        // Restore normal getElementById
-        if (window.__seasaltLoaderRestore) window.__seasaltLoaderRestore();
-        // Now reveal app
-        var appEl = document.getElementById('app');
-        if (appEl) { appEl.classList.remove('hidden'); appEl.style.display = ''; }
-        // Fade out loader
+        // Fade out loader overlay — spinwheel + app are already underneath
         document.getElementById('ss-loader').classList.add('exit');
         var ov = document.getElementById('loading-overlay');
         if (ov) setTimeout(function(){ ov.style.transition='opacity 0.8s'; ov.style.opacity='0'; setTimeout(function(){ ov.remove(); }, 900); }, 800);
       }, 600);
       return;
     }
-    // Slow eased progress: takes ~4.5 seconds to fill
+    // Progress fills over 2 seconds
     var elapsed = Date.now() - loaderStart;
-    var duration = 4500;
-    // Ease-out curve so it starts faster and slows at the end
+    var duration = 2000;
     var t = Math.min(1, elapsed / duration);
-    var eased = 1 - Math.pow(1 - t, 2.5);
+    var eased = 1 - Math.pow(1 - t, 2);
     pr = Math.min(100, eased * 100);
     fill.style.width = pr + '%';
     for (var i = stp.length-1; i >= 0; i--) { if (pr >= stp[i].at) { msg.textContent = stp[i].t; break; } }
@@ -882,9 +876,9 @@
       tick();
     }
   }
-  // Don't start progress until 1.5s in (let logo animate first)
+  // Start progress after 1s of logo animation = 3s total (1s + 2s fill)
   var loaderStart;
-  setTimeout(function() { loaderStart = Date.now(); tick(); }, 1500);
+  setTimeout(function() { loaderStart = Date.now(); tick(); }, 1000);
 })();
 
     </script>
@@ -1141,57 +1135,6 @@
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
     
-    <!-- Loader Guard: prevents app.js from dismissing loader early -->
-    <script>
-    (function(){
-      // Our animated loader needs minimum 6 seconds
-      // Block any external code from showing #app or hiding #loading-overlay
-      var LOADER_MIN_MS = 6000;
-      var pageStart = Date.now();
-      window.__seasaltLoaderDone = false;
-
-      // Save original getElementById
-      var origGetById = document.getElementById.bind(document);
-
-      // Intercept attempts to find loading-overlay by app.js
-      // Return a dummy element so app.js doesn't error, but does nothing visible
-      var dummyDiv = document.createElement('div');
-      dummyDiv.style.cssText = 'display:none!important';
-      dummyDiv.id = 'loading-overlay-dummy';
-      dummyDiv.classList = { add:function(){}, remove:function(){}, contains:function(){return false}, toggle:function(){} };
-
-      var origRemove = Element.prototype.remove;
-
-      // Override getElementById temporarily
-      document.getElementById = function(id) {
-        // If loader hasn't finished and something asks for loading-overlay, give dummy
-        if (id === 'loading-overlay' && !window.__seasaltLoaderDone) {
-          return dummyDiv;
-        }
-        // If loader hasn't finished and something tries to get #app to show it, protect it
-        if (id === 'app' && !window.__seasaltLoaderDone) {
-          var real = origGetById('app');
-          if (real) {
-            // Wrap classList.remove to block removing 'hidden' too early
-            var origRemoveClass = real.classList.remove.bind(real.classList);
-            real.classList.remove = function(cls) {
-              if (cls === 'hidden' && !window.__seasaltLoaderDone) return; // block
-              origRemoveClass(cls);
-            };
-          }
-          return real;
-        }
-        return origGetById(id);
-      };
-
-      // When our loader finishes, restore everything
-      window.__seasaltLoaderRestore = function() {
-        window.__seasaltLoaderDone = true;
-        document.getElementById = origGetById;
-      };
-    })();
-    </script>
-
     <script src="js/config.js"></script>
     <script src="js/store.js"></script>
     <script src="js/api.js"></script>
