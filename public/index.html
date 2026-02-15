@@ -863,13 +863,17 @@
         if (ov) setTimeout(function(){ ov.style.transition='opacity 0.8s'; ov.style.opacity='0'; setTimeout(function(){ ov.remove(); }, 900); }, 800); }, 500);
       return;
     }
-    var sp = pr<25?Math.random()*2.5+1.2:pr<55?Math.random()*1.8+0.8:pr<80?Math.random()*1.2+0.4:Math.random()*0.6+0.2;
-    pr = Math.min(100, pr + sp);
+    // 3-second total loader: progress starts at 0.5s, fills over ~2.5s
+    var elapsed = Date.now() - loaderStart;
+    var duration = 2500; // ms to fill bar (after initial 0.5s delay)
+    pr = Math.min(100, (elapsed / duration) * 100);
     fill.style.width = pr + '%';
     for (var i = stp.length-1; i >= 0; i--) { if (pr >= stp[i].at) { msg.textContent = stp[i].t; break; } }
-    setTimeout(tick, 70 + Math.random() * 100);
+    if (pr < 100) setTimeout(tick, 50);
+    else tick(); // triggers the exit
   }
-  setTimeout(tick, 3000);
+  var loaderStart = Date.now();
+  setTimeout(tick, 500);
 })();
 
     </script>
