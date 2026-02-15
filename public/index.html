@@ -85,9 +85,10 @@
     <style>
       #loading-overlay {
         position: fixed; inset: 0; z-index: 10000; background: #fff;
+        display: none;
       }
-      #loading-overlay.done {
-        opacity: 0; pointer-events: none; transition: opacity 0.8s ease;
+      #loading-overlay.active {
+        display: block;
       }
   @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;500&family=Caveat:wght@600;700&display=swap');
 
@@ -828,8 +829,9 @@
   requestAnimationFrame(frame);
 
   // ═══ FLAVOUR REEL ═══
-  var items = document.querySelectorAll('.fi');
+  var items = document.querySelectorAll('#loading-overlay .fi');
   var idx = 0;
+  var reelInterval;
   function cycle() {
     var p = idx;
     idx = (idx + 1) % items.length;
@@ -838,47 +840,73 @@
     setTimeout(function() { items[p].classList.remove('off'); }, 450);
     items[idx].classList.add('on');
   }
-  setTimeout(function() { items[0].classList.add('on'); setInterval(cycle, 2000); }, 2800);
 
   // ═══ PROGRESS ═══
   var fill = document.getElementById('pf');
   var msg = document.getElementById('pm');
-  var pr = 0;
-  var stp = [
-    {at:0,t:'Preparing flavours'},{at:18,t:'Crushing fresh spices'},
-    {at:35,t:'Slow-mixing traditions'},{at:55,t:'Adding sea salt crystals'},
-    {at:75,t:'Sealing in the aroma'},{at:90,t:'Final touches'},{at:98,t:'Ready to serve'}
-  ];
-  function tick() {
-    if (pr >= 100) {
-      msg.textContent = 'Welcome';
-      msg.style.opacity = '0.5';
-      msg.style.color = 'var(--red)';
-      setTimeout(function() {
-        // Fade out loader overlay — spinwheel + app are already underneath
-        document.getElementById('ss-loader').classList.add('exit');
-        var ov = document.getElementById('loading-overlay');
-        if (ov) setTimeout(function(){ ov.style.transition='opacity 0.8s'; ov.style.opacity='0'; setTimeout(function(){ ov.remove(); }, 900); }, 800);
-      }, 600);
-      return;
+
+  // ═══ EXPOSED: call this after spinwheel completes ═══
+  window.showSeaSaltLoader = function() {
+    var ov = document.getElementById('loading-overlay');
+    if (!ov) return;
+
+    // Reset state
+    fill.style.width = '0%';
+    msg.textContent = 'Preparing flavours';
+    msg.style.opacity = '';
+    msg.style.color = '';
+    var ssLoader = document.getElementById('ss-loader');
+    if (ssLoader) ssLoader.classList.remove('exit');
+
+    // Show overlay
+    ov.classList.add('active');
+    ov.style.opacity = '1';
+
+    // Start flavour reel after 0.8s
+    setTimeout(function() {
+      items[0].classList.add('on');
+      reelInterval = setInterval(cycle, 2000);
+    }, 800);
+
+    // Start progress after 1s, fill over 2s = 3s total
+    var pr = 0;
+    var loaderStart;
+    var stp = [
+      {at:0,t:'Preparing flavours'},{at:18,t:'Crushing fresh spices'},
+      {at:35,t:'Slow-mixing traditions'},{at:55,t:'Adding sea salt crystals'},
+      {at:75,t:'Sealing in the aroma'},{at:90,t:'Final touches'},{at:98,t:'Ready to serve'}
+    ];
+
+    function tick() {
+      if (pr >= 100) {
+        msg.textContent = 'Welcome';
+        msg.style.opacity = '0.5';
+        msg.style.color = 'var(--red)';
+        if (reelInterval) clearInterval(reelInterval);
+        setTimeout(function() {
+          if (ssLoader) ssLoader.classList.add('exit');
+          setTimeout(function(){
+            ov.style.transition = 'opacity 0.8s';
+            ov.style.opacity = '0';
+            setTimeout(function(){ ov.remove(); }, 900);
+          }, 800);
+        }, 600);
+        return;
+      }
+      var elapsed = Date.now() - loaderStart;
+      var duration = 2000;
+      var t = Math.min(1, elapsed / duration);
+      var eased = 1 - Math.pow(1 - t, 2);
+      pr = Math.min(100, eased * 100);
+      fill.style.width = pr + '%';
+      for (var i = stp.length-1; i >= 0; i--) { if (pr >= stp[i].at) { msg.textContent = stp[i].t; break; } }
+      if (pr < 100) requestAnimationFrame(tick);
+      else tick();
     }
-    // Progress fills over 2 seconds
-    var elapsed = Date.now() - loaderStart;
-    var duration = 2000;
-    var t = Math.min(1, elapsed / duration);
-    var eased = 1 - Math.pow(1 - t, 2);
-    pr = Math.min(100, eased * 100);
-    fill.style.width = pr + '%';
-    for (var i = stp.length-1; i >= 0; i--) { if (pr >= stp[i].at) { msg.textContent = stp[i].t; break; } }
-    if (pr < 100) {
-      requestAnimationFrame(tick);
-    } else {
-      tick();
-    }
-  }
-  // Start progress after 1s of logo animation = 3s total (1s + 2s fill)
-  var loaderStart;
-  setTimeout(function() { loaderStart = Date.now(); tick(); }, 1000);
+
+    setTimeout(function() { loaderStart = Date.now(); tick(); }, 1000);
+  };
+
 })();
 
     </script>
@@ -1140,6 +1168,26 @@
     <script src="js/api.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/spinwheel.js"></script>
+    
+    <!-- Hook: show animated loader when spinwheel closes -->
+    <script>
+    (function() {
+      // Wait for SpinWheel to be available
+      var checkReady = setInterval(function() {
+        if (window.SpinWheel && window.SpinWheel.hide) {
+          clearInterval(checkReady);
+          var originalHide = window.SpinWheel.hide;
+          window.SpinWheel.hide = function() {
+            originalHide(); // close the spinwheel overlay
+            // Show our animated loader for 3 seconds before app appears
+            if (window.showSeaSaltLoader) {
+              window.showSeaSaltLoader();
+            }
+          };
+        }
+      }, 50);
+    })();
+    </script>
     <script src="js/cart.js"></script>
     <script src="js/orders.js"></script>
     <script src="js/app.js"></script>
