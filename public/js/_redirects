@@ -1,0 +1,12 @@
+# Force www to bare domain
+https://www.seasaltpickles.com/*    https://seasaltpickles.com/:splat    301!
+
+# Old Wix URLs redirect to homepage
+/product-page/*    /    301
+/category/*        /    301
+/privacypolicy     /    301
+/termsandconditions /   301
+/returnandrefunds  /    301
+/shipping          /    301
+/blog              /    301
+/blog/*            /    301
