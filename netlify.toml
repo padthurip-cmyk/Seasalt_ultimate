@@ -1,6 +1,5 @@
 # Netlify Configuration for SeaSalt Pickles
 # ==========================================
-
 [build]
   # Directory where static files are located
   publish = "public"
@@ -31,7 +30,18 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
-# SPA fallback for main app
+# Blog routes (MUST be before the catch-all)
+[[redirects]]
+  from = "/blog"
+  to = "/.netlify/functions/seasalt-blog"
+  status = 200
+
+[[redirects]]
+  from = "/blog/*"
+  to = "/.netlify/functions/seasalt-blog"
+  status = 200
+
+# SPA fallback for main app (catch-all — must be LAST)
 [[redirects]]
   from = "/*"
   to = "/index.html"
@@ -65,9 +75,3 @@
   for = "/data/*"
   [headers.values]
     Cache-Control = "no-cache"
-
-# Environment variables template (set these in Netlify dashboard)
-# MONGODB_URI = "mongodb+srv://username:password@cluster.mongodb.net"
-# DB_NAME = "seasalt_pickles"
-# RAZORPAY_KEY_ID = "rzp_test_xxxxx"
-# RAZORPAY_KEY_SECRET = "xxxxx"
