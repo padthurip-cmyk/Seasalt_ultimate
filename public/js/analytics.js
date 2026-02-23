@@ -4,6 +4,10 @@
  * Tracks page views, product views, cart events, purchases.
  * All data goes to Supabase so the admin dashboard can see
  * real visitor analytics across all users and devices.
+ *
+ * v2.1 FIX: session_end now uses fetch+keepalive instead of
+ * sendBeacon, so Authorization headers are included and
+ * Supabase RLS doesn't reject the insert.
  */
 
 var Analytics = (function() {
@@ -35,7 +39,7 @@ var Analytics = (function() {
         
         trackPageView('home');
         setupListeners();
-        console.log('📊 Analytics v2: Ready | session=' + sessionId);
+        console.log('📊 Analytics v2.1: Ready | session=' + sessionId);
     }
 
     function getSessionId() {
@@ -110,8 +114,6 @@ var Analytics = (function() {
     function updateDailyStats(eventType, value) {
         var today = new Date().toISOString().split('T')[0];
 
-        // Use upsert to increment counters
-        // First try to get existing row, then upsert
         try {
             fetch(SB + 'analytics_daily?date=eq.' + today, {
                 headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY }
@@ -130,7 +132,6 @@ var Analytics = (function() {
                     updated_at: new Date().toISOString()
                 };
 
-                // If new user for today, increment unique count
                 if (!existing) {
                     data.unique_users = 1;
                 }
@@ -200,7 +201,6 @@ var Analytics = (function() {
     // ============================================
 
     function getReport() {
-        // Return a promise that fetches from Supabase
         return fetchReport().then(function(report) {
             return report;
         }).catch(function() {
@@ -215,12 +215,10 @@ var Analytics = (function() {
         var fromDate = sevenDaysAgo.toISOString();
 
         return Promise.all([
-            // Get recent events (last 7 days)
             fetch(SB + 'analytics_events?select=*&created_at=gte.' + fromDate + '&order=created_at.desc&limit=500', {
                 headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY }
             }).then(function(r) { return r.json(); }).catch(function() { return []; }),
 
-            // Get daily stats
             fetch(SB + 'analytics_daily?select=*&order=date.desc&limit=30', {
                 headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY }
             }).then(function(r) { return r.json(); }).catch(function() { return []; })
@@ -232,7 +230,6 @@ var Analytics = (function() {
     }
 
     function buildReport(events, dailyRows) {
-        // Aggregate from events
         var sessions = {};
         var pageViews = 0;
         var productViews = 0;
@@ -246,7 +243,6 @@ var Analytics = (function() {
         var pageStats = {};
 
         events.forEach(function(e) {
-            // Sessions
             if (e.session_id && !sessions[e.session_id]) {
                 sessions[e.session_id] = { start: e.created_at, device: e.device, referrer: e.referrer };
                 var dev = e.device || 'desktop';
@@ -258,7 +254,6 @@ var Analytics = (function() {
                 sources[src] = (sources[src] || 0) + 1;
             }
 
-            // Count event types
             switch(e.event_type) {
                 case 'page_view':
                     pageViews++;
@@ -290,7 +285,6 @@ var Analytics = (function() {
 
         var totalSessions = Object.keys(sessions).length;
 
-        // Build daily data for last 7 days
         var dailyData = [];
         for (var i = 6; i >= 0; i--) {
             var d = new Date();
@@ -309,19 +303,16 @@ var Analytics = (function() {
             });
         }
 
-        // Top pages
         var topPages = Object.entries(pageStats)
             .map(function(entry) { return { page: entry[0], visits: entry[1].visits, avgTime: 0, bounces: 0 }; })
             .sort(function(a, b) { return b.visits - a.visits; })
             .slice(0, 10);
 
-        // Top products
         var topProducts = Object.entries(productStats)
             .map(function(entry) { return { id: entry[0], name: entry[0], views: entry[1].views, cartAdds: entry[1].cartAdds }; })
             .sort(function(a, b) { return b.views - a.views; })
             .slice(0, 10);
 
-        // Recent events
         var recentEvents = events.slice(0, 50).map(function(e) {
             return {
                 category: e.event_type,
@@ -371,7 +362,6 @@ var Analytics = (function() {
     }
 
     function clearAnalytics() {
-        // Clear Supabase tables
         fetch(SB + 'analytics_events', { method: 'DELETE', headers: HEADERS }).catch(function() {});
         fetch(SB + 'analytics_daily', { method: 'DELETE', headers: HEADERS }).catch(function() {});
         console.log('📊 Analytics cleared');
@@ -382,7 +372,6 @@ var Analytics = (function() {
     // ============================================
 
     function setupListeners() {
-        // Track clicks on buttons and links
         document.addEventListener('click', function(e) {
             lastActivity = Date.now();
             var target = e.target.closest('button, a');
@@ -392,9 +381,11 @@ var Analytics = (function() {
             }
         });
 
-        // Track before unload
+        // ★ FIX: Use fetch+keepalive instead of sendBeacon
+        // sendBeacon cannot set Authorization headers, which causes
+        // Supabase to reject inserts when RLS requires auth.
+        // fetch+keepalive survives page unload AND supports headers.
         window.addEventListener('beforeunload', function() {
-            // Send session end event with navigator.sendBeacon for reliability
             var payload = JSON.stringify({
                 event_type: 'session_end',
                 session_id: sessionId,
@@ -406,9 +397,19 @@ var Analytics = (function() {
                 referrer: document.referrer || 'direct'
             });
             
-            if (navigator.sendBeacon) {
-                var blob = new Blob([payload], { type: 'application/json' });
-                navigator.sendBeacon(SB + 'analytics_events?apikey=' + KEY, blob);
+            try {
+                fetch(SB + 'analytics_events', {
+                    method: 'POST',
+                    headers: HEADERS,
+                    body: payload,
+                    keepalive: true
+                }).catch(function(){});
+            } catch(e) {
+                // Fallback to sendBeacon if fetch+keepalive not supported
+                if (navigator.sendBeacon) {
+                    var blob = new Blob([payload], { type: 'application/json' });
+                    navigator.sendBeacon(SB + 'analytics_events?apikey=' + KEY, blob);
+                }
             }
         });
     }
