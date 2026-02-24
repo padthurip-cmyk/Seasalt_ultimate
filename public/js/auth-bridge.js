@@ -348,7 +348,13 @@
                     localStorage.removeItem('seasalt_user');
                     localStorage.removeItem('seasalt_spin_phone');
                     localStorage.removeItem('seasalt_user_phone');
+                    localStorage.removeItem('seasalt_spin_wallet');
+                    localStorage.removeItem('seasalt_spin_reward');
+                    localStorage.removeItem('seasalt_admin_credit');
+                    localStorage.removeItem('seasalt_spin_done');
                     if (typeof Store !== 'undefined' && Store.logout) Store.logout();
+                    // Clear wallet UI
+                    applyWalletToUI({ amount: 0, expiresAt: null });
                     console.log('[AuthBridge] Logged out');
                 },
                 isLoggedIn: function() {
