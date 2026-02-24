@@ -39,111 +39,11 @@ const UI = (function() {
     }
 
     function syncWalletFromSupabase() {
-        // CRITICAL: Don't sync if cart.js just deducted wallet (prevents overwrite)
-        if (window._walletSyncPaused) {
-            console.log('[UI v10] Wallet sync paused (order in progress)');
-            return Promise.resolve(null);
-        }
-        
-        // Also check if wallet was recently deducted (within last 30 seconds)
-        var lastDeduction = window._walletLastDeductedAt || 0;
-        if (Date.now() - lastDeduction < 30000) {
-            console.log('[UI v10] Wallet sync skipped (recent deduction)');
-            return Promise.resolve(null);
-        }
-        
-        var phone = getUserPhone();
-        if (!phone) {
-            return Promise.resolve(null);
-        }
-
-        console.log('[UI v10] Syncing wallet from Supabase for:', phone);
-
-        return fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(phone) + '&select=wallet_balance,wallet_expires_at', {
-            headers: {
-                'apikey': SUPABASE_KEY,
-                'Authorization': 'Bearer ' + SUPABASE_KEY
-            }
-        })
-        .then(function(res) {
-            if (!res.ok) {
-                console.error('[UI v10] Supabase fetch failed:', res.status);
-                return [];
-            }
-            return res.json();
-        })
-        .then(function(users) {
-            if (!users || users.length === 0 || !users[0]) return null;
-
-            var serverBalance = users[0].wallet_balance || 0;
-            var serverExpiry = users[0].wallet_expires_at;
-
-            // Get current local wallet
-            var localWallet = null;
-            try { localWallet = JSON.parse(localStorage.getItem(SPIN_WALLET_KEY) || 'null'); } catch (e) {}
-            var localBalance = localWallet ? (localWallet.amount || 0) : 0;
-
-            // IMPORTANT: If local wallet was removed (deducted to 0) and server still shows balance,
-            // check if there's a recent order in localStorage — if yes, trust local (0) over server
-            if (localBalance === 0 && serverBalance > 0) {
-                try {
-                    var recentOrders = JSON.parse(localStorage.getItem('seasalt_orders') || '[]');
-                    if (recentOrders.length > 0) {
-                        var lastOrder = recentOrders[0];
-                        var orderAge = Date.now() - new Date(lastOrder.createdAt).getTime();
-                        if (orderAge < 60000 && lastOrder.walletUsed > 0) {
-                            // Order placed in last 60 seconds used wallet — server is stale, don't restore
-                            console.log('[UI v10] Skipping wallet restore - recent order used wallet');
-                            return null;
-                        }
-                    }
-                } catch (e) {}
-            }
-
-            if (serverBalance > 0 && serverExpiry) {
-                var expiry = new Date(serverExpiry);
-                if (new Date() < expiry) {
-                    // Server has valid wallet - use it as source of truth
-                    var walletData = {
-                        amount: serverBalance,
-                        expiresAt: serverExpiry,
-                        phone: phone,
-                        lastSync: new Date().toISOString()
-                    };
-                    localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify(walletData));
-
-                    // Update UI
-                    var wallet = getSpinWallet();
-                    updateWalletDisplay(wallet);
-                    if (!walletTimerInterval) startWalletTimer();
-
-                    if (serverBalance !== localBalance) {
-                        console.log('[UI v10] Wallet synced: ₹' + localBalance + ' → ₹' + serverBalance);
-                        if (serverBalance > localBalance && localBalance > 0) {
-                            showToast('Wallet updated! Balance: ₹' + serverBalance, 'success');
-                        } else if (localBalance === 0 && serverBalance > 0) {
-                            showToast('You have ₹' + serverBalance + ' wallet credits!', 'success');
-                        }
-                    }
-                    return { amount: serverBalance, timeLeft: expiry - new Date() };
-                } else {
-                    // Expired
-                    localStorage.removeItem(SPIN_WALLET_KEY);
-                    updateWalletDisplay(null);
-                    return null;
-                }
-            } else if (serverBalance === 0 && localBalance > 0) {
-                // Server says 0, clear local
-                localStorage.removeItem(SPIN_WALLET_KEY);
-                updateWalletDisplay(null);
-                return null;
-            }
-            return null;
-        })
-        .catch(function(err) {
-            console.error('[UI v10] Wallet sync error:', err);
-            return null;
-        });
+        // v10.1: DISABLED — wallet sync is now handled exclusively by auth-bridge.js v1.3
+        // Having two modules writing to seasalt_spin_wallet caused doubling bugs.
+        // auth-bridge.js handles: Supabase fetch → 3-key split → combined display write
+        console.log('[UI v10.1] Wallet sync delegated to auth-bridge.js');
+        return Promise.resolve(null);
     }
 
     function startWalletSync() {
