@@ -230,6 +230,7 @@ const Cart = (function() {
 
         UI.startWalletTimer = function() {
             if (window._walletTimerInterval) { clearInterval(window._walletTimerInterval); window._walletTimerInterval = null; }
+            window._cartWalletTimerActive = true;
 
             var expiresAt = null;
             var sources = ['seasalt_spin_wallet', 'seasalt_admin_credit', 'seasalt_spin_reward'];
