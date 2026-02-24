@@ -65,11 +65,11 @@
     }
 
     function recalcWallet() {
-        var spinWallet = null;
-        try { spinWallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
+        var spinReward = null;
+        try { spinReward = JSON.parse(localStorage.getItem('seasalt_spin_reward') || 'null'); } catch(e) {}
         var spinBalance = 0;
-        if (spinWallet && spinWallet.expiresAt && new Date(spinWallet.expiresAt) > new Date()) {
-            spinBalance = parseFloat(spinWallet.amount) || 0;
+        if (spinReward && spinReward.expiresAt && new Date(spinReward.expiresAt) > new Date()) {
+            spinBalance = parseFloat(spinReward.amount) || 0;
         }
 
         var adminCredit = null;
@@ -81,10 +81,9 @@
 
         var total = spinBalance + adminBalance;
         if (total > 0) {
-            var expiry = (adminCredit && adminCredit.expiresAt) ? adminCredit.expiresAt :
-                         (spinWallet && spinWallet.expiresAt) ? spinWallet.expiresAt :
-                         new Date(Date.now() + 48*60*60*1000).toISOString();
-            var walletData = { amount: total, expiresAt: expiry };
+            var expiry = (adminBalance > 0 && adminCredit) ? adminCredit.expiresAt :
+                         (spinReward ? spinReward.expiresAt : null);
+            var walletData = { amount: total, expiresAt: expiry, source: 'combined' };
             localStorage.setItem('seasalt_spin_wallet', JSON.stringify(walletData));
             applyWalletToUI(walletData);
         } else {
@@ -211,21 +210,33 @@
                 var supabaseBalance = parseFloat(user.wallet_balance) || 0;
 
                 // Read current localStorage wallets
-                // seasalt_spin_wallet = spin reward (30 day expiry, set by SpinWheel)
-                // seasalt_admin_credit = admin credit (48hr expiry, set by admin portal)
-                var spinWallet = null;
-                try { spinWallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
+                // seasalt_spin_reward = ORIGINAL spin amount (30 day, set by SpinWheel)
+                // seasalt_admin_credit = admin credit (48hr, set by admin)
+                // seasalt_spin_wallet = DISPLAY ONLY (total for store UI, never read back as input)
+
+                // Read ORIGINAL spin reward — NOT seasalt_spin_wallet
+                var spinReward = null;
+                try { spinReward = JSON.parse(localStorage.getItem('seasalt_spin_reward') || 'null'); } catch(e) {}
                 var spinBalance = 0;
-                if (spinWallet && spinWallet.amount) {
-                    // Check if spin reward expired
-                    if (spinWallet.expiresAt && new Date(spinWallet.expiresAt) > new Date()) {
-                        spinBalance = parseFloat(spinWallet.amount) || 0;
+                if (spinReward && spinReward.amount) {
+                    if (spinReward.expiresAt && new Date(spinReward.expiresAt) > new Date()) {
+                        spinBalance = parseFloat(spinReward.amount) || 0;
                     } else {
-                        localStorage.removeItem('seasalt_spin_wallet');
-                        console.log('[AuthBridge] Spin reward expired, removed');
+                        localStorage.removeItem('seasalt_spin_reward');
                     }
                 }
 
+                // Migration: first time — move existing seasalt_spin_wallet to seasalt_spin_reward
+                if (!spinReward && !localStorage.getItem('seasalt_admin_credit')) {
+                    var oldW = null;
+                    try { oldW = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
+                    if (oldW && oldW.amount > 0 && oldW.source !== 'combined') {
+                        localStorage.setItem('seasalt_spin_reward', JSON.stringify(oldW));
+                        spinBalance = parseFloat(oldW.amount) || 0;
+                    }
+                }
+
+                // Read admin credit
                 var adminCredit = null;
                 try { adminCredit = JSON.parse(localStorage.getItem('seasalt_admin_credit') || 'null'); } catch(e) {}
                 var adminBalance = 0;
@@ -234,71 +245,39 @@
                         adminBalance = parseFloat(adminCredit.amount) || 0;
                     } else {
                         localStorage.removeItem('seasalt_admin_credit');
-                        console.log('[AuthBridge] Admin credit expired, removed');
+                        adminBalance = 0;
                     }
                 }
 
-                var localTotal = spinBalance + adminBalance;
-
-                // Supabase wallet_balance is set by admin — it's the admin credit amount
-                // Spin reward is only in localStorage (SpinWheel doesn't write to Supabase)
+                // Detect NEW admin credit from Supabase
                 if (supabaseBalance > 0 && supabaseBalance !== adminBalance) {
-                    // Admin added/changed credit — update local admin credit with 48hr expiry
-                    var creditData = {
+                    localStorage.setItem('seasalt_admin_credit', JSON.stringify({
                         amount: supabaseBalance,
                         expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
                         source: 'admin'
-                    };
-                    localStorage.setItem('seasalt_admin_credit', JSON.stringify(creditData));
+                    }));
                     adminBalance = supabaseBalance;
-                    console.log('[AuthBridge] ✅ Admin credit synced: ₹' + supabaseBalance + ' (48hr expiry)');
                 }
 
-                // Combine both into seasalt_spin_wallet for the store UI to read
-                var totalBalance = spinBalance + adminBalance;
-                if (totalBalance > 0) {
-                    // Use the EARLIER expiry for the combined wallet display
-                    var displayExpiry;
-                    if (adminBalance > 0 && adminCredit && adminCredit.expiresAt) {
-                        // Show admin credit expiry (48hr) since it's more urgent
-                        displayExpiry = adminCredit.expiresAt;
-                    } else if (spinWallet && spinWallet.expiresAt) {
-                        displayExpiry = spinWallet.expiresAt;
-                    } else {
-                        displayExpiry = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-                    }
-
-                    var walletData = { amount: totalBalance, expiresAt: displayExpiry };
+                // Write COMBINED display wallet (store UI reads this)
+                var total = spinBalance + adminBalance;
+                if (total > 0) {
+                    var expiry = (adminBalance > 0 && adminCredit) ? 
+                        (JSON.parse(localStorage.getItem('seasalt_admin_credit') || '{}').expiresAt) :
+                        (spinReward ? spinReward.expiresAt : new Date(Date.now() + 48*60*60*1000).toISOString());
+                    var walletData = { amount: total, expiresAt: expiry, source: 'combined' };
                     localStorage.setItem('seasalt_spin_wallet', JSON.stringify(walletData));
-                    console.log('[AuthBridge] ✅ Total wallet: ₹' + totalBalance + ' (spin:₹' + spinBalance + ' + admin:₹' + adminBalance + ')');
                     applyWalletToUI(walletData);
-                } else if (totalBalance === 0 && localStorage.getItem('seasalt_spin_wallet')) {
-                    // Both expired — remove wallet badge
+                } else {
                     localStorage.removeItem('seasalt_spin_wallet');
                     applyWalletToUI({ amount: 0, expiresAt: null });
-                    console.log('[AuthBridge] All wallet credits expired, badge removed');
                 }
 
-                // Sync spin reward → Supabase so admin can see it
-                // (Don't overwrite admin credit though)
-                if (spinBalance > 0 && supabaseBalance === 0) {
-                    fetch(SU + '/rest/v1/users?phone=eq.' + encodeURIComponent(p), {
-                        method: 'PATCH',
-                        headers: { 'apikey': SK, 'Authorization': 'Bearer ' + SK, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-                        body: JSON.stringify({ wallet_balance: spinBalance })
-                    }).catch(function(){});
-                    console.log('[AuthBridge] Synced spin reward → Supabase: ₹' + spinBalance);
-                }
-
-                // Sync name if missing locally
+                // Sync name
                 if (user.name) {
                     try {
                         var u = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
-                        if (!u.name) {
-                            u.name = user.name;
-                            u.phone = phone;
-                            localStorage.setItem('seasalt_user', JSON.stringify(u));
-                        }
+                        if (!u.name) { u.name = user.name; u.phone = phone; localStorage.setItem('seasalt_user', JSON.stringify(u)); }
                     } catch(e) {}
                 }
 
