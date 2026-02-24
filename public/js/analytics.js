@@ -1,13 +1,9 @@
 /**
- * SeaSalt Pickles - Analytics v2 (Supabase-Backed)
+ * SeaSalt Pickles - Analytics v2.4 (Supabase-Backed)
  * ==================================================
- * Tracks page views, product views, cart events, purchases.
- * All data goes to Supabase so the admin dashboard can see
- * real visitor analytics across all users and devices.
- *
- * v2.1 FIX: session_end now uses fetch+keepalive instead of
- * sendBeacon, so Authorization headers are included and
- * Supabase RLS doesn't reject the insert.
+ * v2.4 FIX: Reads phone from localStorage 'seasalt_phone' key
+ * Firebase auth.currentUser is ALWAYS null because both firebase-auth.js
+ * and spinwheel.js call auth.signOut() on page load / after OTP.
  */
 
 var Analytics = (function() {
@@ -28,20 +24,14 @@ var Analytics = (function() {
     var lastActivity = Date.now();
     var deviceInfo = {};
 
-    // ============================================
-    // INIT
-    // ============================================
-
     function init() {
         sessionId = getSessionId();
         userId = getUserId();
         deviceInfo = getDeviceInfo();
-        
         trackPageView('home');
         setupListeners();
         startLoginWatcher();
-        startFirebaseWatcher();
-        console.log('📊 Analytics v2.3: Ready | session=' + sessionId + ' | user=' + userId);
+        console.log('📊 Analytics v2.4: Ready | session=' + sessionId + ' | user=' + userId);
     }
 
     function getSessionId() {
@@ -54,13 +44,8 @@ var Analytics = (function() {
     }
 
     function getUserId() {
-        // Check if user is logged in (store saves phone to localStorage after Firebase auth)
         var phone = getLoggedInPhone();
-        if (phone) {
-            userId = phone;
-            return phone;
-        }
-        // Fallback to anonymous ID
+        if (phone) { userId = phone; return phone; }
         var uid = localStorage.getItem('seasalt_user_id');
         if (!uid) {
             uid = 'u_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
@@ -69,43 +54,25 @@ var Analytics = (function() {
         return uid;
     }
 
-    // Detect logged-in phone from various localStorage keys the store might use
+    // v2.4: Read phone from localStorage (the ONLY reliable source)
     function getLoggedInPhone() {
-        // Try all common keys the store auth module might save the phone under
-        var keys = [
-            'seasalt_phone', 'user_phone', 'phone', 'ss_phone',
-            'seasalt_user_phone', 'loggedInPhone', 'auth_phone',
-            'userPhone', 'customer_phone', 'ss_customer_phone',
-            'seasalt_customer', 'currentUserPhone'
-        ];
+        // 1. Direct phone key — set by both spinwheel.js and firebase-auth.js
+        var phone = localStorage.getItem('seasalt_phone');
+        if (phone && phone.length >= 10) return phone;
+        // 2. seasalt_user JSON object
+        try {
+            var u = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
+            if (u.phone && u.phone.length >= 10) return u.phone;
+        } catch(e) {}
+        // 3. Other keys
+        var keys = ['seasalt_user_phone', 'seasalt_spin_phone'];
         for (var i = 0; i < keys.length; i++) {
             var val = localStorage.getItem(keys[i]);
             if (val && val.length >= 10) return val;
         }
-        // Check if store saves a full user object
-        try {
-            var userKeys = ['seasalt_user', 'ss_user', 'user', 'userData', 'currentUser', 'ss_customer'];
-            for (var j = 0; j < userKeys.length; j++) {
-                var userData = localStorage.getItem(userKeys[j]) || sessionStorage.getItem(userKeys[j]);
-                if (userData) {
-                    var parsed = JSON.parse(userData);
-                    if (parsed.phone) return parsed.phone;
-                    if (parsed.phoneNumber) return parsed.phoneNumber;
-                    if (parsed.customer_phone) return parsed.customer_phone;
-                }
-            }
-        } catch(e) {}
-        // Last resort: check Firebase directly
-        try {
-            if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
-                var fbPhone = firebase.auth().currentUser.phoneNumber;
-                if (fbPhone) return fbPhone;
-            }
-        } catch(e) {}
         return null;
     }
 
-    // Re-check login status periodically (catches login that happens after init)
     function startLoginWatcher() {
         setInterval(function() {
             var phone = getLoggedInPhone();
@@ -117,67 +84,27 @@ var Analytics = (function() {
         }, 3000);
     }
 
-    // Called by store auth module after Firebase phone verification
     function linkPhone(phone) {
         if (!phone) return;
         userId = phone;
         console.log('📊 Phone linked: ' + phone);
     }
 
-    // Watch Firebase Auth for phone login (most reliable method)
-    function startFirebaseWatcher() {
-        try {
-            if (typeof firebase !== 'undefined' && firebase.auth) {
-                firebase.auth().onAuthStateChanged(function(user) {
-                    if (user && user.phoneNumber) {
-                        var phone = user.phoneNumber;
-                        if (userId !== phone) {
-                            console.log('📊 Firebase auth detected: ' + userId + ' → ' + phone);
-                            userId = phone;
-                        }
-                    }
-                });
-            } else {
-                // Firebase not loaded yet, retry after 2 seconds
-                setTimeout(startFirebaseWatcher, 2000);
-            }
-        } catch(e) {}
-    }
-
     function getDeviceInfo() {
         var ua = navigator.userAgent;
-        var device = 'desktop';
-        if (/mobile/i.test(ua)) device = 'mobile';
-        else if (/tablet|ipad/i.test(ua)) device = 'tablet';
-        var browser = 'other';
-        if (/chrome/i.test(ua) && !/edge/i.test(ua)) browser = 'chrome';
-        else if (/firefox/i.test(ua)) browser = 'firefox';
-        else if (/safari/i.test(ua) && !/chrome/i.test(ua)) browser = 'safari';
-        else if (/edge/i.test(ua)) browser = 'edge';
-        var os = 'other';
-        if (/windows/i.test(ua)) os = 'windows';
-        else if (/mac/i.test(ua)) os = 'macos';
-        else if (/android/i.test(ua)) os = 'android';
-        else if (/iphone|ipad|ios/i.test(ua)) os = 'ios';
-        else if (/linux/i.test(ua)) os = 'linux';
+        var device = /mobile/i.test(ua) ? 'mobile' : /tablet|ipad/i.test(ua) ? 'tablet' : 'desktop';
+        var browser = /chrome/i.test(ua) && !/edge/i.test(ua) ? 'chrome' : /firefox/i.test(ua) ? 'firefox' : /safari/i.test(ua) && !/chrome/i.test(ua) ? 'safari' : /edge/i.test(ua) ? 'edge' : 'other';
+        var os = /windows/i.test(ua) ? 'windows' : /mac/i.test(ua) ? 'macos' : /android/i.test(ua) ? 'android' : /iphone|ipad|ios/i.test(ua) ? 'ios' : /linux/i.test(ua) ? 'linux' : 'other';
         return { type: device, browser: browser, os: os };
     }
 
-    // ============================================
-    // SEND EVENT TO SUPABASE
-    // ============================================
-
     function sendEvent(eventType, page, action, label, value) {
-        // Always check Firebase for latest phone (store never saves to localStorage)
-        try {
-            if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
-                var fbPhone = firebase.auth().currentUser.phoneNumber;
-                if (fbPhone && userId !== fbPhone) {
-                    console.log('📊 Firebase phone detected: ' + fbPhone);
-                    userId = fbPhone;
-                }
-            }
-        } catch(e) {}
+        // v2.4: Always re-check localStorage for phone at send time
+        var phone = getLoggedInPhone();
+        if (phone && userId !== phone) {
+            console.log('📊 Phone update: ' + userId + ' → ' + phone);
+            userId = phone;
+        }
 
         var payload = {
             event_type: eventType || 'page_view',
@@ -193,33 +120,25 @@ var Analytics = (function() {
             referrer: document.referrer || 'direct'
         };
 
-        // Fire and forget — don't block the UI, but LOG errors for debugging
         try {
             fetch(SB + 'analytics_events', {
-                method: 'POST',
-                headers: HEADERS,
-                body: JSON.stringify(payload)
+                method: 'POST', headers: HEADERS, body: JSON.stringify(payload)
             }).then(function(r) {
-                if (!r.ok) {
-                    r.text().then(function(t) { console.error('📊 Analytics INSERT failed:', r.status, t); });
-                }
+                if (!r.ok) r.text().then(function(t) { console.error('📊 Analytics INSERT failed:', r.status, t); });
             }).catch(function(err) { console.error('📊 Analytics network error:', err); });
         } catch(e) { console.error('📊 Analytics exception:', e); }
 
-        // Also update daily aggregate
         updateDailyStats(eventType, value);
     }
 
     function updateDailyStats(eventType, value) {
         var today = new Date().toISOString().split('T')[0];
-
         try {
             fetch(SB + 'analytics_daily?date=eq.' + today, {
                 headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY }
             }).then(function(r) { return r.json(); })
             .then(function(rows) {
                 var existing = (rows && rows.length > 0) ? rows[0] : null;
-
                 var data = {
                     date: today,
                     views: (existing ? existing.views : 0) + (eventType === 'page_view' ? 1 : 0),
@@ -230,28 +149,15 @@ var Analytics = (function() {
                     revenue: (existing ? existing.revenue : 0) + (eventType === 'purchase' ? (value || 0) : 0),
                     updated_at: new Date().toISOString()
                 };
-
-                if (!existing) {
-                    data.unique_users = 1;
-                }
-
+                if (!existing) data.unique_users = 1;
                 fetch(SB + 'analytics_daily', {
                     method: 'POST',
-                    headers: {
-                        'apikey': KEY,
-                        'Authorization': 'Bearer ' + KEY,
-                        'Content-Type': 'application/json',
-                        'Prefer': 'resolution=merge-duplicates,return=minimal'
-                    },
+                    headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates,return=minimal' },
                     body: JSON.stringify(data)
                 }).catch(function(err) { console.error('📊 Daily upsert failed:', err); });
             }).catch(function(err) { console.error('📊 Daily fetch failed:', err); });
         } catch(e) { console.error('📊 Daily stats exception:', e); }
     }
-
-    // ============================================
-    // TRACKING METHODS (called by other modules)
-    // ============================================
 
     function trackPageView(pageName) {
         currentPage = pageName || 'home';
@@ -259,282 +165,53 @@ var Analytics = (function() {
         sendEvent('page_view', currentPage);
         console.log('📊 Page view:', currentPage);
     }
+    function trackEvent(category, action, label, value) { sendEvent('event', currentPage, category + ':' + action, label, value); }
+    function trackProductView(product) { if (!product) return; sendEvent('product_view', currentPage, 'view', product.name || product.id, product.price || 0); }
+    function trackAddToCart(product, quantity, variant) { if (!product) return; var price = (variant && variant.price) ? variant.price : (product.price || 0); sendEvent('add_to_cart', currentPage, 'add', product.name || product.id, price * (quantity || 1)); }
+    function trackRemoveFromCart(product) { if (!product) return; sendEvent('remove_from_cart', currentPage, 'remove', product.name || product.id, 0); }
+    function trackCheckoutStart(cart) { sendEvent('checkout_start', 'checkout', 'start', null, (cart && cart.total) ? cart.total : 0); }
+    function trackPurchase(orderData) { sendEvent('purchase', 'checkout', 'complete', (orderData && orderData.id) ? orderData.id : '', (orderData && orderData.total) ? orderData.total : 0); }
+    function trackSearch(query) { sendEvent('search', currentPage, 'query', query, 0); }
 
-    function trackEvent(category, action, label, value) {
-        sendEvent('event', currentPage, category + ':' + action, label, value);
-    }
-
-    function trackProductView(product) {
-        if (!product) return;
-        sendEvent('product_view', currentPage, 'view', product.name || product.id, product.price || 0);
-    }
-
-    function trackAddToCart(product, quantity, variant) {
-        if (!product) return;
-        var price = (variant && variant.price) ? variant.price : (product.price || 0);
-        sendEvent('add_to_cart', currentPage, 'add', product.name || product.id, price * (quantity || 1));
-    }
-
-    function trackRemoveFromCart(product) {
-        if (!product) return;
-        sendEvent('remove_from_cart', currentPage, 'remove', product.name || product.id, 0);
-    }
-
-    function trackCheckoutStart(cart) {
-        var total = (cart && cart.total) ? cart.total : 0;
-        sendEvent('checkout_start', 'checkout', 'start', null, total);
-    }
-
-    function trackPurchase(orderData) {
-        var total = (orderData && orderData.total) ? orderData.total : 0;
-        var orderId = (orderData && orderData.id) ? orderData.id : '';
-        sendEvent('purchase', 'checkout', 'complete', orderId, total);
-    }
-
-    function trackSearch(query) {
-        sendEvent('search', currentPage, 'query', query, 0);
-    }
-
-    // ============================================
-    // REPORT GENERATION (called by admin dashboard)
-    // ============================================
-
-    function getReport() {
-        return fetchReport().then(function(report) {
-            return report;
-        }).catch(function() {
-            return getEmptyReport();
-        });
-    }
-
+    function getReport() { return fetchReport().catch(function() { return getEmptyReport(); }); }
     function fetchReport() {
-        var today = new Date();
-        var sevenDaysAgo = new Date(today);
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        var fromDate = sevenDaysAgo.toISOString();
-
+        var today = new Date(); var sevenDaysAgo = new Date(today); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7); var fromDate = sevenDaysAgo.toISOString();
         return Promise.all([
-            fetch(SB + 'analytics_events?select=*&created_at=gte.' + fromDate + '&order=created_at.desc&limit=500', {
-                headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY }
-            }).then(function(r) { return r.json(); }).catch(function() { return []; }),
-
-            fetch(SB + 'analytics_daily?select=*&order=date.desc&limit=30', {
-                headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY }
-            }).then(function(r) { return r.json(); }).catch(function() { return []; })
-        ]).then(function(results) {
-            var events = results[0] || [];
-            var dailyRows = results[1] || [];
-            return buildReport(events, dailyRows);
-        });
+            fetch(SB + 'analytics_events?select=*&created_at=gte.' + fromDate + '&order=created_at.desc&limit=500', { headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY } }).then(function(r) { return r.json(); }).catch(function() { return []; }),
+            fetch(SB + 'analytics_daily?select=*&order=date.desc&limit=30', { headers: { 'apikey': KEY, 'Authorization': 'Bearer ' + KEY } }).then(function(r) { return r.json(); }).catch(function() { return []; })
+        ]).then(function(results) { return buildReport(results[0] || [], results[1] || []); });
     }
-
     function buildReport(events, dailyRows) {
-        var sessions = {};
-        var pageViews = 0;
-        var productViews = 0;
-        var cartAdds = 0;
-        var checkouts = 0;
-        var purchases = 0;
-        var revenue = 0;
-        var devices = { mobile: 0, desktop: 0, tablet: 0 };
-        var sources = {};
-        var productStats = {};
-        var pageStats = {};
-
-        events.forEach(function(e) {
-            if (e.session_id && !sessions[e.session_id]) {
-                sessions[e.session_id] = { start: e.created_at, device: e.device, referrer: e.referrer };
-                var dev = e.device || 'desktop';
-                devices[dev] = (devices[dev] || 0) + 1;
-                var src = e.referrer || 'direct';
-                if (src !== 'direct') {
-                    try { src = new URL(src).hostname; } catch(x) { src = 'other'; }
-                } else { src = 'Direct'; }
-                sources[src] = (sources[src] || 0) + 1;
-            }
-
-            switch(e.event_type) {
-                case 'page_view':
-                    pageViews++;
-                    var pg = e.page || 'home';
-                    if (!pageStats[pg]) pageStats[pg] = { visits: 0, totalTime: 0, avgTime: 0, bounces: 0 };
-                    pageStats[pg].visits++;
-                    break;
-                case 'product_view':
-                    productViews++;
-                    if (e.label) {
-                        if (!productStats[e.label]) productStats[e.label] = { views: 0, cartAdds: 0, purchases: 0 };
-                        productStats[e.label].views++;
-                    }
-                    break;
-                case 'add_to_cart':
-                    cartAdds++;
-                    if (e.label) {
-                        if (!productStats[e.label]) productStats[e.label] = { views: 0, cartAdds: 0, purchases: 0 };
-                        productStats[e.label].cartAdds++;
-                    }
-                    break;
-                case 'checkout_start': checkouts++; break;
-                case 'purchase':
-                    purchases++;
-                    revenue += (e.value || 0);
-                    break;
-            }
-        });
-
-        var totalSessions = Object.keys(sessions).length;
-
-        var dailyData = [];
-        for (var i = 6; i >= 0; i--) {
-            var d = new Date();
-            d.setDate(d.getDate() - i);
-            var dateStr = d.toISOString().split('T')[0];
-            var found = dailyRows.find(function(r) { return r.date === dateStr; });
-            dailyData.push({
-                date: dateStr,
-                views: found ? found.views : 0,
-                unique_users: found ? found.unique_users : 0,
-                uniqueUsers: found ? [].fill(0, 0, found.unique_users || 0) : [],
-                cartAdds: found ? found.cart_adds : 0,
-                checkouts: found ? found.checkouts : 0,
-                purchases: found ? found.purchases : 0,
-                revenue: found ? found.revenue : 0
-            });
-        }
-
-        var topPages = Object.entries(pageStats)
-            .map(function(entry) { return { page: entry[0], visits: entry[1].visits, avgTime: 0, bounces: 0 }; })
-            .sort(function(a, b) { return b.visits - a.visits; })
-            .slice(0, 10);
-
-        var topProducts = Object.entries(productStats)
-            .map(function(entry) { return { id: entry[0], name: entry[0], views: entry[1].views, cartAdds: entry[1].cartAdds }; })
-            .sort(function(a, b) { return b.views - a.views; })
-            .slice(0, 10);
-
-        var recentEvents = events.slice(0, 50).map(function(e) {
-            return {
-                category: e.event_type,
-                action: e.action || '',
-                label: e.label || '',
-                page: e.page || '',
-                timestamp: new Date(e.created_at).getTime()
-            };
-        });
-
-        var conversionRate = pageViews > 0 ? (purchases / pageViews * 100).toFixed(2) : '0.00';
-        var bounceRate = '0.0';
-
-        return {
-            summary: {
-                totalSessions: totalSessions,
-                totalPageViews: pageViews,
-                avgSessionDuration: 0,
-                bounceRate: bounceRate,
-                conversionRate: conversionRate
-            },
-            funnel: {
-                views: pageViews,
-                productViews: productViews,
-                cartAdds: cartAdds,
-                checkoutStarts: checkouts,
-                purchases: purchases
-            },
-            topPages: topPages,
-            topProducts: topProducts,
-            dailyData: dailyData,
-            devices: devices,
-            sources: sources,
-            recentEvents: recentEvents,
-            pageStats: pageStats
-        };
+        var sessions={},pageViews=0,productViews=0,cartAdds=0,checkouts=0,purchases=0,revenue=0,devices={mobile:0,desktop:0,tablet:0},sources={},productStats={},pageStats={};
+        events.forEach(function(e){if(e.session_id&&!sessions[e.session_id]){sessions[e.session_id]={start:e.created_at,device:e.device,referrer:e.referrer};var dev=e.device||'desktop';devices[dev]=(devices[dev]||0)+1;var src=e.referrer||'direct';if(src!=='direct'){try{src=new URL(src).hostname}catch(x){src='other'}}else{src='Direct'}sources[src]=(sources[src]||0)+1}switch(e.event_type){case'page_view':pageViews++;var pg=e.page||'home';if(!pageStats[pg])pageStats[pg]={visits:0};pageStats[pg].visits++;break;case'product_view':productViews++;if(e.label){if(!productStats[e.label])productStats[e.label]={views:0,cartAdds:0};productStats[e.label].views++}break;case'add_to_cart':cartAdds++;if(e.label){if(!productStats[e.label])productStats[e.label]={views:0,cartAdds:0};productStats[e.label].cartAdds++}break;case'checkout_start':checkouts++;break;case'purchase':purchases++;revenue+=(e.value||0);break}});
+        var totalSessions=Object.keys(sessions).length;
+        var dailyData=[];for(var i=6;i>=0;i--){var d=new Date();d.setDate(d.getDate()-i);var dateStr=d.toISOString().split('T')[0];var found=dailyRows.find(function(r){return r.date===dateStr});dailyData.push({date:dateStr,views:found?found.views:0,unique_users:found?found.unique_users:0,uniqueUsers:[],cartAdds:found?found.cart_adds:0,checkouts:found?found.checkouts:0,purchases:found?found.purchases:0,revenue:found?found.revenue:0})}
+        var topPages=Object.entries(pageStats).map(function(e){return{page:e[0],visits:e[1].visits,avgTime:0,bounces:0}}).sort(function(a,b){return b.visits-a.visits}).slice(0,10);
+        var topProducts=Object.entries(productStats).map(function(e){return{id:e[0],name:e[0],views:e[1].views,cartAdds:e[1].cartAdds}}).sort(function(a,b){return b.views-a.views}).slice(0,10);
+        var recentEvents=events.slice(0,50).map(function(e){return{category:e.event_type,action:e.action||'',label:e.label||'',page:e.page||'',timestamp:new Date(e.created_at).getTime()}});
+        return{summary:{totalSessions:totalSessions,totalPageViews:pageViews,avgSessionDuration:0,bounceRate:'0.0',conversionRate:pageViews>0?(purchases/pageViews*100).toFixed(2):'0.00'},funnel:{views:pageViews,productViews:productViews,cartAdds:cartAdds,checkoutStarts:checkouts,purchases:purchases},topPages:topPages,topProducts:topProducts,dailyData:dailyData,devices:devices,sources:sources,recentEvents:recentEvents,pageStats:pageStats};
     }
-
-    function getEmptyReport() {
-        return {
-            summary: { totalSessions: 0, totalPageViews: 0, avgSessionDuration: 0, bounceRate: '0.0', conversionRate: '0.00' },
-            funnel: { views: 0, productViews: 0, cartAdds: 0, checkoutStarts: 0, purchases: 0 },
-            topPages: [], topProducts: [], dailyData: [],
-            devices: { mobile: 0, desktop: 0, tablet: 0 },
-            sources: {}, recentEvents: [], pageStats: {}
-        };
-    }
-
-    function clearAnalytics() {
-        fetch(SB + 'analytics_events', { method: 'DELETE', headers: HEADERS }).catch(function() {});
-        fetch(SB + 'analytics_daily', { method: 'DELETE', headers: HEADERS }).catch(function() {});
-        console.log('📊 Analytics cleared');
-    }
-
-    // ============================================
-    // EVENT LISTENERS
-    // ============================================
+    function getEmptyReport(){return{summary:{totalSessions:0,totalPageViews:0,avgSessionDuration:0,bounceRate:'0.0',conversionRate:'0.00'},funnel:{views:0,productViews:0,cartAdds:0,checkoutStarts:0,purchases:0},topPages:[],topProducts:[],dailyData:[],devices:{mobile:0,desktop:0,tablet:0},sources:{},recentEvents:[],pageStats:{}};}
+    function clearAnalytics(){fetch(SB+'analytics_events',{method:'DELETE',headers:HEADERS}).catch(function(){});fetch(SB+'analytics_daily',{method:'DELETE',headers:HEADERS}).catch(function(){});console.log('📊 Analytics cleared');}
 
     function setupListeners() {
-        document.addEventListener('click', function(e) {
-            lastActivity = Date.now();
-            var target = e.target.closest('button, a');
-            if (target) {
-                var text = (target.textContent || '').trim().substring(0, 50);
-                trackEvent('Click', target.tagName, text);
-            }
-        });
-
-        // ★ FIX: Use fetch+keepalive instead of sendBeacon
-        // sendBeacon cannot set Authorization headers, which causes
-        // Supabase to reject inserts when RLS requires auth.
-        // fetch+keepalive survives page unload AND supports headers.
+        document.addEventListener('click', function(e) { lastActivity = Date.now(); var target = e.target.closest('button, a'); if (target) { var text = (target.textContent || '').trim().substring(0, 50); trackEvent('Click', target.tagName, text); } });
         window.addEventListener('beforeunload', function() {
-            var payload = JSON.stringify({
-                event_type: 'session_end',
-                session_id: sessionId,
-                user_id: userId,
-                page: currentPage,
-                device: deviceInfo.type,
-                browser: deviceInfo.browser,
-                os: deviceInfo.os,
-                referrer: document.referrer || 'direct'
-            });
-            
-            try {
-                fetch(SB + 'analytics_events', {
-                    method: 'POST',
-                    headers: HEADERS,
-                    body: payload,
-                    keepalive: true
-                }).catch(function(){});
-            } catch(e) {
-                // Fallback to sendBeacon if fetch+keepalive not supported
-                if (navigator.sendBeacon) {
-                    var blob = new Blob([payload], { type: 'application/json' });
-                    navigator.sendBeacon(SB + 'analytics_events?apikey=' + KEY, blob);
-                }
-            }
+            var payload = JSON.stringify({ event_type: 'session_end', session_id: sessionId, user_id: userId, page: currentPage, device: deviceInfo.type, browser: deviceInfo.browser, os: deviceInfo.os, referrer: document.referrer || 'direct' });
+            try { fetch(SB + 'analytics_events', { method: 'POST', headers: HEADERS, body: payload, keepalive: true }).catch(function(){}); } catch(e) { if (navigator.sendBeacon) { var blob = new Blob([payload], { type: 'application/json' }); navigator.sendBeacon(SB + 'analytics_events?apikey=' + KEY, blob); } }
         });
     }
 
-    // Auto-init
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 
     return {
-        init: init,
-        trackPageView: trackPageView,
-        trackEvent: trackEvent,
-        trackProductView: trackProductView,
-        trackAddToCart: trackAddToCart,
-        trackRemoveFromCart: trackRemoveFromCart,
-        trackCheckoutStart: trackCheckoutStart,
-        trackPurchase: trackPurchase,
-        trackSearch: trackSearch,
-        getReport: getReport,
-        clearAnalytics: clearAnalytics,
+        init: init, trackPageView: trackPageView, trackEvent: trackEvent,
+        trackProductView: trackProductView, trackAddToCart: trackAddToCart,
+        trackRemoveFromCart: trackRemoveFromCart, trackCheckoutStart: trackCheckoutStart,
+        trackPurchase: trackPurchase, trackSearch: trackSearch,
+        getReport: getReport, clearAnalytics: clearAnalytics,
         getSession: function() { return { id: sessionId, userId: userId }; },
         linkPhone: linkPhone
     };
 })();
-
 window.Analytics = Analytics;
