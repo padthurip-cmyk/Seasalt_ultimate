@@ -692,8 +692,14 @@ const App = (function() {
             localStorage.removeItem('seasalt_user_phone');
             localStorage.removeItem('seasalt_spin_phone');
             localStorage.removeItem('seasalt_spin_done');
+            localStorage.removeItem('seasalt_spin_wallet');
+            localStorage.removeItem('seasalt_spin_reward');
+            localStorage.removeItem('seasalt_admin_credit');
             if (typeof SeaSaltAuth !== 'undefined') SeaSaltAuth.logout();
-            if (typeof Store !== 'undefined' && Store.logout) Store.logout(); 
+            if (typeof Store !== 'undefined' && Store.logout) Store.logout();
+            // Clear wallet UI immediately
+            if (typeof UI !== 'undefined' && UI.updateWalletDisplay) UI.updateWalletDisplay(null);
+            if (typeof UI !== 'undefined' && UI.updateCartUI) UI.updateCartUI();
             closeModal(); 
             UI.showToast('Logged out', 'success'); 
         });
