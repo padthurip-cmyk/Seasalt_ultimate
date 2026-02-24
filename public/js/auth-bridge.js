@@ -40,76 +40,86 @@
     document.head.appendChild(fabStyle);
 
     // ═══════════════════════════════════════════
-    // FIX: Wallet timer shows 719:59:42 instead of 29d 23h 59m
-    // Monkey-patch UI.startWalletTimer to fix the time format
+    // FIX: Wallet timer — show days format from the start (no flicker)
+    // Completely replaces UI.startWalletTimer before it ever runs
     // ═══════════════════════════════════════════
+    var _timerPatched = false;
     function patchWalletTimer() {
-        if (typeof UI === 'undefined') return;
+        if (typeof UI === 'undefined' || _timerPatched) return;
+        _timerPatched = true;
 
-        // Store original
-        var origStartWalletTimer = UI.startWalletTimer;
+        // Save reference to original so we can call it for badge creation
+        var _origTimer = UI.startWalletTimer;
 
         UI.startWalletTimer = function() {
-            // Clear any existing timer from original
+            // Clear any existing intervals
             if (window._walletTimerInterval) clearInterval(window._walletTimerInterval);
+            if (window._origWalletTimerInterval) clearInterval(window._origWalletTimerInterval);
 
             var wallet = null;
             try { wallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
-            if (!wallet || !wallet.expiresAt) {
-                if (origStartWalletTimer) origStartWalletTimer.call(UI);
-                return;
-            }
+            if (!wallet || !wallet.expiresAt) return;
 
             var expiresAt = new Date(wallet.expiresAt).getTime();
 
-            function formatWalletTime() {
+            function formatTime() {
                 var diff = expiresAt - Date.now();
                 if (diff <= 0) return 'Expired';
-
                 var totalSec = Math.floor(diff / 1000);
                 var days = Math.floor(totalSec / 86400);
                 var hrs = Math.floor((totalSec % 86400) / 3600);
                 var mins = Math.floor((totalSec % 3600) / 60);
                 var secs = totalSec % 60;
-
                 if (days > 0) {
                     return days + 'd ' + hrs + 'h ' + mins + 'm';
-                } else {
-                    return String(hrs).padStart(2,'0') + ':' + String(mins).padStart(2,'0') + ':' + String(secs).padStart(2,'0');
                 }
+                return String(hrs).padStart(2,'0') + ':' + String(mins).padStart(2,'0') + ':' + String(secs).padStart(2,'0');
             }
 
-            // Find and update ONLY the time digits, preserving all styling
-            function updateTimerDisplay() {
-                var timeStr = formatWalletTime();
-
-                // Walk text nodes and only replace the HHH:MM:SS pattern
+            function replaceTimerText() {
                 var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
                 var node;
+                var timeStr = formatTime();
                 while (node = walker.nextNode()) {
-                    var text = node.textContent;
-                    // Match ONLY the time pattern (3+ digit hours : 2 digit mins : 2 digit secs)
-                    var match = text.match(/(\d{2,}:\d{2}:\d{2})/);
-                    if (match) {
-                        // Replace just the time portion, keep everything else (₹, ⏱, spaces)
-                        node.textContent = text.replace(match[1], timeStr);
+                    // Match any HH:MM:SS or HHH:MM:SS pattern
+                    if (/\d{2,}:\d{2}:\d{2}/.test(node.textContent)) {
+                        node.textContent = node.textContent.replace(/\d{2,}:\d{2}:\d{2}/, timeStr);
+                    }
+                    // Also replace if our own format is already there (for re-updates)
+                    else if (/\d+d \d+h \d+m/.test(node.textContent)) {
+                        node.textContent = node.textContent.replace(/\d+d \d+h \d+m/, timeStr);
                     }
                 }
             }
 
-            // Run original first to set up the badge, then override the timer text
-            if (origStartWalletTimer) origStartWalletTimer.call(UI);
+            // Let original create the badge HTML first, then immediately fix it
+            if (_origTimer) {
+                // Temporarily suppress the original's setInterval
+                var realSetInterval = window.setInterval;
+                window.setInterval = function(fn, ms) {
+                    // Capture the original timer's interval ID so we can kill it
+                    var id = realSetInterval(fn, ms);
+                    window._origWalletTimerInterval = id;
+                    return id;
+                };
+                _origTimer.call(UI);
+                window.setInterval = realSetInterval; // Restore
+                // Kill the original's interval immediately
+                if (window._origWalletTimerInterval) {
+                    clearInterval(window._origWalletTimerInterval);
+                }
+            }
 
-            // Wait a tick for original to render, then fix the display
-            setTimeout(updateTimerDisplay, 100);
+            // Fix the display immediately (no flash)
+            replaceTimerText();
 
-            // Keep updating every second
-            window._walletTimerInterval = setInterval(updateTimerDisplay, 1000);
+            // Our own interval with correct format
+            window._walletTimerInterval = setInterval(replaceTimerText, 1000);
         };
 
-        console.log('[AuthBridge] ✅ Patched wallet timer format');
+        console.log('[AuthBridge] ✅ Wallet timer patched (no flicker)');
 
-        // If wallet timer was already started, restart with patched version
+        // If wallet exists, start our timer now
         var wallet = null;
         try { wallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
         if (wallet && wallet.expiresAt) {
@@ -117,10 +127,11 @@
         }
     }
 
-    // Retry patching since UI may load after auth-bridge
-    setTimeout(patchWalletTimer, 500);
+    // Patch ASAP — try multiple times in case UI loads late
+    setTimeout(patchWalletTimer, 100);
+    setTimeout(patchWalletTimer, 300);
+    setTimeout(patchWalletTimer, 800);
     setTimeout(patchWalletTimer, 1500);
-    setTimeout(patchWalletTimer, 3000);
 
     // ═══════════════════════════════════════════
     // 1. SYNC LOGIN STATE: localStorage → Store
