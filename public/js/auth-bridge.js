@@ -33,35 +33,35 @@
     // With new 48hr admin credits, this is mainly for cleanup
     // ═══════════════════════════════════════════
     function checkAndFixExpiry() {
-        // Fix any old admin credits that had 30-day expiry
+        // Clean up expired wallets — but NEVER reset the expiry time
         var adminCredit = null;
         try { adminCredit = JSON.parse(localStorage.getItem('seasalt_admin_credit') || 'null'); } catch(e) {}
         if (adminCredit && adminCredit.expiresAt) {
             var hoursLeft = (new Date(adminCredit.expiresAt).getTime() - Date.now()) / (60*60*1000);
-            if (hoursLeft > 48) {
-                // Old 30-day expiry — cap it to 48hrs from now
-                adminCredit.expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-                localStorage.setItem('seasalt_admin_credit', JSON.stringify(adminCredit));
-                console.log('[AuthBridge] Fixed old admin credit expiry to 48hrs');
-            }
             if (hoursLeft <= 0) {
                 // Expired — remove it
                 localStorage.removeItem('seasalt_admin_credit');
                 console.log('[AuthBridge] Admin credit expired, removed');
-                // Recalculate total wallet
                 recalcWallet();
             }
         }
 
-        // Also fix seasalt_spin_wallet if it shows admin credit with wrong expiry
+        var spinReward = null;
+        try { spinReward = JSON.parse(localStorage.getItem('seasalt_spin_reward') || 'null'); } catch(e) {}
+        if (spinReward && spinReward.expiresAt) {
+            if (new Date(spinReward.expiresAt) <= new Date()) {
+                localStorage.removeItem('seasalt_spin_reward');
+                console.log('[AuthBridge] Spin reward expired, removed');
+                recalcWallet();
+            }
+        }
+
         var wallet = null;
         try { wallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
         if (wallet && wallet.expiresAt) {
-            var walletHoursLeft = (new Date(wallet.expiresAt).getTime() - Date.now()) / (60*60*1000);
-            // If expiry > 48hrs AND there's an admin credit, the combined wallet has wrong expiry
-            if (walletHoursLeft > 48 && adminCredit) {
-                wallet.expiresAt = adminCredit.expiresAt;
-                localStorage.setItem('seasalt_spin_wallet', JSON.stringify(wallet));
+            if (new Date(wallet.expiresAt) <= new Date()) {
+                localStorage.removeItem('seasalt_spin_wallet');
+                console.log('[AuthBridge] Display wallet expired, removed');
             }
         }
     }
@@ -224,103 +224,60 @@
                 var supabaseExpiry = user.wallet_expires_at || null;
 
                 // ══════════════════════════════════════════
-                // 3-KEY WALLET ARCHITECTURE (v1.3 — fixed doubling)
+                // WALLET SYNC v1.4 — Supabase is source of truth
                 //
-                // seasalt_spin_reward  = spin prize only (set by spinwheel.js)
-                // seasalt_admin_credit = admin-added credit (set here from Supabase)
-                // seasalt_spin_wallet  = DISPLAY TOTAL (set here, read by UI)
-                //
-                // RULE: Supabase wallet_balance is the TOTAL (spin + admin).
-                // We do NOT add spin + supabase. We use the HIGHER of:
-                //   - local spin_reward (if Supabase hasn't synced yet)
-                //   - Supabase balance (source of truth once synced)
+                // Supabase stores the TOTAL balance and the ORIGINAL expiry.
+                // We just mirror it to localStorage for the UI to read.
+                // We NEVER generate a new expiry — always use what Supabase has.
                 // ══════════════════════════════════════════
 
-                // Read ORIGINAL spin reward
-                var spinReward = null;
-                try { spinReward = JSON.parse(localStorage.getItem('seasalt_spin_reward') || 'null'); } catch(e) {}
-                var spinBalance = 0;
-                if (spinReward && spinReward.amount) {
-                    if (spinReward.expiresAt && new Date(spinReward.expiresAt) > new Date()) {
-                        spinBalance = parseFloat(spinReward.amount) || 0;
-                    } else {
-                        localStorage.removeItem('seasalt_spin_reward');
-                    }
-                }
-
-                // Read existing admin credit
-                var adminCredit = null;
-                try { adminCredit = JSON.parse(localStorage.getItem('seasalt_admin_credit') || 'null'); } catch(e) {}
-                var adminBalance = 0;
-                if (adminCredit && adminCredit.amount) {
-                    if (adminCredit.expiresAt && new Date(adminCredit.expiresAt) > new Date()) {
-                        adminBalance = parseFloat(adminCredit.amount) || 0;
-                    } else {
+                if (supabaseBalance > 0 && supabaseExpiry) {
+                    var serverExpDate = new Date(supabaseExpiry);
+                    
+                    // Check if expired
+                    if (serverExpDate <= new Date()) {
+                        // Expired — clear everything
+                        localStorage.removeItem('seasalt_spin_wallet');
                         localStorage.removeItem('seasalt_admin_credit');
-                        adminBalance = 0;
+                        localStorage.removeItem('seasalt_spin_reward');
+                        applyWalletToUI({ amount: 0, expiresAt: null });
+                        console.log('[AuthBridge] Wallet expired on server, cleared');
+                        return;
                     }
-                }
 
-                // Detect if Supabase has MORE than just the spin reward
-                // If supabaseBalance > spinBalance, the difference is admin credit
-                var adminCreditFromServer = 0;
-                if (supabaseBalance > spinBalance) {
-                    adminCreditFromServer = supabaseBalance - spinBalance;
-                } else if (supabaseBalance > 0 && spinBalance === 0) {
-                    // No local spin, supabase has balance — could be admin credit or synced spin
-                    adminCreditFromServer = supabaseBalance;
-                }
-
-                // Only update admin credit if server shows new/different amount
-                if (adminCreditFromServer > 0 && adminCreditFromServer !== adminBalance) {
-                    var adminExpiry = supabaseExpiry ? supabaseExpiry : new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-                    // Cap admin credit expiry to 48hrs
-                    var adminExpDate = new Date(adminExpiry);
-                    var maxExpiry = new Date(Date.now() + 48 * 60 * 60 * 1000);
-                    if (adminExpDate > maxExpiry) adminExpiry = maxExpiry.toISOString();
-                    
-                    localStorage.setItem('seasalt_admin_credit', JSON.stringify({
-                        amount: adminCreditFromServer,
-                        expiresAt: adminExpiry,
-                        source: 'admin'
-                    }));
-                    adminBalance = adminCreditFromServer;
-                }
-
-                // Write COMBINED display wallet
-                // Total = spin reward + admin credit (NOT supabase, to avoid double counting)
-                var total = spinBalance + adminBalance;
-                
-                // Safety: total should never exceed supabase balance (if supabase is source of truth)
-                if (supabaseBalance > 0 && total > supabaseBalance) {
-                    total = supabaseBalance;
-                }
-                
-                if (total > 0) {
-                    // Use the EARLIEST expiry for display
-                    var expiry = null;
-                    if (spinReward && spinReward.expiresAt && new Date(spinReward.expiresAt) > new Date()) {
-                        expiry = spinReward.expiresAt;
-                    }
-                    if (adminBalance > 0) {
-                        var ac = null;
-                        try { ac = JSON.parse(localStorage.getItem('seasalt_admin_credit') || 'null'); } catch(e) {}
-                        if (ac && ac.expiresAt) {
-                            if (!expiry || new Date(ac.expiresAt) < new Date(expiry)) {
-                                expiry = ac.expiresAt;
-                            }
-                        }
-                    }
-                    if (!expiry) expiry = new Date(Date.now() + 48*60*60*1000).toISOString();
-                    
-                    var walletData = { amount: total, expiresAt: expiry, source: 'combined' };
+                    // Write to display wallet — use server expiry as-is (NEVER reset)
+                    var walletData = { amount: supabaseBalance, expiresAt: supabaseExpiry, source: 'server' };
                     localStorage.setItem('seasalt_spin_wallet', JSON.stringify(walletData));
+
+                    // Also keep seasalt_spin_reward in sync if no separate admin credit exists
+                    var existingSpinReward = null;
+                    try { existingSpinReward = JSON.parse(localStorage.getItem('seasalt_spin_reward') || 'null'); } catch(e) {}
+                    if (!existingSpinReward || !existingSpinReward.amount) {
+                        // No local spin reward — this could be a fresh login, restore from server
+                        localStorage.setItem('seasalt_spin_reward', JSON.stringify({
+                            amount: supabaseBalance,
+                            expiresAt: supabaseExpiry,
+                            source: 'server_restore'
+                        }));
+                    }
+
                     applyWalletToUI(walletData);
+                    console.log('[AuthBridge] Wallet sync done — ₹' + supabaseBalance + ' expires:' + supabaseExpiry);
+
                 } else if (supabaseBalance <= 0) {
-                    // Server says 0 and no local rewards — clear everything
-                    localStorage.removeItem('seasalt_spin_wallet');
-                    localStorage.removeItem('seasalt_admin_credit');
-                    applyWalletToUI({ amount: 0, expiresAt: null });
+                    // Server says 0 — but check if we have valid local wallet (spin just happened, not synced yet)
+                    var localWallet = null;
+                    try { localWallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
+                    if (localWallet && localWallet.amount > 0 && localWallet.expiresAt && new Date(localWallet.expiresAt) > new Date()) {
+                        // Local wallet still valid — spin may not have synced to server yet, keep it
+                        console.log('[AuthBridge] Server balance 0 but local wallet valid, keeping local');
+                    } else {
+                        // Both empty — clear
+                        localStorage.removeItem('seasalt_spin_wallet');
+                        localStorage.removeItem('seasalt_admin_credit');
+                        localStorage.removeItem('seasalt_spin_reward');
+                        applyWalletToUI({ amount: 0, expiresAt: null });
+                    }
                 }
 
                 // Sync name
@@ -330,8 +287,6 @@
                         if (!u.name) { u.name = user.name; u.phone = phone; localStorage.setItem('seasalt_user', JSON.stringify(u)); }
                     } catch(e) {}
                 }
-
-                console.log('[AuthBridge] Wallet sync done — spin:₹' + spinBalance + ' admin:₹' + adminBalance + ' total:₹' + total + ' supabase:₹' + supabaseBalance);
 
             }).catch(function(err) {
                 console.warn('[AuthBridge] Wallet sync error:', err);
