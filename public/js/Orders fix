@@ -1,310 +1,459 @@
 /**
- * SeaSalt Pickles - Orders Page Fix + WhatsApp Notification v1
- * =============================================================
- * FIXES:
- * 1. Orders page was compressed/unstyled — now full-screen with proper cards
- * 2. WhatsApp message not triggered on order — now sends confirmation
- * 3. Order total showing ₹0 — now reads actual amounts from order data
+ * SeaSalt Pickles - Orders Page Fix + WhatsApp + Wallet Timer v2
+ * ================================================================
+ * LOADS AFTER app.js — patches everything directly.
  *
- * ADD TO index.html AFTER app.js:
- *   <script src="js/orders-fix.js"></script>
+ * FIXES:
+ *  1. Orders page was showing old compressed modal — now beautiful full-screen
+ *  2. Order total showing ₹0 — reads all field-name variants from cart.js
+ *  3. WhatsApp message on checkout — patches Cart.checkout flow
+ *  4. Wallet timer shows 719 hrs — patches UI.startWalletTimer to show d/h/m
+ *
+ * DEPLOY: <script src="js/orders-fix.js"></script>  (AFTER app.js in index.html)
  */
 
-var OrdersFix = (function() {
+;(function() {
     'use strict';
 
-    var STORE_PHONE = '919876543210'; // Store's WhatsApp number — UPDATE THIS
+    // ╔══════════════════════════════════════════════╗
+    // ║  CONFIG                                       ║
+    // ╚══════════════════════════════════════════════╝
+    var STORE_PHONE = '919963971447';
+    var ORDERS_KEY  = 'seasalt_orders';
 
-    // ════════════════════════════════════════════
-    // ORDERS PAGE — Beautiful full-screen modal
-    // ════════════════════════════════════════════
+    // ╔══════════════════════════════════════════════╗
+    // ║  1. ORDERS PAGE — Full-screen beautiful UI    ║
+    // ╚══════════════════════════════════════════════╝
 
     function showOrdersPage() {
         var orders = getOrders();
 
-        // Remove any existing orders modal
-        var existing = document.getElementById('orders-modal');
-        if (existing) existing.remove();
+        // Remove any existing modals
+        var old = document.getElementById('orders-modal');
+        if (old) old.remove();
 
         var modal = document.createElement('div');
         modal.id = 'orders-modal';
-        modal.className = 'fixed inset-0 z-[85] flex items-end justify-center';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:86;display:flex;align-items:flex-end;justify-content:center;';
 
-        var ordersHtml = '';
+        // Backdrop
+        var backdrop = document.createElement('div');
+        backdrop.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);';
+        backdrop.onclick = function() { closeModal(modal); };
+        modal.appendChild(backdrop);
+
+        // Panel
+        var panel = document.createElement('div');
+        panel.style.cssText = 'position:relative;background:#fff;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column;animation:slideUp .3s ease;';
+        modal.appendChild(panel);
+
+        // Header
+        var header = document.createElement('div');
+        header.style.cssText = 'padding:20px 20px 16px;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;';
+        header.innerHTML = '<div><h3 style="font-weight:800;font-size:1.25rem;color:#1f2937;margin:0;">My Orders</h3>' +
+            '<p style="font-size:0.8rem;color:#9ca3af;margin:4px 0 0;">' + orders.length + ' order' + (orders.length !== 1 ? 's' : '') + '</p></div>' +
+            '<button id="close-orders-btn" style="width:36px;height:36px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">✕</button>';
+        panel.appendChild(header);
+
+        header.querySelector('#close-orders-btn').onclick = function() { closeModal(modal); };
+
+        // Body (scrollable)
+        var body = document.createElement('div');
+        body.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px 24px;';
+        panel.appendChild(body);
+
         if (orders.length === 0) {
-            ordersHtml = '<div style="text-align:center;padding:60px 20px;">' +
+            body.innerHTML = '<div style="text-align:center;padding:60px 0;">' +
                 '<div style="font-size:4rem;margin-bottom:16px;">📦</div>' +
-                '<h4 style="font-weight:700;color:#1f2937;margin-bottom:8px;font-size:1.1rem;">No orders yet</h4>' +
-                '<p style="color:#9ca3af;font-size:0.9rem;">Your orders will appear here after checkout</p>' +
-                '</div>';
+                '<h4 style="font-weight:700;color:#1f2937;font-size:1.1rem;margin:0 0 8px;">No orders yet</h4>' +
+                '<p style="color:#9ca3af;font-size:0.9rem;margin:0;">Your orders will appear here after checkout</p></div>';
         } else {
             orders.forEach(function(order) {
-                var items = [];
-                try {
-                    items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []);
-                } catch(e) {}
-
-                var date = order.date || order.created_at;
-                var dateStr = date ? new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-
-                var total = parseFloat(order.total) || 0;
-                if (total === 0 && items.length > 0) {
-                    items.forEach(function(item) {
-                        total += (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1);
-                    });
-                }
-
-                var statusColors = {
-                    pending: { bg: '#fef3c7', text: '#92400e', icon: '⏳' },
-                    confirmed: { bg: '#d1fae5', text: '#065f46', icon: '✅' },
-                    processing: { bg: '#dbeafe', text: '#1e40af', icon: '🔄' },
-                    shipped: { bg: '#ede9fe', text: '#5b21b6', icon: '🚚' },
-                    dispatched: { bg: '#ede9fe', text: '#5b21b6', icon: '🚚' },
-                    delivered: { bg: '#d1fae5', text: '#065f46', icon: '✅' },
-                    cancelled: { bg: '#fee2e2', text: '#991b1b', icon: '❌' }
-                };
-                var status = (order.status || 'confirmed').toLowerCase();
-                var sc = statusColors[status] || statusColors.confirmed;
-
-                var orderId = order.id || order.orderId || '';
-                var displayId = orderId.length > 12 ? orderId.substring(0, 12) + '…' : orderId;
-
-                // Build items list
-                var itemsHtml = '';
-                items.forEach(function(item) {
-                    var itemPrice = (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1);
-                    itemsHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f3f4f6;">' +
-                        '<div style="flex:1;">' +
-                            '<span style="font-weight:600;color:#374151;font-size:0.9rem;">' + (item.name || 'Item') + '</span>' +
-                            (item.variant ? '<span style="color:#9ca3af;font-size:0.8rem;margin-left:6px;">' + (item.variant.weight || item.variant.name || '') + '</span>' : '') +
-                            '<span style="color:#9ca3af;font-size:0.8rem;margin-left:6px;">× ' + (item.quantity || 1) + '</span>' +
-                        '</div>' +
-                        '<span style="font-weight:700;color:#059669;">₹' + itemPrice + '</span>' +
-                    '</div>';
-                });
-
-                ordersHtml += '<div style="background:#fff;border-radius:16px;border:1px solid #e5e7eb;margin-bottom:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">' +
-                    // Header
-                    '<div style="padding:16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f3f4f6;">' +
-                        '<div>' +
-                            '<div style="font-weight:700;color:#1f2937;font-size:0.95rem;">#' + displayId + '</div>' +
-                            '<div style="color:#9ca3af;font-size:0.8rem;margin-top:2px;">' + dateStr + '</div>' +
-                        '</div>' +
-                        '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600;background:' + sc.bg + ';color:' + sc.text + ';">' +
-                            sc.icon + ' ' + status.charAt(0).toUpperCase() + status.slice(1) +
-                        '</span>' +
-                    '</div>' +
-                    // Items
-                    '<div style="padding:12px 16px;">' + itemsHtml + '</div>' +
-                    // Footer
-                    '<div style="padding:12px 16px;background:#f9fafb;display:flex;justify-content:space-between;align-items:center;">' +
-                        '<span style="color:#6b7280;font-size:0.85rem;">' + items.length + ' item' + (items.length !== 1 ? 's' : '') + '</span>' +
-                        '<span style="font-weight:800;color:#1f2937;font-size:1.15rem;">₹' + total + '</span>' +
-                    '</div>' +
-                '</div>';
+                body.appendChild(buildOrderCard(order));
             });
         }
-
-        modal.innerHTML = '<div class="absolute inset-0 bg-black/60 backdrop-blur-sm close-orders-modal"></div>' +
-            '<div class="relative bg-white rounded-t-3xl w-full max-w-lg max-h-[85vh] overflow-hidden animate-slide-up" style="display:flex;flex-direction:column;">' +
-                '<div style="padding:20px 20px 16px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">' +
-                    '<h3 style="font-size:1.25rem;font-weight:800;color:#1f2937;">📋 My Orders</h3>' +
-                    '<button class="close-orders-modal" style="width:36px;height:36px;background:#f3f4f6;border-radius:50%;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;">' +
-                        '<svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>' +
-                    '</button>' +
-                '</div>' +
-                '<div style="padding:16px 20px;overflow-y:auto;flex:1;">' +
-                    ordersHtml +
-                '</div>' +
-            '</div>';
 
         document.body.appendChild(modal);
         document.body.style.overflow = 'hidden';
 
-        var closeModal = function() {
-            modal.remove();
-            document.body.style.overflow = '';
-            if (typeof UI !== 'undefined' && UI.updateBottomNav) UI.updateBottomNav('home');
-        };
-
-        modal.querySelectorAll('.close-orders-modal').forEach(function(btn) {
-            btn.addEventListener('click', closeModal);
-        });
+        // Add animation keyframe
+        if (!document.getElementById('orders-fix-style')) {
+            var s = document.createElement('style');
+            s.id = 'orders-fix-style';
+            s.textContent = '@keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}';
+            document.head.appendChild(s);
+        }
     }
 
-    // ════════════════════════════════════════════
-    // GET ORDERS from localStorage
-    // ════════════════════════════════════════════
+    function closeModal(modal) {
+        modal.remove();
+        document.body.style.overflow = '';
+    }
+
+    function buildOrderCard(order) {
+        var card = document.createElement('div');
+        card.style.cssText = 'background:#f9fafb;border-radius:16px;padding:16px;margin-bottom:12px;border:1px solid #f3f4f6;';
+
+        // ─── Read fields (cart.js uses camelCase, Supabase uses snake_case) ───
+        var orderId = order.id || order.orderId || order.order_id || '???';
+        var status  = order.status || 'pending';
+        var date    = order.createdAt || order.created_at || order.date || '';
+        var total   = parseFloat(order.total) || 0;
+
+        // Items — could be string (from Supabase) or array
+        var items = [];
+        try {
+            items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []);
+        } catch(e) {}
+
+        // Item count
+        var itemCount = 0;
+        items.forEach(function(it) { itemCount += (it.quantity || 1); });
+
+        // If total is 0, try to calculate from items
+        if (total === 0 && items.length > 0) {
+            items.forEach(function(it) {
+                total += (parseFloat(it.price) || 0) * (it.quantity || 1);
+            });
+            // Add delivery
+            var del = parseFloat(order.delivery || order.deliveryCharge || order.delivery_charge || 0);
+            total += del;
+            // Subtract wallet
+            var wd = parseFloat(order.walletUsed || order.walletDiscount || order.wallet_used || 0);
+            total -= wd;
+            if (total < 0) total = 0;
+        }
+
+        // Status styling
+        var statusConfig = {
+            'confirmed':  { bg: '#dcfce7', color: '#166534', icon: '✅', label: 'Confirmed' },
+            'pending':    { bg: '#fef3c7', color: '#92400e', icon: '⏳', label: 'Pending' },
+            'shipped':    { bg: '#dbeafe', color: '#1e40af', icon: '🚚', label: 'Shipped' },
+            'delivered':  { bg: '#d1fae5', color: '#065f46', icon: '🎉', label: 'Delivered' },
+            'cancelled':  { bg: '#fee2e2', color: '#991b1b', icon: '❌', label: 'Cancelled' },
+            'processing': { bg: '#e0e7ff', color: '#3730a3', icon: '⚙️', label: 'Processing' }
+        };
+        var sc = statusConfig[status] || statusConfig['pending'];
+
+        // Date formatting
+        var dateStr = '';
+        if (date) {
+            try {
+                var d = new Date(date);
+                dateStr = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) +
+                    ', ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+            } catch(e) { dateStr = date; }
+        }
+
+        // ─── Build HTML ───
+        // Header row: Order ID + Status badge
+        var headerRow = '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">' +
+            '<div style="font-weight:700;color:#1f2937;font-size:0.95rem;">#' + orderId + '</div>' +
+            '<span style="display:inline-flex;align-items:center;gap:4px;font-size:0.75rem;font-weight:600;padding:4px 10px;border-radius:20px;background:' + sc.bg + ';color:' + sc.color + ';">' + sc.icon + ' ' + sc.label + '</span></div>';
+
+        // Date
+        var dateRow = dateStr ? '<div style="font-size:0.8rem;color:#9ca3af;margin-bottom:10px;">' + dateStr + '</div>' : '';
+
+        // Items list
+        var itemsHtml = '';
+        items.forEach(function(it) {
+            var name = it.name || 'Item';
+            var size = it.size || it.weight || it.variant || '';
+            var qty  = it.quantity || 1;
+            var price = parseFloat(it.price) || 0;
+            itemsHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:0.85rem;">' +
+                '<span style="color:#4b5563;">' + name + (size ? ' (' + size + ')' : '') + ' × ' + qty + '</span>' +
+                '<span style="font-weight:600;color:#374151;">₹' + (price * qty) + '</span></div>';
+        });
+        if (itemsHtml) {
+            itemsHtml = '<div style="border-top:1px solid #e5e7eb;padding-top:8px;margin-bottom:8px;">' + itemsHtml + '</div>';
+        }
+
+        // Footer: item count + total
+        var footerRow = '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e5e7eb;padding-top:8px;">' +
+            '<span style="font-size:0.85rem;color:#6b7280;">' + itemCount + ' item' + (itemCount !== 1 ? 's' : '') + '</span>' +
+            '<span style="font-weight:800;font-size:1.1rem;color:#1f2937;">₹' + total + '</span></div>';
+
+        card.innerHTML = headerRow + dateRow + itemsHtml + footerRow;
+        return card;
+    }
 
     function getOrders() {
         var orders = [];
-        try {
-            orders = JSON.parse(localStorage.getItem('seasalt_orders') || '[]');
-        } catch(e) {}
-        // Sort newest first
+        try { orders = JSON.parse(localStorage.getItem(ORDERS_KEY) || '[]'); } catch(e) {}
+
+        // Sort newest first — handle all date field names
         orders.sort(function(a, b) {
-            var da = new Date(a.date || a.created_at || 0).getTime();
-            var db = new Date(b.date || b.created_at || 0).getTime();
+            var da = new Date(a.createdAt || a.created_at || a.date || 0).getTime();
+            var db = new Date(b.createdAt || b.created_at || b.date || 0).getTime();
             return db - da;
         });
         return orders;
     }
 
-    // ════════════════════════════════════════════
-    // WHATSAPP ORDER NOTIFICATION
-    // ════════════════════════════════════════════
 
-    function sendOrderWhatsApp(orderData) {
-        if (!orderData) return;
+    // ╔══════════════════════════════════════════════╗
+    // ║  2. PATCH ORDERS NAV BUTTON DIRECTLY          ║
+    // ╚══════════════════════════════════════════════╝
+    //
+    // app.js binds nav clicks at load time → our fix loads after → 
+    // we must OVERRIDE the nav button click handler.
 
-        var items = [];
-        try {
-            items = typeof orderData.items === 'string' ? JSON.parse(orderData.items) : (orderData.items || []);
-        } catch(e) {}
+    function patchOrdersNav() {
+        // Find the Orders nav button
+        var navBtns = document.querySelectorAll('#bottom-nav .nav-item, #bottom-nav button[data-page]');
+        navBtns.forEach(function(btn) {
+            if (btn.getAttribute('data-page') === 'orders') {
+                // Clone and replace to remove all old event listeners
+                var newBtn = btn.cloneNode(true);
+                btn.parentNode.replaceChild(newBtn, btn);
 
-        var total = parseFloat(orderData.total) || 0;
-        if (total === 0 && items.length > 0) {
-            items.forEach(function(item) {
-                total += (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1);
-            });
-        }
+                newBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
 
-        var userName = '';
-        var userPhone = '';
-        try {
-            var u = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
-            userName = u.name || '';
-            userPhone = u.phone || localStorage.getItem('seasalt_phone') || '';
-        } catch(e) {}
+                    // Update active nav state
+                    document.querySelectorAll('#bottom-nav .nav-item, #bottom-nav button[data-page]').forEach(function(b) {
+                        b.classList.remove('active');
+                        b.style.color = '';
+                    });
+                    newBtn.classList.add('active');
+                    newBtn.style.color = '#D4451A';
 
-        var orderId = orderData.id || orderData.orderId || ('SS' + Date.now().toString(36).toUpperCase());
-
-        // Build message
-        var msg = '🧂 *SeaSalt Pickles - New Order!*\n\n';
-        msg += '📋 *Order ID:* #' + orderId + '\n';
-        msg += '👤 *Customer:* ' + (userName || 'Guest') + '\n';
-        if (userPhone) msg += '📱 *Phone:* ' + userPhone + '\n';
-        msg += '📅 *Date:* ' + new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + '\n\n';
-
-        msg += '🛒 *Items:*\n';
-        items.forEach(function(item, i) {
-            var itemPrice = (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1);
-            msg += (i + 1) + '. ' + (item.name || 'Item');
-            if (item.variant && (item.variant.weight || item.variant.name)) {
-                msg += ' (' + (item.variant.weight || item.variant.name) + ')';
+                    showOrdersPage();
+                });
+                console.log('[OrdersFix] ✅ Orders nav button patched');
             }
-            msg += ' × ' + (item.quantity || 1) + ' = ₹' + itemPrice + '\n';
         });
-
-        msg += '\n💰 *Total: ₹' + total + '*\n';
-
-        // Check if wallet was used
-        if (orderData.walletUsed && orderData.walletUsed > 0) {
-            msg += '🎁 *Wallet Used: -₹' + orderData.walletUsed + '*\n';
-            msg += '💵 *To Pay: ₹' + Math.max(0, total - orderData.walletUsed) + '*\n';
-        }
-
-        msg += '\nThank you for ordering! 🙏';
-
-        // Open WhatsApp with the message
-        var encodedMsg = encodeURIComponent(msg);
-        var waUrl = 'https://api.whatsapp.com/send?phone=' + STORE_PHONE + '&text=' + encodedMsg;
-
-        // Try opening WhatsApp
-        window.open(waUrl, '_blank');
-
-        console.log('[OrdersFix] WhatsApp order message sent for #' + orderId);
     }
 
-    // ════════════════════════════════════════════
-    // PATCH: Intercept Cart.checkout to add WhatsApp
-    // ════════════════════════════════════════════
 
+    // ╔══════════════════════════════════════════════╗
+    // ║  3. WHATSAPP NOTIFICATION ON CHECKOUT         ║
+    // ╚══════════════════════════════════════════════╝
+
+    function sendWhatsAppNotification(order) {
+        if (!STORE_PHONE || STORE_PHONE === '919876543210') {
+            console.warn('[OrdersFix] WhatsApp not configured — update STORE_PHONE');
+            return;
+        }
+
+        var items = [];
+        try { items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []); } catch(e) {}
+
+        var customer = order.customer || order.address || {};
+        var custName = customer.name || order.customer_name || 'Customer';
+        var custPhone = customer.phone || order.customer_phone || '';
+
+        var msg = '🧂 *SeaSalt Pickles — New Order!*\n\n' +
+            '📋 *Order ID:* #' + (order.id || order.orderId) + '\n' +
+            '👤 *Customer:* ' + custName + '\n' +
+            '📱 *Phone:* ' + custPhone + '\n';
+
+        var date = order.createdAt || order.created_at || new Date().toISOString();
+        try {
+            var d = new Date(date);
+            msg += '📅 *Date:* ' + d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) +
+                ', ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) + '\n';
+        } catch(e) {}
+
+        msg += '\n🛒 *Items:*\n';
+        var calcTotal = 0;
+        items.forEach(function(it, i) {
+            var name = it.name || 'Item';
+            var size = it.size || it.weight || '';
+            var qty = it.quantity || 1;
+            var price = parseFloat(it.price) || 0;
+            var lineTotal = price * qty;
+            calcTotal += lineTotal;
+            msg += (i + 1) + '. ' + name + (size ? ' (' + size + ')' : '') + ' × ' + qty + ' = ₹' + lineTotal + '\n';
+        });
+
+        var total = parseFloat(order.total) || calcTotal;
+        msg += '\n💰 *Total: ₹' + total + '*\n\nThank you for ordering! 🙏';
+
+        var url = 'https://wa.me/' + STORE_PHONE + '?text=' + encodeURIComponent(msg);
+        window.open(url, '_blank');
+    }
+
+    // Patch Cart.checkout to also send WhatsApp
     function patchCheckout() {
-        if (typeof Cart === 'undefined') return;
+        if (typeof Cart === 'undefined' || !Cart.checkout) return;
 
         var _origCheckout = Cart.checkout;
 
         Cart.checkout = function() {
-            // Get cart data BEFORE checkout clears it
-            var cartItems = [];
-            var cartTotal = 0;
+            // Capture cart items BEFORE checkout clears them
+            var cartSnapshot = null;
             try {
-                if (Cart.getItems) cartItems = Cart.getItems();
-                else if (Store && Store.getState) cartItems = Store.getState().cart || [];
-                if (Cart.getTotal) cartTotal = Cart.getTotal();
-                else {
-                    cartItems.forEach(function(item) {
-                        var price = 0;
-                        if (item.variant && item.variant.price) price = item.variant.price;
-                        else if (item.price) price = item.price;
-                        cartTotal += price * (item.quantity || 1);
-                    });
+                if (typeof Store !== 'undefined' && Store.getCart) {
+                    cartSnapshot = JSON.parse(JSON.stringify(Store.getCart()));
                 }
             } catch(e) {}
 
+            // Watch for new order appearing in localStorage
+            var ordersBefore = [];
+            try { ordersBefore = JSON.parse(localStorage.getItem(ORDERS_KEY) || '[]'); } catch(e) {}
+            var countBefore = ordersBefore.length;
+
             // Call original checkout
-            if (_origCheckout) _origCheckout.call(Cart);
+            _origCheckout.apply(Cart, arguments);
 
-            // After checkout, send WhatsApp with order data
-            if (cartItems.length > 0) {
-                var orderData = {
-                    id: 'SS' + Date.now().toString(36).toUpperCase(),
-                    items: cartItems.map(function(item) {
-                        return {
-                            name: item.name || (item.product && item.product.name) || 'Item',
-                            price: item.variant ? item.variant.price : (item.price || 0),
-                            quantity: item.quantity || 1,
-                            variant: item.variant || null
-                        };
-                    }),
-                    total: cartTotal,
-                    date: new Date().toISOString(),
-                    status: 'confirmed'
-                };
+            // Poll for new order (checkout is async with Razorpay)
+            var checks = 0;
+            var checker = setInterval(function() {
+                checks++;
+                if (checks > 120) { clearInterval(checker); return; } // Stop after 2 min
 
-                // Save to localStorage orders
-                var orders = [];
-                try { orders = JSON.parse(localStorage.getItem('seasalt_orders') || '[]'); } catch(e) {}
-                orders.unshift(orderData);
-                localStorage.setItem('seasalt_orders', JSON.stringify(orders));
+                var ordersNow = [];
+                try { ordersNow = JSON.parse(localStorage.getItem(ORDERS_KEY) || '[]'); } catch(e) {}
 
-                // Send WhatsApp notification
-                setTimeout(function() {
-                    sendOrderWhatsApp(orderData);
-                }, 500);
-            }
+                if (ordersNow.length > countBefore) {
+                    clearInterval(checker);
+                    var newOrder = ordersNow[0]; // newest is first
+                    console.log('[OrdersFix] New order detected:', newOrder.id || newOrder.orderId);
+
+                    // Send WhatsApp after a small delay (let success modal show first)
+                    setTimeout(function() {
+                        sendWhatsAppNotification(newOrder);
+                    }, 2000);
+                }
+            }, 1000);
         };
 
-        console.log('[OrdersFix] ✅ Checkout patched with WhatsApp notification');
+        console.log('[OrdersFix] ✅ Cart.checkout patched for WhatsApp');
     }
 
-    // ════════════════════════════════════════════
-    // INIT
-    // ════════════════════════════════════════════
+
+    // ╔══════════════════════════════════════════════╗
+    // ║  4. WALLET TIMER FIX                          ║
+    // ╚══════════════════════════════════════════════╝
+    //
+    // Problem: UI.startWalletTimer shows raw hours (719:59:42 for 30 days).
+    // Fix: Override to show days/hours/minutes properly.
+
+    function patchWalletTimer() {
+        if (typeof UI === 'undefined') return;
+
+        // Override startWalletTimer
+        UI.startWalletTimer = function() {
+            // Clear any existing timer
+            if (window._walletTimerInterval) {
+                clearInterval(window._walletTimerInterval);
+                window._walletTimerInterval = null;
+            }
+
+            // Find the wallet expiry time from all possible sources
+            var expiresAt = null;
+            var sources = ['seasalt_spin_wallet', 'seasalt_admin_credit', 'seasalt_spin_reward'];
+
+            for (var i = 0; i < sources.length; i++) {
+                try {
+                    var raw = localStorage.getItem(sources[i]);
+                    if (raw) {
+                        var data = JSON.parse(raw);
+                        if (data && data.expiresAt) {
+                            var exp = new Date(data.expiresAt);
+                            if (exp > new Date()) {
+                                // Use the SOONEST expiry (admin credit 48hr is more urgent than spin 30day)
+                                if (!expiresAt || exp < expiresAt) {
+                                    expiresAt = exp;
+                                }
+                            }
+                        }
+                    }
+                } catch(e) {}
+            }
+
+            if (!expiresAt) return; // No active wallet
+
+            function updateTimerDisplay() {
+                var now = new Date();
+                var diff = expiresAt - now;
+
+                if (diff <= 0) {
+                    // Expired — clean up
+                    var walletBtn = document.getElementById('wallet-btn');
+                    var timerEl = walletBtn ? walletBtn.querySelector('.wallet-timer') : null;
+                    if (timerEl) timerEl.remove();
+                    clearInterval(window._walletTimerInterval);
+                    window._walletTimerInterval = null;
+                    return;
+                }
+
+                var totalSeconds = Math.floor(diff / 1000);
+                var days    = Math.floor(totalSeconds / 86400);
+                var hours   = Math.floor((totalSeconds % 86400) / 3600);
+                var minutes = Math.floor((totalSeconds % 3600) / 60);
+                var seconds = totalSeconds % 60;
+
+                // Smart format:
+                //   > 1 day  → "2d 5h left"
+                //   < 1 day  → "23:45:12"
+                //   < 1 hour → "45:12"
+                var text = '';
+                if (days > 0) {
+                    text = days + 'd ' + hours + 'h left';
+                } else if (hours > 0) {
+                    text = pad(hours) + ':' + pad(minutes) + ':' + pad(seconds);
+                } else {
+                    text = pad(minutes) + ':' + pad(seconds);
+                }
+
+                // Find or create timer element next to wallet button
+                var walletBtn = document.getElementById('wallet-btn');
+                if (!walletBtn) return;
+
+                var timerEl = walletBtn.querySelector('.wallet-timer');
+                if (!timerEl) {
+                    timerEl = document.createElement('span');
+                    timerEl.className = 'wallet-timer';
+                    timerEl.style.cssText = 'font-size:0.65rem;color:#b45309;margin-left:4px;white-space:nowrap;';
+                    walletBtn.appendChild(timerEl);
+                }
+                timerEl.textContent = '⏱ ' + text;
+            }
+
+            // Run immediately + every second
+            updateTimerDisplay();
+            window._walletTimerInterval = setInterval(updateTimerDisplay, 1000);
+        };
+
+        // Run the patched timer immediately
+        UI.startWalletTimer();
+        console.log('[OrdersFix] ✅ Wallet timer patched');
+    }
+
+    function pad(n) { return n < 10 ? '0' + n : '' + n; }
+
+
+    // ╔══════════════════════════════════════════════╗
+    // ║  5. INIT — Apply all patches                  ║
+    // ╚══════════════════════════════════════════════╝
 
     function init() {
-        // Patch checkout to add WhatsApp
+        console.log('[OrdersFix] v2 initializing...');
+        patchOrdersNav();
         patchCheckout();
-
-        // If Cart loads later, retry
-        if (typeof Cart === 'undefined') {
-            setTimeout(patchCheckout, 1000);
-            setTimeout(patchCheckout, 3000);
-        }
+        patchWalletTimer();
+        console.log('[OrdersFix] v2 ✅ All patches applied');
     }
 
+    // Run when DOM is ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
+        // DOM already loaded — run with tiny delay to ensure app.js has finished
         setTimeout(init, 100);
     }
 
-    return {
+    // ╔══════════════════════════════════════════════╗
+    // ║  EXPORTS                                      ║
+    // ╚══════════════════════════════════════════════╝
+
+    window.OrdersFix = {
         showOrdersPage: showOrdersPage,
-        sendOrderWhatsApp: sendOrderWhatsApp
+        sendWhatsApp: sendWhatsAppNotification
     };
 
 })();
-
-window.OrdersFix = OrdersFix;
