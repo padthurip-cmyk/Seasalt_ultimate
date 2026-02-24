@@ -420,6 +420,8 @@
         userName = document.getElementById('sw-name').value.trim();
         userPhone = selectedCountryCode + document.getElementById('sw-phone').value;
 
+        console.log('[SpinWheel] handleSendOtp v17.2 — phone:', userPhone, 'isTest:', isTestNumber(userPhone));
+
         var btn = document.getElementById('sw-send-otp');
         btn.disabled = true;
         btn.textContent = 'Checking...';
