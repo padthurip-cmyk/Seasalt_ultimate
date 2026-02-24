@@ -39,7 +39,9 @@ var Analytics = (function() {
         
         trackPageView('home');
         setupListeners();
-        console.log('📊 Analytics v2.1: Ready | session=' + sessionId);
+        startLoginWatcher();
+        startFirebaseWatcher();
+        console.log('📊 Analytics v2.3: Ready | session=' + sessionId + ' | user=' + userId);
     }
 
     function getSessionId() {
@@ -52,6 +54,13 @@ var Analytics = (function() {
     }
 
     function getUserId() {
+        // Check if user is logged in (store saves phone to localStorage after Firebase auth)
+        var phone = getLoggedInPhone();
+        if (phone) {
+            userId = phone;
+            return phone;
+        }
+        // Fallback to anonymous ID
         var uid = localStorage.getItem('seasalt_user_id');
         if (!uid) {
             uid = 'u_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
@@ -60,19 +69,79 @@ var Analytics = (function() {
         return uid;
     }
 
-    // Link phone number to user_id when customer logs in
-    // Called by the store's auth module after Firebase phone verification
-    function linkPhone(phone) {
-        if (!phone || !userId) return;
-        // Store mapping in Supabase users table so admin can see phone in activity
+    // Detect logged-in phone from various localStorage keys the store might use
+    function getLoggedInPhone() {
+        // Try all common keys the store auth module might save the phone under
+        var keys = [
+            'seasalt_phone', 'user_phone', 'phone', 'ss_phone',
+            'seasalt_user_phone', 'loggedInPhone', 'auth_phone',
+            'userPhone', 'customer_phone', 'ss_customer_phone',
+            'seasalt_customer', 'currentUserPhone'
+        ];
+        for (var i = 0; i < keys.length; i++) {
+            var val = localStorage.getItem(keys[i]);
+            if (val && val.length >= 10) return val;
+        }
+        // Check if store saves a full user object
         try {
-            fetch(SB + 'users?phone=eq.' + encodeURIComponent(phone), {
-                method: 'PATCH',
-                headers: HEADERS,
-                body: JSON.stringify({ seasalt_user_id: userId })
-            }).catch(function(){});
+            var userKeys = ['seasalt_user', 'ss_user', 'user', 'userData', 'currentUser', 'ss_customer'];
+            for (var j = 0; j < userKeys.length; j++) {
+                var userData = localStorage.getItem(userKeys[j]) || sessionStorage.getItem(userKeys[j]);
+                if (userData) {
+                    var parsed = JSON.parse(userData);
+                    if (parsed.phone) return parsed.phone;
+                    if (parsed.phoneNumber) return parsed.phoneNumber;
+                    if (parsed.customer_phone) return parsed.customer_phone;
+                }
+            }
         } catch(e) {}
-        console.log('📊 Linked phone ' + phone + ' → ' + userId);
+        // Last resort: check Firebase directly
+        try {
+            if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+                var fbPhone = firebase.auth().currentUser.phoneNumber;
+                if (fbPhone) return fbPhone;
+            }
+        } catch(e) {}
+        return null;
+    }
+
+    // Re-check login status periodically (catches login that happens after init)
+    function startLoginWatcher() {
+        setInterval(function() {
+            var phone = getLoggedInPhone();
+            if (phone && userId !== phone) {
+                var oldId = userId;
+                userId = phone;
+                console.log('📊 User identified: ' + oldId + ' → ' + phone);
+            }
+        }, 3000);
+    }
+
+    // Called by store auth module after Firebase phone verification
+    function linkPhone(phone) {
+        if (!phone) return;
+        userId = phone;
+        console.log('📊 Phone linked: ' + phone);
+    }
+
+    // Watch Firebase Auth for phone login (most reliable method)
+    function startFirebaseWatcher() {
+        try {
+            if (typeof firebase !== 'undefined' && firebase.auth) {
+                firebase.auth().onAuthStateChanged(function(user) {
+                    if (user && user.phoneNumber) {
+                        var phone = user.phoneNumber;
+                        if (userId !== phone) {
+                            console.log('📊 Firebase auth detected: ' + userId + ' → ' + phone);
+                            userId = phone;
+                        }
+                    }
+                });
+            } else {
+                // Firebase not loaded yet, retry after 2 seconds
+                setTimeout(startFirebaseWatcher, 2000);
+            }
+        } catch(e) {}
     }
 
     function getDeviceInfo() {
