@@ -433,6 +433,18 @@
                 return;
             }
 
+            /* TEST NUMBERS: Skip OTP entirely — go straight to spin */
+            if (isTestNumber(userPhone)) {
+                console.log('[SpinWheel] Test number — skipping OTP, going to spin');
+                var saved = {}; try { saved = JSON.parse(localStorage.getItem('seasalt_user')||'{}'); } catch(e){}
+                saved.phone = userPhone; saved.name = userName;
+                localStorage.setItem('seasalt_user', JSON.stringify(saved));
+                localStorage.setItem('seasalt_phone', userPhone);
+                btn.disabled = false; btn.textContent = 'Send OTP to Continue \u2728';
+                doFinalSpin();
+                return;
+            }
+
             btn.textContent = 'Sending OTP...';
 
             if (!auth) {
