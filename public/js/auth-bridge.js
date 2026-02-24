@@ -265,18 +265,26 @@
                     console.log('[AuthBridge] Wallet sync done — ₹' + supabaseBalance + ' expires:' + supabaseExpiry);
 
                 } else if (supabaseBalance <= 0) {
-                    // Server says 0 — but check if we have valid local wallet (spin just happened, not synced yet)
+                    // Server says 0 — admin may have reset it
+                    // Only keep local wallet if spin happened in the last 60 seconds (not yet synced)
                     var localWallet = null;
                     try { localWallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
-                    if (localWallet && localWallet.amount > 0 && localWallet.expiresAt && new Date(localWallet.expiresAt) > new Date()) {
-                        // Local wallet still valid — spin may not have synced to server yet, keep it
-                        console.log('[AuthBridge] Server balance 0 but local wallet valid, keeping local');
-                    } else {
-                        // Both empty — clear
+                    var keepLocal = false;
+                    if (localWallet && localWallet.amount > 0 && localWallet.addedAt) {
+                        var addedAge = Date.now() - new Date(localWallet.addedAt).getTime();
+                        if (addedAge < 60000) {
+                            // Spin happened less than 60 seconds ago — server hasn't caught up yet
+                            keepLocal = true;
+                            console.log('[AuthBridge] Server 0 but spin just happened ' + Math.round(addedAge/1000) + 's ago, keeping local');
+                        }
+                    }
+                    if (!keepLocal) {
+                        // Server is source of truth — clear everything
                         localStorage.removeItem('seasalt_spin_wallet');
                         localStorage.removeItem('seasalt_admin_credit');
                         localStorage.removeItem('seasalt_spin_reward');
                         applyWalletToUI({ amount: 0, expiresAt: null });
+                        console.log('[AuthBridge] Server balance 0, cleared local wallet');
                     }
                 }
 
