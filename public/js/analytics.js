@@ -60,6 +60,21 @@ var Analytics = (function() {
         return uid;
     }
 
+    // Link phone number to user_id when customer logs in
+    // Called by the store's auth module after Firebase phone verification
+    function linkPhone(phone) {
+        if (!phone || !userId) return;
+        // Store mapping in Supabase users table so admin can see phone in activity
+        try {
+            fetch(SB + 'users?phone=eq.' + encodeURIComponent(phone), {
+                method: 'PATCH',
+                headers: HEADERS,
+                body: JSON.stringify({ seasalt_user_id: userId })
+            }).catch(function(){});
+        } catch(e) {}
+        console.log('📊 Linked phone ' + phone + ' → ' + userId);
+    }
+
     function getDeviceInfo() {
         var ua = navigator.userAgent;
         var device = 'desktop';
@@ -433,7 +448,8 @@ var Analytics = (function() {
         trackSearch: trackSearch,
         getReport: getReport,
         clearAnalytics: clearAnalytics,
-        getSession: function() { return { id: sessionId, userId: userId }; }
+        getSession: function() { return { id: sessionId, userId: userId }; },
+        linkPhone: linkPhone
     };
 })();
 
