@@ -27,6 +27,64 @@
     document.head.appendChild(fabStyle);
 
     // ═══════════════════════════════════════════
+    // FIX: Wallet timer shows raw hours (719:59:42) instead of days
+    // Override the timer display to show "29d 23:59" format
+    // ═══════════════════════════════════════════
+    function fixWalletTimer() {
+        // Find the wallet badge timer element
+        var timerEl = document.querySelector('.wallet-timer, [id*="wallet-time"], [id*="walletTime"]');
+        if (!timerEl) {
+            // Try finding by text pattern (HHH:MM:SS where HHH > 24)
+            var allSpans = document.querySelectorAll('span, div, p');
+            for (var i = 0; i < allSpans.length; i++) {
+                var txt = allSpans[i].textContent.trim();
+                if (/^\d{3,}:\d{2}:\d{2}$/.test(txt)) {
+                    timerEl = allSpans[i];
+                    break;
+                }
+            }
+        }
+        if (!timerEl) return;
+
+        // Get the wallet expiry from localStorage
+        var wallet = null;
+        try { wallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
+        if (!wallet || !wallet.expiresAt) return;
+
+        var expiresAt = new Date(wallet.expiresAt).getTime();
+
+        // Override with our own timer that shows days
+        function updateTimer() {
+            var now = Date.now();
+            var diff = expiresAt - now;
+            if (diff <= 0) {
+                timerEl.textContent = 'Expired';
+                return;
+            }
+            var totalSec = Math.floor(diff / 1000);
+            var days = Math.floor(totalSec / 86400);
+            var hrs = Math.floor((totalSec % 86400) / 3600);
+            var mins = Math.floor((totalSec % 3600) / 60);
+            var secs = totalSec % 60;
+
+            if (days > 0) {
+                timerEl.textContent = days + 'd ' + hrs + 'h ' + mins + 'm';
+            } else {
+                timerEl.textContent = String(hrs).padStart(2,'0') + ':' + String(mins).padStart(2,'0') + ':' + String(secs).padStart(2,'0');
+            }
+        }
+
+        updateTimer();
+        setInterval(updateTimer, 1000);
+        console.log('[AuthBridge] ✅ Fixed wallet timer format');
+    }
+
+    // Run timer fix after page loads and wallet badge appears
+    setTimeout(fixWalletTimer, 1500);
+    setTimeout(fixWalletTimer, 3000);
+    setTimeout(fixWalletTimer, 6000);
+
+    // ═══════════════════════════════════════════
     // 1. SYNC LOGIN STATE: localStorage → Store
     // ═══════════════════════════════════════════
     function syncLoginState() {
