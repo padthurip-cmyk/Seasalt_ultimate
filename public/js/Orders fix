@@ -1,0 +1,310 @@
+/**
+ * SeaSalt Pickles - Orders Page Fix + WhatsApp Notification v1
+ * =============================================================
+ * FIXES:
+ * 1. Orders page was compressed/unstyled — now full-screen with proper cards
+ * 2. WhatsApp message not triggered on order — now sends confirmation
+ * 3. Order total showing ₹0 — now reads actual amounts from order data
+ *
+ * ADD TO index.html AFTER app.js:
+ *   <script src="js/orders-fix.js"></script>
+ */
+
+var OrdersFix = (function() {
+    'use strict';
+
+    var STORE_PHONE = '919876543210'; // Store's WhatsApp number — UPDATE THIS
+
+    // ════════════════════════════════════════════
+    // ORDERS PAGE — Beautiful full-screen modal
+    // ════════════════════════════════════════════
+
+    function showOrdersPage() {
+        var orders = getOrders();
+
+        // Remove any existing orders modal
+        var existing = document.getElementById('orders-modal');
+        if (existing) existing.remove();
+
+        var modal = document.createElement('div');
+        modal.id = 'orders-modal';
+        modal.className = 'fixed inset-0 z-[85] flex items-end justify-center';
+
+        var ordersHtml = '';
+        if (orders.length === 0) {
+            ordersHtml = '<div style="text-align:center;padding:60px 20px;">' +
+                '<div style="font-size:4rem;margin-bottom:16px;">📦</div>' +
+                '<h4 style="font-weight:700;color:#1f2937;margin-bottom:8px;font-size:1.1rem;">No orders yet</h4>' +
+                '<p style="color:#9ca3af;font-size:0.9rem;">Your orders will appear here after checkout</p>' +
+                '</div>';
+        } else {
+            orders.forEach(function(order) {
+                var items = [];
+                try {
+                    items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []);
+                } catch(e) {}
+
+                var date = order.date || order.created_at;
+                var dateStr = date ? new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
+                var total = parseFloat(order.total) || 0;
+                if (total === 0 && items.length > 0) {
+                    items.forEach(function(item) {
+                        total += (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1);
+                    });
+                }
+
+                var statusColors = {
+                    pending: { bg: '#fef3c7', text: '#92400e', icon: '⏳' },
+                    confirmed: { bg: '#d1fae5', text: '#065f46', icon: '✅' },
+                    processing: { bg: '#dbeafe', text: '#1e40af', icon: '🔄' },
+                    shipped: { bg: '#ede9fe', text: '#5b21b6', icon: '🚚' },
+                    dispatched: { bg: '#ede9fe', text: '#5b21b6', icon: '🚚' },
+                    delivered: { bg: '#d1fae5', text: '#065f46', icon: '✅' },
+                    cancelled: { bg: '#fee2e2', text: '#991b1b', icon: '❌' }
+                };
+                var status = (order.status || 'confirmed').toLowerCase();
+                var sc = statusColors[status] || statusColors.confirmed;
+
+                var orderId = order.id || order.orderId || '';
+                var displayId = orderId.length > 12 ? orderId.substring(0, 12) + '…' : orderId;
+
+                // Build items list
+                var itemsHtml = '';
+                items.forEach(function(item) {
+                    var itemPrice = (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1);
+                    itemsHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f3f4f6;">' +
+                        '<div style="flex:1;">' +
+                            '<span style="font-weight:600;color:#374151;font-size:0.9rem;">' + (item.name || 'Item') + '</span>' +
+                            (item.variant ? '<span style="color:#9ca3af;font-size:0.8rem;margin-left:6px;">' + (item.variant.weight || item.variant.name || '') + '</span>' : '') +
+                            '<span style="color:#9ca3af;font-size:0.8rem;margin-left:6px;">× ' + (item.quantity || 1) + '</span>' +
+                        '</div>' +
+                        '<span style="font-weight:700;color:#059669;">₹' + itemPrice + '</span>' +
+                    '</div>';
+                });
+
+                ordersHtml += '<div style="background:#fff;border-radius:16px;border:1px solid #e5e7eb;margin-bottom:16px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.05);">' +
+                    // Header
+                    '<div style="padding:16px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f3f4f6;">' +
+                        '<div>' +
+                            '<div style="font-weight:700;color:#1f2937;font-size:0.95rem;">#' + displayId + '</div>' +
+                            '<div style="color:#9ca3af;font-size:0.8rem;margin-top:2px;">' + dateStr + '</div>' +
+                        '</div>' +
+                        '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600;background:' + sc.bg + ';color:' + sc.text + ';">' +
+                            sc.icon + ' ' + status.charAt(0).toUpperCase() + status.slice(1) +
+                        '</span>' +
+                    '</div>' +
+                    // Items
+                    '<div style="padding:12px 16px;">' + itemsHtml + '</div>' +
+                    // Footer
+                    '<div style="padding:12px 16px;background:#f9fafb;display:flex;justify-content:space-between;align-items:center;">' +
+                        '<span style="color:#6b7280;font-size:0.85rem;">' + items.length + ' item' + (items.length !== 1 ? 's' : '') + '</span>' +
+                        '<span style="font-weight:800;color:#1f2937;font-size:1.15rem;">₹' + total + '</span>' +
+                    '</div>' +
+                '</div>';
+            });
+        }
+
+        modal.innerHTML = '<div class="absolute inset-0 bg-black/60 backdrop-blur-sm close-orders-modal"></div>' +
+            '<div class="relative bg-white rounded-t-3xl w-full max-w-lg max-h-[85vh] overflow-hidden animate-slide-up" style="display:flex;flex-direction:column;">' +
+                '<div style="padding:20px 20px 16px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">' +
+                    '<h3 style="font-size:1.25rem;font-weight:800;color:#1f2937;">📋 My Orders</h3>' +
+                    '<button class="close-orders-modal" style="width:36px;height:36px;background:#f3f4f6;border-radius:50%;display:flex;align-items:center;justify-content:center;border:none;cursor:pointer;">' +
+                        '<svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>' +
+                    '</button>' +
+                '</div>' +
+                '<div style="padding:16px 20px;overflow-y:auto;flex:1;">' +
+                    ordersHtml +
+                '</div>' +
+            '</div>';
+
+        document.body.appendChild(modal);
+        document.body.style.overflow = 'hidden';
+
+        var closeModal = function() {
+            modal.remove();
+            document.body.style.overflow = '';
+            if (typeof UI !== 'undefined' && UI.updateBottomNav) UI.updateBottomNav('home');
+        };
+
+        modal.querySelectorAll('.close-orders-modal').forEach(function(btn) {
+            btn.addEventListener('click', closeModal);
+        });
+    }
+
+    // ════════════════════════════════════════════
+    // GET ORDERS from localStorage
+    // ════════════════════════════════════════════
+
+    function getOrders() {
+        var orders = [];
+        try {
+            orders = JSON.parse(localStorage.getItem('seasalt_orders') || '[]');
+        } catch(e) {}
+        // Sort newest first
+        orders.sort(function(a, b) {
+            var da = new Date(a.date || a.created_at || 0).getTime();
+            var db = new Date(b.date || b.created_at || 0).getTime();
+            return db - da;
+        });
+        return orders;
+    }
+
+    // ════════════════════════════════════════════
+    // WHATSAPP ORDER NOTIFICATION
+    // ════════════════════════════════════════════
+
+    function sendOrderWhatsApp(orderData) {
+        if (!orderData) return;
+
+        var items = [];
+        try {
+            items = typeof orderData.items === 'string' ? JSON.parse(orderData.items) : (orderData.items || []);
+        } catch(e) {}
+
+        var total = parseFloat(orderData.total) || 0;
+        if (total === 0 && items.length > 0) {
+            items.forEach(function(item) {
+                total += (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1);
+            });
+        }
+
+        var userName = '';
+        var userPhone = '';
+        try {
+            var u = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
+            userName = u.name || '';
+            userPhone = u.phone || localStorage.getItem('seasalt_phone') || '';
+        } catch(e) {}
+
+        var orderId = orderData.id || orderData.orderId || ('SS' + Date.now().toString(36).toUpperCase());
+
+        // Build message
+        var msg = '🧂 *SeaSalt Pickles - New Order!*\n\n';
+        msg += '📋 *Order ID:* #' + orderId + '\n';
+        msg += '👤 *Customer:* ' + (userName || 'Guest') + '\n';
+        if (userPhone) msg += '📱 *Phone:* ' + userPhone + '\n';
+        msg += '📅 *Date:* ' + new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) + '\n\n';
+
+        msg += '🛒 *Items:*\n';
+        items.forEach(function(item, i) {
+            var itemPrice = (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1);
+            msg += (i + 1) + '. ' + (item.name || 'Item');
+            if (item.variant && (item.variant.weight || item.variant.name)) {
+                msg += ' (' + (item.variant.weight || item.variant.name) + ')';
+            }
+            msg += ' × ' + (item.quantity || 1) + ' = ₹' + itemPrice + '\n';
+        });
+
+        msg += '\n💰 *Total: ₹' + total + '*\n';
+
+        // Check if wallet was used
+        if (orderData.walletUsed && orderData.walletUsed > 0) {
+            msg += '🎁 *Wallet Used: -₹' + orderData.walletUsed + '*\n';
+            msg += '💵 *To Pay: ₹' + Math.max(0, total - orderData.walletUsed) + '*\n';
+        }
+
+        msg += '\nThank you for ordering! 🙏';
+
+        // Open WhatsApp with the message
+        var encodedMsg = encodeURIComponent(msg);
+        var waUrl = 'https://api.whatsapp.com/send?phone=' + STORE_PHONE + '&text=' + encodedMsg;
+
+        // Try opening WhatsApp
+        window.open(waUrl, '_blank');
+
+        console.log('[OrdersFix] WhatsApp order message sent for #' + orderId);
+    }
+
+    // ════════════════════════════════════════════
+    // PATCH: Intercept Cart.checkout to add WhatsApp
+    // ════════════════════════════════════════════
+
+    function patchCheckout() {
+        if (typeof Cart === 'undefined') return;
+
+        var _origCheckout = Cart.checkout;
+
+        Cart.checkout = function() {
+            // Get cart data BEFORE checkout clears it
+            var cartItems = [];
+            var cartTotal = 0;
+            try {
+                if (Cart.getItems) cartItems = Cart.getItems();
+                else if (Store && Store.getState) cartItems = Store.getState().cart || [];
+                if (Cart.getTotal) cartTotal = Cart.getTotal();
+                else {
+                    cartItems.forEach(function(item) {
+                        var price = 0;
+                        if (item.variant && item.variant.price) price = item.variant.price;
+                        else if (item.price) price = item.price;
+                        cartTotal += price * (item.quantity || 1);
+                    });
+                }
+            } catch(e) {}
+
+            // Call original checkout
+            if (_origCheckout) _origCheckout.call(Cart);
+
+            // After checkout, send WhatsApp with order data
+            if (cartItems.length > 0) {
+                var orderData = {
+                    id: 'SS' + Date.now().toString(36).toUpperCase(),
+                    items: cartItems.map(function(item) {
+                        return {
+                            name: item.name || (item.product && item.product.name) || 'Item',
+                            price: item.variant ? item.variant.price : (item.price || 0),
+                            quantity: item.quantity || 1,
+                            variant: item.variant || null
+                        };
+                    }),
+                    total: cartTotal,
+                    date: new Date().toISOString(),
+                    status: 'confirmed'
+                };
+
+                // Save to localStorage orders
+                var orders = [];
+                try { orders = JSON.parse(localStorage.getItem('seasalt_orders') || '[]'); } catch(e) {}
+                orders.unshift(orderData);
+                localStorage.setItem('seasalt_orders', JSON.stringify(orders));
+
+                // Send WhatsApp notification
+                setTimeout(function() {
+                    sendOrderWhatsApp(orderData);
+                }, 500);
+            }
+        };
+
+        console.log('[OrdersFix] ✅ Checkout patched with WhatsApp notification');
+    }
+
+    // ════════════════════════════════════════════
+    // INIT
+    // ════════════════════════════════════════════
+
+    function init() {
+        // Patch checkout to add WhatsApp
+        patchCheckout();
+
+        // If Cart loads later, retry
+        if (typeof Cart === 'undefined') {
+            setTimeout(patchCheckout, 1000);
+            setTimeout(patchCheckout, 3000);
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        setTimeout(init, 100);
+    }
+
+    return {
+        showOrdersPage: showOrdersPage,
+        sendOrderWhatsApp: sendOrderWhatsApp
+    };
+
+})();
+
+window.OrdersFix = OrdersFix;
