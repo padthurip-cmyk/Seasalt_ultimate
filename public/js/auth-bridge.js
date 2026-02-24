@@ -1,5 +1,5 @@
 /**
- * SeaSalt Pickles - Auth Bridge v1
+ * SeaSalt Pickles - Auth Bridge v1.2
  * =================================
  * Fixes the gap between SpinWheel auth, Firebase auth, and the Account/Orders pages.
  * 
@@ -19,7 +19,7 @@
 (function() {
     'use strict';
 
-    console.log('[AuthBridge] v1 Loading...');
+    console.log('[AuthBridge] v1.2 Loading...');
 
     // Fix: Move cart FAB above WhatsApp button so they don't overlap
     var fabStyle = document.createElement('style');
@@ -96,6 +96,108 @@
         }
 
         console.log('[AuthBridge] User state synced | phone:', normalizedPhone, '| name:', name);
+
+        // ═══════════════════════════════════════════
+        // WALLET SYNC: Fetch wallet from Supabase → update localStorage
+        // Admin credits wallet in Supabase, but store reads from localStorage.
+        // This bridges the gap so admin-credited wallet shows on customer UI.
+        // ═══════════════════════════════════════════
+        syncWalletFromSupabase(normalizedPhone);
+    }
+
+    function syncWalletFromSupabase(phone) {
+        if (!phone || phone.length < 10) return;
+
+        var SU = 'https://yosjbsncvghpscsrvxds.supabase.co';
+        var SK = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
+
+        // Try with exact phone first, then try variants
+        var variants = [phone];
+        if (phone.startsWith('+91')) variants.push(phone.replace('+91', ''));
+        if (!phone.startsWith('+')) variants.push('+91' + phone);
+
+        function tryFetch(idx) {
+            if (idx >= variants.length) return;
+            var p = variants[idx];
+
+            fetch(SU + '/rest/v1/users?phone=eq.' + encodeURIComponent(p) + '&select=wallet_balance,name', {
+                headers: { 'apikey': SK, 'Authorization': 'Bearer ' + SK }
+            }).then(function(r) { return r.json(); }).then(function(users) {
+                if (!users || !users.length || !users[0]) {
+                    tryFetch(idx + 1);
+                    return;
+                }
+
+                var user = users[0];
+                var supabaseBalance = parseFloat(user.wallet_balance) || 0;
+
+                // Read current localStorage wallet
+                var localWallet = null;
+                try { localWallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
+                var localBalance = localWallet ? (parseFloat(localWallet.amount) || 0) : 0;
+                var localExpiry = localWallet ? localWallet.expiresAt : null;
+
+                // Default expiry: 30 days from now
+                var defaultExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+                // CASE 1: Supabase has MORE than local → admin added money
+                // Update local to match Supabase (source of truth for admin credits)
+                if (supabaseBalance > localBalance) {
+                    var walletData = { amount: supabaseBalance, expiresAt: localExpiry || defaultExpiry };
+                    localStorage.setItem('seasalt_spin_wallet', JSON.stringify(walletData));
+                    console.log('[AuthBridge] ✅ Wallet updated from Supabase: ₹' + supabaseBalance + ' (was ₹' + localBalance + ')');
+                    applyWalletToUI(walletData);
+                }
+                // CASE 2: Local has MORE than Supabase → spin reward not yet synced
+                // Push local to Supabase so admin sees correct balance
+                else if (localBalance > supabaseBalance && localBalance > 0) {
+                    fetch(SU + '/rest/v1/users?phone=eq.' + encodeURIComponent(p), {
+                        method: 'PATCH',
+                        headers: { 'apikey': SK, 'Authorization': 'Bearer ' + SK, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+                        body: JSON.stringify({ wallet_balance: localBalance })
+                    }).catch(function(){});
+                    console.log('[AuthBridge] Synced local wallet → Supabase: ₹' + localBalance);
+                }
+                // CASE 3: Both equal and > 0 — already in sync
+                else if (supabaseBalance > 0 && supabaseBalance === localBalance) {
+                    console.log('[AuthBridge] Wallet in sync: ₹' + supabaseBalance);
+                }
+
+                // Sync name if missing locally
+                if (user.name) {
+                    try {
+                        var u = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
+                        if (!u.name) {
+                            u.name = user.name;
+                            u.phone = phone;
+                            localStorage.setItem('seasalt_user', JSON.stringify(u));
+                        }
+                    } catch(e) {}
+                }
+
+            }).catch(function(err) {
+                console.warn('[AuthBridge] Wallet sync error:', err);
+                tryFetch(idx + 1);
+            });
+        }
+
+        tryFetch(0);
+    }
+
+    function applyWalletToUI(walletData) {
+        // Update Store
+        if (typeof Store !== 'undefined') {
+            if (Store.setWallet) Store.setWallet(walletData);
+            else if (Store.getState) {
+                var state = Store.getState();
+                if (state) state.wallet = walletData;
+            }
+        }
+        // Refresh cart UI to show wallet badge
+        if (typeof UI !== 'undefined' && UI.updateCartUI) UI.updateCartUI();
+        if (typeof UI !== 'undefined' && UI.startWalletTimer) UI.startWalletTimer();
+        // Dispatch event
+        try { window.dispatchEvent(new CustomEvent('walletUpdated', { detail: walletData })); } catch(e) {}
     }
 
     // ═══════════════════════════════════════════
