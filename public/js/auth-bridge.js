@@ -22,116 +22,88 @@
     console.log('[AuthBridge] v1.2 Loading...');
 
     // Fix: Move cart FAB above WhatsApp button so they don't overlap
-    // Also ensure wallet badge keeps its vibrant styling
     var fabStyle = document.createElement('style');
-    fabStyle.textContent = '#cart-fab { bottom: 150px !important; } ' +
-        '.wallet-badge, [class*="wallet-badge"], [onclick*="wallet"], .header-wallet { ' +
-        '  background: linear-gradient(135deg, #e8590c, #d9480f) !important; ' +
-        '  color: #fff !important; ' +
-        '  padding: 8px 16px !important; ' +
-        '  border-radius: 25px !important; ' +
-        '  font-weight: 700 !important; ' +
-        '  font-size: 0.85rem !important; ' +
-        '  display: inline-flex !important; ' +
-        '  align-items: center !important; ' +
-        '  gap: 4px !important; ' +
-        '  box-shadow: 0 2px 8px rgba(232, 89, 12, 0.3) !important; ' +
-        '}';
+    fabStyle.textContent = '#cart-fab { bottom: 150px !important; }';
     document.head.appendChild(fabStyle);
 
     // ═══════════════════════════════════════════
-    // FIX: Wallet timer — show days format from the start (no flicker)
-    // Completely replaces UI.startWalletTimer before it ever runs
+    // FIX: Wallet timer — catch old 30-day wallets showing 700+ hrs
+    // With new 48hr admin credits, this is mainly for cleanup
     // ═══════════════════════════════════════════
-    var _timerPatched = false;
-    function patchWalletTimer() {
-        if (typeof UI === 'undefined' || _timerPatched) return;
-        _timerPatched = true;
-
-        // Save reference to original so we can call it for badge creation
-        var _origTimer = UI.startWalletTimer;
-
-        UI.startWalletTimer = function() {
-            // Clear any existing intervals
-            if (window._walletTimerInterval) clearInterval(window._walletTimerInterval);
-            if (window._origWalletTimerInterval) clearInterval(window._origWalletTimerInterval);
-
-            var wallet = null;
-            try { wallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
-            if (!wallet || !wallet.expiresAt) return;
-
-            var expiresAt = new Date(wallet.expiresAt).getTime();
-
-            function formatTime() {
-                var diff = expiresAt - Date.now();
-                if (diff <= 0) return 'Expired';
-                var totalSec = Math.floor(diff / 1000);
-                var days = Math.floor(totalSec / 86400);
-                var hrs = Math.floor((totalSec % 86400) / 3600);
-                var mins = Math.floor((totalSec % 3600) / 60);
-                var secs = totalSec % 60;
-                if (days > 0) {
-                    return days + 'd ' + hrs + 'h ' + mins + 'm';
-                }
-                return String(hrs).padStart(2,'0') + ':' + String(mins).padStart(2,'0') + ':' + String(secs).padStart(2,'0');
+    function checkAndFixExpiry() {
+        // Fix any old admin credits that had 30-day expiry
+        var adminCredit = null;
+        try { adminCredit = JSON.parse(localStorage.getItem('seasalt_admin_credit') || 'null'); } catch(e) {}
+        if (adminCredit && adminCredit.expiresAt) {
+            var hoursLeft = (new Date(adminCredit.expiresAt).getTime() - Date.now()) / (60*60*1000);
+            if (hoursLeft > 48) {
+                // Old 30-day expiry — cap it to 48hrs from now
+                adminCredit.expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+                localStorage.setItem('seasalt_admin_credit', JSON.stringify(adminCredit));
+                console.log('[AuthBridge] Fixed old admin credit expiry to 48hrs');
             }
-
-            function replaceTimerText() {
-                var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-                var node;
-                var timeStr = formatTime();
-                while (node = walker.nextNode()) {
-                    // Match any HH:MM:SS or HHH:MM:SS pattern
-                    if (/\d{2,}:\d{2}:\d{2}/.test(node.textContent)) {
-                        node.textContent = node.textContent.replace(/\d{2,}:\d{2}:\d{2}/, timeStr);
-                    }
-                    // Also replace if our own format is already there (for re-updates)
-                    else if (/\d+d \d+h \d+m/.test(node.textContent)) {
-                        node.textContent = node.textContent.replace(/\d+d \d+h \d+m/, timeStr);
-                    }
-                }
+            if (hoursLeft <= 0) {
+                // Expired — remove it
+                localStorage.removeItem('seasalt_admin_credit');
+                console.log('[AuthBridge] Admin credit expired, removed');
+                // Recalculate total wallet
+                recalcWallet();
             }
+        }
 
-            // Let original create the badge HTML first, then immediately fix it
-            if (_origTimer) {
-                // Temporarily suppress the original's setInterval
-                var realSetInterval = window.setInterval;
-                window.setInterval = function(fn, ms) {
-                    // Capture the original timer's interval ID so we can kill it
-                    var id = realSetInterval(fn, ms);
-                    window._origWalletTimerInterval = id;
-                    return id;
-                };
-                _origTimer.call(UI);
-                window.setInterval = realSetInterval; // Restore
-                // Kill the original's interval immediately
-                if (window._origWalletTimerInterval) {
-                    clearInterval(window._origWalletTimerInterval);
-                }
-            }
-
-            // Fix the display immediately (no flash)
-            replaceTimerText();
-
-            // Our own interval with correct format
-            window._walletTimerInterval = setInterval(replaceTimerText, 1000);
-        };
-
-        console.log('[AuthBridge] ✅ Wallet timer patched (no flicker)');
-
-        // If wallet exists, start our timer now
+        // Also fix seasalt_spin_wallet if it shows admin credit with wrong expiry
         var wallet = null;
         try { wallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
         if (wallet && wallet.expiresAt) {
-            UI.startWalletTimer();
+            var walletHoursLeft = (new Date(wallet.expiresAt).getTime() - Date.now()) / (60*60*1000);
+            // If expiry > 48hrs AND there's an admin credit, the combined wallet has wrong expiry
+            if (walletHoursLeft > 48 && adminCredit) {
+                wallet.expiresAt = adminCredit.expiresAt;
+                localStorage.setItem('seasalt_spin_wallet', JSON.stringify(wallet));
+            }
         }
     }
 
-    // Patch ASAP — try multiple times in case UI loads late
-    setTimeout(patchWalletTimer, 100);
-    setTimeout(patchWalletTimer, 300);
-    setTimeout(patchWalletTimer, 800);
-    setTimeout(patchWalletTimer, 1500);
+    function recalcWallet() {
+        var spinWallet = null;
+        try { spinWallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
+        var spinBalance = 0;
+        if (spinWallet && spinWallet.expiresAt && new Date(spinWallet.expiresAt) > new Date()) {
+            spinBalance = parseFloat(spinWallet.amount) || 0;
+        }
+
+        var adminCredit = null;
+        try { adminCredit = JSON.parse(localStorage.getItem('seasalt_admin_credit') || 'null'); } catch(e) {}
+        var adminBalance = 0;
+        if (adminCredit && adminCredit.expiresAt && new Date(adminCredit.expiresAt) > new Date()) {
+            adminBalance = parseFloat(adminCredit.amount) || 0;
+        }
+
+        var total = spinBalance + adminBalance;
+        if (total > 0) {
+            var expiry = (adminCredit && adminCredit.expiresAt) ? adminCredit.expiresAt :
+                         (spinWallet && spinWallet.expiresAt) ? spinWallet.expiresAt :
+                         new Date(Date.now() + 48*60*60*1000).toISOString();
+            var walletData = { amount: total, expiresAt: expiry };
+            localStorage.setItem('seasalt_spin_wallet', JSON.stringify(walletData));
+            applyWalletToUI(walletData);
+        } else {
+            localStorage.removeItem('seasalt_spin_wallet');
+            applyWalletToUI({ amount: 0, expiresAt: null });
+        }
+    }
+
+    // Check expiry every 30 seconds to auto-remove expired credits
+    setTimeout(checkAndFixExpiry, 500);
+    setInterval(function() {
+        var adminCredit = null;
+        try { adminCredit = JSON.parse(localStorage.getItem('seasalt_admin_credit') || 'null'); } catch(e) {}
+        if (adminCredit && adminCredit.expiresAt && new Date(adminCredit.expiresAt) <= new Date()) {
+            localStorage.removeItem('seasalt_admin_credit');
+            recalcWallet();
+            console.log('[AuthBridge] Admin credit expired — wallet updated');
+        }
+    }, 30000);
 
     // ═══════════════════════════════════════════
     // 1. SYNC LOGIN STATE: localStorage → Store
@@ -238,36 +210,84 @@
                 var user = users[0];
                 var supabaseBalance = parseFloat(user.wallet_balance) || 0;
 
-                // Read current localStorage wallet
-                var localWallet = null;
-                try { localWallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
-                var localBalance = localWallet ? (parseFloat(localWallet.amount) || 0) : 0;
-                var localExpiry = localWallet ? localWallet.expiresAt : null;
-
-                // Default expiry: 30 days from now
-                var defaultExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-                // CASE 1: Supabase has MORE than local → admin added money
-                // Update local to match Supabase (source of truth for admin credits)
-                if (supabaseBalance > localBalance) {
-                    var walletData = { amount: supabaseBalance, expiresAt: localExpiry || defaultExpiry };
-                    localStorage.setItem('seasalt_spin_wallet', JSON.stringify(walletData));
-                    console.log('[AuthBridge] ✅ Wallet updated from Supabase: ₹' + supabaseBalance + ' (was ₹' + localBalance + ')');
-                    applyWalletToUI(walletData);
+                // Read current localStorage wallets
+                // seasalt_spin_wallet = spin reward (30 day expiry, set by SpinWheel)
+                // seasalt_admin_credit = admin credit (48hr expiry, set by admin portal)
+                var spinWallet = null;
+                try { spinWallet = JSON.parse(localStorage.getItem('seasalt_spin_wallet') || 'null'); } catch(e) {}
+                var spinBalance = 0;
+                if (spinWallet && spinWallet.amount) {
+                    // Check if spin reward expired
+                    if (spinWallet.expiresAt && new Date(spinWallet.expiresAt) > new Date()) {
+                        spinBalance = parseFloat(spinWallet.amount) || 0;
+                    } else {
+                        localStorage.removeItem('seasalt_spin_wallet');
+                        console.log('[AuthBridge] Spin reward expired, removed');
+                    }
                 }
-                // CASE 2: Local has MORE than Supabase → spin reward not yet synced
-                // Push local to Supabase so admin sees correct balance
-                else if (localBalance > supabaseBalance && localBalance > 0) {
+
+                var adminCredit = null;
+                try { adminCredit = JSON.parse(localStorage.getItem('seasalt_admin_credit') || 'null'); } catch(e) {}
+                var adminBalance = 0;
+                if (adminCredit && adminCredit.amount) {
+                    if (adminCredit.expiresAt && new Date(adminCredit.expiresAt) > new Date()) {
+                        adminBalance = parseFloat(adminCredit.amount) || 0;
+                    } else {
+                        localStorage.removeItem('seasalt_admin_credit');
+                        console.log('[AuthBridge] Admin credit expired, removed');
+                    }
+                }
+
+                var localTotal = spinBalance + adminBalance;
+
+                // Supabase wallet_balance is set by admin — it's the admin credit amount
+                // Spin reward is only in localStorage (SpinWheel doesn't write to Supabase)
+                if (supabaseBalance > 0 && supabaseBalance !== adminBalance) {
+                    // Admin added/changed credit — update local admin credit with 48hr expiry
+                    var creditData = {
+                        amount: supabaseBalance,
+                        expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+                        source: 'admin'
+                    };
+                    localStorage.setItem('seasalt_admin_credit', JSON.stringify(creditData));
+                    adminBalance = supabaseBalance;
+                    console.log('[AuthBridge] ✅ Admin credit synced: ₹' + supabaseBalance + ' (48hr expiry)');
+                }
+
+                // Combine both into seasalt_spin_wallet for the store UI to read
+                var totalBalance = spinBalance + adminBalance;
+                if (totalBalance > 0) {
+                    // Use the EARLIER expiry for the combined wallet display
+                    var displayExpiry;
+                    if (adminBalance > 0 && adminCredit && adminCredit.expiresAt) {
+                        // Show admin credit expiry (48hr) since it's more urgent
+                        displayExpiry = adminCredit.expiresAt;
+                    } else if (spinWallet && spinWallet.expiresAt) {
+                        displayExpiry = spinWallet.expiresAt;
+                    } else {
+                        displayExpiry = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+                    }
+
+                    var walletData = { amount: totalBalance, expiresAt: displayExpiry };
+                    localStorage.setItem('seasalt_spin_wallet', JSON.stringify(walletData));
+                    console.log('[AuthBridge] ✅ Total wallet: ₹' + totalBalance + ' (spin:₹' + spinBalance + ' + admin:₹' + adminBalance + ')');
+                    applyWalletToUI(walletData);
+                } else if (totalBalance === 0 && localStorage.getItem('seasalt_spin_wallet')) {
+                    // Both expired — remove wallet badge
+                    localStorage.removeItem('seasalt_spin_wallet');
+                    applyWalletToUI({ amount: 0, expiresAt: null });
+                    console.log('[AuthBridge] All wallet credits expired, badge removed');
+                }
+
+                // Sync spin reward → Supabase so admin can see it
+                // (Don't overwrite admin credit though)
+                if (spinBalance > 0 && supabaseBalance === 0) {
                     fetch(SU + '/rest/v1/users?phone=eq.' + encodeURIComponent(p), {
                         method: 'PATCH',
                         headers: { 'apikey': SK, 'Authorization': 'Bearer ' + SK, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-                        body: JSON.stringify({ wallet_balance: localBalance })
+                        body: JSON.stringify({ wallet_balance: spinBalance })
                     }).catch(function(){});
-                    console.log('[AuthBridge] Synced local wallet → Supabase: ₹' + localBalance);
-                }
-                // CASE 3: Both equal and > 0 — already in sync
-                else if (supabaseBalance > 0 && supabaseBalance === localBalance) {
-                    console.log('[AuthBridge] Wallet in sync: ₹' + supabaseBalance);
+                    console.log('[AuthBridge] Synced spin reward → Supabase: ₹' + spinBalance);
                 }
 
                 // Sync name if missing locally
