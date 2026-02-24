@@ -354,8 +354,8 @@
         // Refresh cart UI to show wallet badge
         if (typeof UI !== 'undefined' && UI.updateCartUI) UI.updateCartUI();
         if (typeof UI !== 'undefined' && UI.startWalletTimer) UI.startWalletTimer();
-        // Dispatch event
-        try { window.dispatchEvent(new CustomEvent('walletUpdated', { detail: walletData })); } catch(e) {}
+        // NOTE: Do NOT dispatch walletUpdated here — it causes infinite loop
+        // (applyWalletToUI → walletUpdated → syncLoginState → syncWallet → applyWalletToUI)
     }
 
     // ═══════════════════════════════════════════
@@ -526,7 +526,11 @@
     // ═══════════════════════════════════════════
     // When SpinWheel completes, it dispatches 'walletUpdated' event.
     // We use this to immediately sync login state.
+    var _lastWalletSync = 0;
     window.addEventListener('walletUpdated', function() {
+        // Debounce: only sync once per 5 seconds to prevent loops
+        if (Date.now() - _lastWalletSync < 5000) return;
+        _lastWalletSync = Date.now();
         console.log('[AuthBridge] walletUpdated event — syncing login state');
         setTimeout(syncLoginState, 500);
     });
