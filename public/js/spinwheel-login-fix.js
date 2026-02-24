@@ -169,13 +169,6 @@
             // Ensure data is saved before closing
             saveSpinWheelUserData();
             
-            // Show welcome toast
-            var name = '';
-            try { name = JSON.parse(localStorage.getItem('seasalt_user') || '{}').name || ''; } catch(e) {}
-            if (name && typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast('Welcome back, ' + name + '! 👋', 'success');
-            }
-            
             // Call original close handler
             if (originalOnClick) originalOnClick.call(this);
         };
