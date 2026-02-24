@@ -258,8 +258,6 @@ const Cart = (function() {
                     return;
                 }
                 var sec = Math.floor(diff / 1000);
-                // Cap at 48 hours max
-                if (sec > 48 * 3600) sec = 48 * 3600;
                 var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
                 var text = (h < 10 ? '0' : '') + h + ':' + p(m) + ':' + p(s);
 
