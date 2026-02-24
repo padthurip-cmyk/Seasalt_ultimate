@@ -21,6 +21,11 @@
 
     console.log('[AuthBridge] v1 Loading...');
 
+    // Fix: Move cart FAB above WhatsApp button so they don't overlap
+    var fabStyle = document.createElement('style');
+    fabStyle.textContent = '#cart-fab { bottom: 150px !important; }';
+    document.head.appendChild(fabStyle);
+
     // ═══════════════════════════════════════════
     // 1. SYNC LOGIN STATE: localStorage → Store
     // ═══════════════════════════════════════════
@@ -283,18 +288,21 @@
         console.log('[AuthBridge] v1 Ready');
     }
 
-    // Run after DOM and other scripts are loaded
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
-            setTimeout(init, 100);
-        });
-    } else {
-        setTimeout(init, 100);
+    // Run once after DOM and other scripts are loaded
+    var _initialized = false;
+    function initOnce() {
+        if (_initialized) return;
+        _initialized = true;
+        init();
     }
 
-    // Also re-sync after Store might have initialized
-    setTimeout(init, 500);
-    setTimeout(syncLoginState, 2000);
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(initOnce, 300);
+        });
+    } else {
+        setTimeout(initOnce, 300);
+    }
 
     // Export for other modules
     window.AuthBridge = {
