@@ -564,6 +564,9 @@
         var now = new Date(), exp = new Date(now.getTime() + expiryMs);
         localStorage.setItem('seasalt_user', JSON.stringify({name:userName,phone:userPhone,country:userCountry}));
         localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify({amount:wonAmount,addedAt:now.toISOString(),expiresAt:exp.toISOString()}));
+        // v17.1: ALSO write to seasalt_spin_reward (source key for 3-key wallet architecture)
+        // This prevents auth-bridge from double-counting spin rewards
+        localStorage.setItem('seasalt_spin_reward', JSON.stringify({amount:wonAmount,addedAt:now.toISOString(),expiresAt:exp.toISOString(),source:'spin'}));
         localStorage.setItem('seasalt_spin_done','true');
 
         fetch(SUPABASE_URL+'/rest/v1/users?phone=eq.'+encodeURIComponent(userPhone),{
