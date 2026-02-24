@@ -1,11 +1,12 @@
 /**
- * SeaSalt Pickles - Cart & Checkout Module v11
+ * SeaSalt Pickles - Cart & Checkout Module v12
  * =============================================
- * v11 Changes:
- *  - Beautiful orders page built-in (no orders-fix.js dependency)
- *  - Fixed ₹0 total on orders (reads all field name variants)
- *  - WhatsApp notification on order completion
+ * v12 Changes:
+ *  - Fixed wallet doubling bug (proper 3-key deduction: admin first, then spin)
+ *  - Orders page now fetches from Supabase + localStorage (merged, deduped)
+ *  - Clickable order cards → full order detail view with status timeline
  *  - Wallet timer smart formatting (days/hours/minutes)
+ *  - WhatsApp notification on order completion
  */
 
 const Cart = (function() {
@@ -153,7 +154,7 @@ const Cart = (function() {
     const DEFAULT_FLAT_FEE = 50;
 
     function init() {
-        console.log('[Cart] v11 Initializing...');
+        console.log('[Cart] v12 Initializing...');
         loadDeliveryCharges();
         bindEvents();
         subscribeToChanges();
@@ -161,7 +162,7 @@ const Cart = (function() {
         setTimeout(patchWalletTimer, 500);
         // Patch orders nav button
         setTimeout(patchOrdersNavButton, 300);
-        console.log('[Cart] v11 Initialized');
+        console.log('[Cart] v12 Initialized');
     }
 
     async function loadDeliveryCharges() {
@@ -580,8 +581,34 @@ const Cart = (function() {
             var spinWallet = getSpinWallet();
             if (spinWallet) {
                 var remaining = spinWallet.amount - orderData.walletDiscount;
-                if (remaining <= 0) { localStorage.removeItem(SPIN_WALLET_KEY); }
-                else { localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify({ amount: remaining, expiresAt: spinWallet.expiresAt.toISOString(), addedAt: new Date().toISOString() })); }
+                if (remaining <= 0) { 
+                    localStorage.removeItem(SPIN_WALLET_KEY); 
+                    localStorage.removeItem('seasalt_spin_reward');
+                    localStorage.removeItem('seasalt_admin_credit');
+                }
+                else { 
+                    // Update display wallet
+                    localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify({ amount: remaining, expiresAt: spinWallet.expiresAt.toISOString(), addedAt: new Date().toISOString() })); 
+                    // Update source keys proportionally
+                    var spinReward = null; try { spinReward = JSON.parse(localStorage.getItem('seasalt_spin_reward') || 'null'); } catch(e) {}
+                    var adminCredit = null; try { adminCredit = JSON.parse(localStorage.getItem('seasalt_admin_credit') || 'null'); } catch(e) {}
+                    var spinAmt = (spinReward && spinReward.expiresAt && new Date(spinReward.expiresAt) > new Date()) ? (parseFloat(spinReward.amount) || 0) : 0;
+                    var adminAmt = (adminCredit && adminCredit.expiresAt && new Date(adminCredit.expiresAt) > new Date()) ? (parseFloat(adminCredit.amount) || 0) : 0;
+                    // Deduct from admin credit first (expires sooner), then spin
+                    var deductLeft = orderData.walletDiscount;
+                    if (adminAmt > 0 && deductLeft > 0) {
+                        var adminDeduct = Math.min(adminAmt, deductLeft);
+                        adminAmt -= adminDeduct; deductLeft -= adminDeduct;
+                        if (adminAmt <= 0) localStorage.removeItem('seasalt_admin_credit');
+                        else { adminCredit.amount = adminAmt; localStorage.setItem('seasalt_admin_credit', JSON.stringify(adminCredit)); }
+                    }
+                    if (spinAmt > 0 && deductLeft > 0) {
+                        var spinDeduct = Math.min(spinAmt, deductLeft);
+                        spinAmt -= spinDeduct; deductLeft -= spinDeduct;
+                        if (spinAmt <= 0) localStorage.removeItem('seasalt_spin_reward');
+                        else { spinReward.amount = spinAmt; localStorage.setItem('seasalt_spin_reward', JSON.stringify(spinReward)); }
+                    }
+                }
                 var userPhone = localStorage.getItem('seasalt_phone') || localStorage.getItem('seasalt_user_phone');
                 if (!userPhone) try { userPhone = JSON.parse(localStorage.getItem('seasalt_user') || '{}').phone; } catch(e) {}
                 if (!userPhone) userPhone = orderData.customer.phone;
@@ -735,12 +762,10 @@ const Cart = (function() {
     }
 
     // ╔══════════════════════════════════════════════╗
-    // ║  BEAUTIFUL ORDERS PAGE (BUILT-IN)             ║
+    // ║  BEAUTIFUL ORDERS PAGE (BUILT-IN) v12        ║
     // ╚══════════════════════════════════════════════╝
 
     function showBeautifulOrdersPage() {
-        var orders = getStoredOrders();
-
         var old = document.getElementById('orders-modal');
         if (old) old.remove();
 
@@ -763,37 +788,113 @@ const Cart = (function() {
         var hdr = document.createElement('div');
         hdr.style.cssText = 'padding:20px 20px 16px;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;';
         hdr.innerHTML = '<div><h3 style="font-weight:800;font-size:1.25rem;color:#1f2937;margin:0;">My Orders</h3>' +
-            '<p style="font-size:0.8rem;color:#9ca3af;margin:4px 0 0;">' + orders.length + ' order' + (orders.length !== 1 ? 's' : '') + '</p></div>' +
+            '<p id="orders-count" style="font-size:0.8rem;color:#9ca3af;margin:4px 0 0;">Loading...</p></div>' +
             '<button style="width:36px;height:36px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.1rem;" id="close-orders-x">\u2715</button>';
         panel.appendChild(hdr);
         hdr.querySelector('#close-orders-x').onclick = function() { modal.remove(); document.body.style.overflow = ''; };
 
         // Body
         var body = document.createElement('div');
+        body.id = 'orders-body';
         body.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px 24px;';
+        body.innerHTML = '<div style="text-align:center;padding:40px 0;"><div class="animate-pulse" style="font-size:2rem;">⏳</div><p style="color:#9ca3af;font-size:0.9rem;margin-top:8px;">Loading orders...</p></div>';
         panel.appendChild(body);
-
-        if (orders.length === 0) {
-            body.innerHTML = '<div style="text-align:center;padding:60px 0;"><div style="font-size:4rem;margin-bottom:16px;">\uD83D\uDCE6</div>' +
-                '<h4 style="font-weight:700;color:#1f2937;font-size:1.1rem;margin:0 0 8px;">No orders yet</h4>' +
-                '<p style="color:#9ca3af;font-size:0.9rem;margin:0;">Your orders will appear here after checkout</p></div>';
-        } else {
-            orders.forEach(function(order) { body.appendChild(buildCard(order)); });
-        }
 
         document.body.appendChild(modal);
         document.body.style.overflow = 'hidden';
+
+        // Fetch orders from BOTH localStorage and Supabase, merge & deduplicate
+        loadAllOrders(function(orders) {
+            var countEl = document.getElementById('orders-count');
+            if (countEl) countEl.textContent = orders.length + ' order' + (orders.length !== 1 ? 's' : '');
+            
+            body.innerHTML = '';
+            if (orders.length === 0) {
+                body.innerHTML = '<div style="text-align:center;padding:60px 0;"><div style="font-size:4rem;margin-bottom:16px;">\uD83D\uDCE6</div>' +
+                    '<h4 style="font-weight:700;color:#1f2937;font-size:1.1rem;margin:0 0 8px;">No orders yet</h4>' +
+                    '<p style="color:#9ca3af;font-size:0.9rem;margin:0;">Your orders will appear here after checkout</p></div>';
+            } else {
+                orders.forEach(function(order) { 
+                    var card = buildCard(order);
+                    card.style.cursor = 'pointer';
+                    card.onclick = function() { showOrderDetail(order, modal); };
+                    body.appendChild(card); 
+                });
+            }
+        });
+    }
+
+    function loadAllOrders(callback) {
+        // Start with localStorage orders
+        var localOrders = getStoredOrders();
+        
+        // Try to fetch from Supabase too
+        var phone = localStorage.getItem('seasalt_phone') || '';
+        if (!phone) { try { phone = JSON.parse(localStorage.getItem('seasalt_user') || '{}').phone || ''; } catch(e) {} }
+        
+        if (!phone || phone.length < 10) {
+            callback(localOrders);
+            return;
+        }
+
+        var variants = [phone];
+        if (phone.startsWith('+91')) variants.push(phone.replace('+91', ''));
+        if (!phone.startsWith('+')) variants.push('+91' + phone);
+
+        var fetched = false;
+        function tryVariant(idx) {
+            if (idx >= variants.length || fetched) { callback(localOrders); return; }
+            fetch(SUPABASE_URL + '/rest/v1/orders?customer_phone=eq.' + encodeURIComponent(variants[idx]) + '&order=created_at.desc&limit=50', {
+                headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+            }).then(function(r) { return r.json(); }).then(function(serverOrders) {
+                if (!serverOrders || !serverOrders.length) { tryVariant(idx + 1); return; }
+                fetched = true;
+                // Merge: use server orders as base (they have latest status), fill in with local
+                var merged = {};
+                serverOrders.forEach(function(so) {
+                    var id = so.id || so.order_id || '';
+                    merged[id] = {
+                        id: id, orderId: id,
+                        items: so.items || '[]',
+                        customer: { name: so.customer_name, phone: so.customer_phone, address: so.customer_address, pincode: so.customer_pincode },
+                        customer_name: so.customer_name, customer_phone: so.customer_phone,
+                        customer_address: so.customer_address, customer_pincode: so.customer_pincode,
+                        subtotal: so.subtotal || 0, delivery: so.delivery_charge || 0, deliveryCharge: so.delivery_charge || 0,
+                        walletUsed: so.wallet_used || 0, walletDiscount: so.wallet_used || 0,
+                        total: so.total || 0, status: so.status || 'pending',
+                        paymentId: so.payment_id, paymentMethod: so.payment_method,
+                        createdAt: so.created_at, created_at: so.created_at, date: so.created_at,
+                        tracking_number: so.tracking_number || '',
+                        _fromServer: true
+                    };
+                });
+                // Add local orders not on server
+                localOrders.forEach(function(lo) {
+                    var id = lo.id || lo.orderId || lo.order_id || '';
+                    if (!merged[id]) merged[id] = lo;
+                });
+                // Sort by date desc
+                var all = Object.values(merged);
+                all.sort(function(a, b) {
+                    var da = new Date(a.createdAt || a.created_at || a.date || 0).getTime();
+                    var db = new Date(b.createdAt || b.created_at || b.date || 0).getTime();
+                    return db - da;
+                });
+                callback(all);
+            }).catch(function() { tryVariant(idx + 1); });
+        }
+        tryVariant(0);
     }
 
     function buildCard(order) {
         var card = document.createElement('div');
-        card.style.cssText = 'background:#f9fafb;border-radius:16px;padding:16px;margin-bottom:12px;border:1px solid #e5e7eb;';
+        card.style.cssText = 'background:#f9fafb;border-radius:16px;padding:16px;margin-bottom:12px;border:1px solid #e5e7eb;transition:box-shadow 0.2s;';
+        card.onmouseenter = function() { card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'; };
+        card.onmouseleave = function() { card.style.boxShadow = 'none'; };
 
         var orderId = order.id || order.orderId || order.order_id || '???';
         var status = order.status || 'pending';
-        // Read date from ALL possible fields
         var date = order.createdAt || order.created_at || order.date || '';
-        // Read total from ALL possible fields
         var total = parseFloat(order.total) || 0;
 
         var items = [];
@@ -802,7 +903,6 @@ const Cart = (function() {
         var itemCount = 0;
         items.forEach(function(it) { itemCount += (it.quantity || 1); });
 
-        // If total is still 0, calculate from items
         if (total === 0 && items.length > 0) {
             items.forEach(function(it) { total += (parseFloat(it.price) || 0) * (it.quantity || 1); });
             total += parseFloat(order.delivery || order.deliveryCharge || order.delivery_charge || 0);
@@ -810,42 +910,180 @@ const Cart = (function() {
             if (total < 0) total = 0;
         }
 
-        // Status config
-        var sc = { 'confirmed': { bg:'#dcfce7', c:'#166534', i:'\u2705', l:'Confirmed' }, 'pending': { bg:'#fef3c7', c:'#92400e', i:'\u23F3', l:'Pending' }, 'shipped': { bg:'#dbeafe', c:'#1e40af', i:'\uD83D\uDE9A', l:'Shipped' }, 'delivered': { bg:'#d1fae5', c:'#065f46', i:'\uD83C\uDF89', l:'Delivered' }, 'cancelled': { bg:'#fee2e2', c:'#991b1b', i:'\u274C', l:'Cancelled' } };
+        var sc = { 'confirmed': { bg:'#dcfce7', c:'#166534', i:'\u2705', l:'Confirmed' }, 'pending': { bg:'#fef3c7', c:'#92400e', i:'\u23F3', l:'Pending' }, 'preparing': { bg:'#fef3c7', c:'#92400e', i:'\uD83D\uDC68\u200D\uD83C\uDF73', l:'Preparing' }, 'shipped': { bg:'#dbeafe', c:'#1e40af', i:'\uD83D\uDE9A', l:'Shipped' }, 'delivered': { bg:'#d1fae5', c:'#065f46', i:'\uD83C\uDF89', l:'Delivered' }, 'cancelled': { bg:'#fee2e2', c:'#991b1b', i:'\u274C', l:'Cancelled' } };
         var s = sc[status] || sc['pending'];
 
-        // Date
         var dateStr = '';
         if (date) { try { var dd = new Date(date); dateStr = dd.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) + ', ' + dd.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit',hour12:true}); } catch(e) {} }
 
-        // Items detail
+        // Show first 2 items as preview
+        var previewHtml = '';
+        var previewItems = items.slice(0, 2);
+        previewItems.forEach(function(it) {
+            var nm = it.name || 'Item';
+            var qty = it.quantity || 1;
+            previewHtml += '<span style="font-size:0.8rem;color:#6b7280;">' + nm + ' \u00d7' + qty + '</span>';
+            if (previewItems.indexOf(it) < previewItems.length - 1) previewHtml += '<span style="color:#d1d5db;margin:0 4px;">•</span>';
+        });
+        if (items.length > 2) previewHtml += '<span style="font-size:0.75rem;color:#9ca3af;margin-left:4px;">+' + (items.length - 2) + ' more</span>';
+
+        card.innerHTML =
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">' +
+            '<div style="font-weight:700;color:#1f2937;font-size:0.95rem;">#' + orderId + '</div>' +
+            '<span style="display:inline-flex;align-items:center;gap:4px;font-size:0.75rem;font-weight:600;padding:4px 10px;border-radius:20px;background:' + s.bg + ';color:' + s.c + ';">' + s.i + ' ' + s.l + '</span></div>' +
+            (dateStr ? '<div style="font-size:0.8rem;color:#9ca3af;margin-bottom:8px;">' + dateStr + '</div>' : '') +
+            (previewHtml ? '<div style="margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;">' + previewHtml + '</div>' : '') +
+            '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e5e7eb;padding-top:8px;">' +
+            '<span style="font-size:0.85rem;color:#6b7280;">' + itemCount + ' item' + (itemCount !== 1 ? 's' : '') + '</span>' +
+            '<div style="display:flex;align-items:center;gap:8px;"><span style="font-weight:800;font-size:1.15rem;color:#1f2937;">\u20b9' + total + '</span>' +
+            '<span style="font-size:0.75rem;color:#9ca3af;">View \u203A</span></div></div>';
+
+        return card;
+    }
+
+    // ╔══════════════════════════════════════════════╗
+    // ║  ORDER DETAIL VIEW (NEW)                      ║
+    // ╚══════════════════════════════════════════════╝
+
+    function showOrderDetail(order, parentModal) {
+        var orderId = order.id || order.orderId || order.order_id || '???';
+        var status = order.status || 'pending';
+        var date = order.createdAt || order.created_at || order.date || '';
+        var total = parseFloat(order.total) || 0;
+        var subtotal = parseFloat(order.subtotal) || 0;
+        var delivery = parseFloat(order.delivery || order.deliveryCharge || order.delivery_charge || 0);
+        var walletUsed = parseFloat(order.walletUsed || order.walletDiscount || order.wallet_used || 0);
+        var paymentMethod = order.paymentMethod || order.payment_method || '';
+        var paymentId = order.paymentId || order.payment_id || '';
+        var tracking = order.tracking_number || '';
+
+        var cust = order.customer || {};
+        var custName = cust.name || order.customer_name || '';
+        var custPhone = cust.phone || order.customer_phone || '';
+        var custAddress = cust.address || order.customer_address || '';
+        var custPincode = cust.pincode || order.customer_pincode || '';
+
+        var items = [];
+        try { items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []); } catch(e) {}
+
+        if (total === 0 && items.length > 0) {
+            items.forEach(function(it) { total += (parseFloat(it.price) || 0) * (it.quantity || 1); });
+            subtotal = total;
+            total += delivery - walletUsed;
+            if (total < 0) total = 0;
+        }
+        if (subtotal === 0 && items.length > 0) {
+            items.forEach(function(it) { subtotal += (parseFloat(it.price) || 0) * (it.quantity || 1); });
+        }
+
+        var sc = { 'confirmed': { bg:'#dcfce7', c:'#166534', i:'\u2705', l:'Confirmed' }, 'pending': { bg:'#fef3c7', c:'#92400e', i:'\u23F3', l:'Pending' }, 'preparing': { bg:'#fef3c7', c:'#92400e', i:'\uD83D\uDC68\u200D\uD83C\uDF73', l:'Preparing' }, 'shipped': { bg:'#dbeafe', c:'#1e40af', i:'\uD83D\uDE9A', l:'Shipped' }, 'delivered': { bg:'#d1fae5', c:'#065f46', i:'\uD83C\uDF89', l:'Delivered' }, 'cancelled': { bg:'#fee2e2', c:'#991b1b', i:'\u274C', l:'Cancelled' } };
+        var s = sc[status] || sc['pending'];
+
+        var dateStr = '';
+        if (date) { try { var dd = new Date(date); dateStr = dd.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) + ' at ' + dd.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit',hour12:true}); } catch(e) {} }
+
+        // Items HTML
         var itemsHtml = '';
         items.forEach(function(it) {
             var nm = it.name || 'Item';
             var sz = it.size || it.weight || it.variant || '';
             var qty = it.quantity || 1;
             var pr = parseFloat(it.price) || 0;
-            itemsHtml += '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.85rem;">' +
-                '<span style="color:#4b5563;">' + nm + (sz ? ' (' + sz + ')' : '') + ' \u00d7 ' + qty + '</span>' +
-                '<span style="font-weight:600;color:#374151;">\u20b9' + (pr * qty) + '</span></div>';
+            var img = it.image || '';
+            itemsHtml += '<div style="display:flex;gap:12px;padding:10px 0;border-bottom:1px solid #f3f4f6;">' +
+                (img ? '<div style="width:48px;height:48px;border-radius:10px;overflow:hidden;flex-shrink:0;background:#f3f4f6;"><img src="' + img + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=\'🥒\'"></div>' : 
+                '<div style="width:48px;height:48px;border-radius:10px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.4rem;">🥒</div>') +
+                '<div style="flex:1;min-width:0;">' +
+                '<div style="font-weight:600;color:#1f2937;font-size:0.9rem;">' + nm + '</div>' +
+                (sz ? '<div style="font-size:0.78rem;color:#9ca3af;">' + sz + '</div>' : '') +
+                '<div style="font-size:0.8rem;color:#6b7280;margin-top:2px;">\u20b9' + pr + ' \u00d7 ' + qty + '</div></div>' +
+                '<div style="font-weight:700;color:#1f2937;font-size:0.95rem;flex-shrink:0;">\u20b9' + (pr * qty) + '</div></div>';
         });
-        if (itemsHtml) itemsHtml = '<div style="border-top:1px solid #e5e7eb;padding-top:8px;margin-bottom:8px;">' + itemsHtml + '</div>';
 
-        card.innerHTML =
-            // Header: ID + Status
-            '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">' +
-            '<div style="font-weight:700;color:#1f2937;font-size:0.95rem;">#' + orderId + '</div>' +
-            '<span style="display:inline-flex;align-items:center;gap:4px;font-size:0.75rem;font-weight:600;padding:4px 10px;border-radius:20px;background:' + s.bg + ';color:' + s.c + ';">' + s.i + ' ' + s.l + '</span></div>' +
-            // Date
-            (dateStr ? '<div style="font-size:0.8rem;color:#9ca3af;margin-bottom:10px;">' + dateStr + '</div>' : '') +
+        // Status timeline
+        var statusOrder = ['pending', 'confirmed', 'preparing', 'shipped', 'delivered'];
+        var currentIdx = statusOrder.indexOf(status);
+        if (status === 'cancelled') currentIdx = -1;
+        var timelineHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px;position:relative;">';
+        statusOrder.forEach(function(st, idx) {
+            var done = idx <= currentIdx;
+            var current = idx === currentIdx;
+            var icon = { pending:'\u23F3', confirmed:'\u2705', preparing:'\uD83D\uDC68\u200D\uD83C\uDF73', shipped:'\uD83D\uDE9A', delivered:'\uD83C\uDF89' }[st];
+            var label = st.charAt(0).toUpperCase() + st.slice(1);
+            var color = done ? '#166534' : '#d1d5db';
+            var bgCol = done ? '#dcfce7' : '#f3f4f6';
+            timelineHtml += '<div style="display:flex;flex-direction:column;align-items:center;z-index:1;flex:1;">' +
+                '<div style="width:28px;height:28px;border-radius:50%;background:' + bgCol + ';display:flex;align-items:center;justify-content:center;font-size:0.8rem;' + (current ? 'box-shadow:0 0 0 3px ' + bgCol + ';' : '') + '">' + icon + '</div>' +
+                '<div style="font-size:0.6rem;color:' + color + ';margin-top:4px;font-weight:' + (current ? '700' : '500') + ';">' + label + '</div></div>';
+        });
+        timelineHtml += '</div>';
+        if (status === 'cancelled') {
+            timelineHtml = '<div style="text-align:center;padding:12px;background:#fee2e2;border-radius:12px;margin:8px 0;"><span style="font-size:1.2rem;">\u274C</span> <span style="font-weight:600;color:#991b1b;">Order Cancelled</span></div>';
+        }
+
+        // Build detail panel
+        var detail = document.createElement('div');
+        detail.id = 'order-detail-panel';
+        detail.style.cssText = 'position:absolute;inset:0;background:#fff;border-radius:24px 24px 0 0;z-index:2;display:flex;flex-direction:column;animation:slideInRight 0.25s ease;';
+
+        // Add animation
+        var styleTag = document.getElementById('order-detail-anim');
+        if (!styleTag) {
+            styleTag = document.createElement('style');
+            styleTag.id = 'order-detail-anim';
+            styleTag.textContent = '@keyframes slideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}';
+            document.head.appendChild(styleTag);
+        }
+
+        detail.innerHTML =
+            // Header
+            '<div style="padding:16px 20px;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;gap:12px;flex-shrink:0;">' +
+            '<button id="back-to-orders" style="width:36px;height:36px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.1rem;">\u2190</button>' +
+            '<div style="flex:1;"><h3 style="font-weight:800;font-size:1.1rem;color:#1f2937;margin:0;">Order #' + orderId + '</h3>' +
+            '<p style="font-size:0.78rem;color:#9ca3af;margin:2px 0 0;">' + dateStr + '</p></div>' +
+            '<span style="display:inline-flex;align-items:center;gap:4px;font-size:0.72rem;font-weight:600;padding:4px 10px;border-radius:20px;background:' + s.bg + ';color:' + s.c + ';">' + s.i + ' ' + s.l + '</span></div>' +
+            // Scrollable body
+            '<div style="flex:1;overflow-y:auto;padding:16px 20px 24px;">' +
+            // Status timeline
+            timelineHtml +
+            // Tracking
+            (tracking ? '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px;margin:12px 0;font-size:0.85rem;"><strong style="color:#1e40af;">\uD83D\uDE9A Tracking:</strong> <span style="color:#1e40af;">' + tracking + '</span></div>' : '') +
             // Items
-            itemsHtml +
-            // Footer
-            '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e5e7eb;padding-top:8px;">' +
-            '<span style="font-size:0.85rem;color:#6b7280;">' + itemCount + ' item' + (itemCount !== 1 ? 's' : '') + '</span>' +
-            '<span style="font-weight:800;font-size:1.15rem;color:#1f2937;">\u20b9' + total + '</span></div>';
+            '<div style="margin-top:16px;"><h4 style="font-weight:700;color:#1f2937;font-size:0.95rem;margin:0 0 8px;">Items</h4>' + itemsHtml + '</div>' +
+            // Price breakdown
+            '<div style="background:#f9fafb;border-radius:14px;padding:14px;margin-top:16px;">' +
+            '<div style="display:flex;justify-content:space-between;font-size:0.85rem;color:#6b7280;margin-bottom:6px;"><span>Subtotal</span><span>\u20b9' + subtotal + '</span></div>' +
+            '<div style="display:flex;justify-content:space-between;font-size:0.85rem;color:#6b7280;margin-bottom:6px;"><span>Delivery</span><span style="' + (delivery === 0 ? 'color:#16a34a;' : '') + '">' + (delivery === 0 ? 'FREE' : '\u20b9' + delivery) + '</span></div>' +
+            (walletUsed > 0 ? '<div style="display:flex;justify-content:space-between;font-size:0.85rem;color:#16a34a;margin-bottom:6px;"><span>\uD83D\uDCB0 Wallet Used</span><span>-\u20b9' + walletUsed + '</span></div>' : '') +
+            '<div style="display:flex;justify-content:space-between;font-weight:800;font-size:1.1rem;color:#1f2937;border-top:1px solid #e5e7eb;padding-top:10px;margin-top:6px;"><span>Total</span><span>\u20b9' + total + '</span></div></div>' +
+            // Payment info
+            (paymentMethod ? '<div style="margin-top:12px;font-size:0.82rem;color:#9ca3af;">\uD83D\uDCB3 Paid via ' + paymentMethod + (paymentId ? ' (' + paymentId.substring(0, 16) + '...)' : '') + '</div>' : '') +
+            // Delivery address
+            (custAddress ? '<div style="margin-top:16px;"><h4 style="font-weight:700;color:#1f2937;font-size:0.95rem;margin:0 0 8px;">\uD83D\uDCCD Delivery Address</h4>' +
+            '<div style="background:#f9fafb;border-radius:12px;padding:12px;font-size:0.85rem;color:#4b5563;">' +
+            (custName ? '<div style="font-weight:600;">' + custName + '</div>' : '') +
+            '<div>' + custAddress + '</div>' +
+            (custPincode ? '<div>' + custPincode + '</div>' : '') +
+            (custPhone ? '<div style="color:#9ca3af;margin-top:4px;">\uD83D\uDCF1 ' + custPhone + '</div>' : '') +
+            '</div></div>' : '') +
+            '</div>';
 
-        return card;
+        // Find the panel (parent modal's second child = the white panel)
+        var parentPanel = parentModal.children[1];
+        if (!parentPanel) parentPanel = parentModal;
+        parentPanel.appendChild(detail);
+
+        detail.querySelector('#back-to-orders').onclick = function() {
+            detail.style.animation = 'slideOutRight 0.2s ease forwards';
+            var styleOut = document.getElementById('order-detail-anim-out');
+            if (!styleOut) {
+                styleOut = document.createElement('style');
+                styleOut.id = 'order-detail-anim-out';
+                styleOut.textContent = '@keyframes slideOutRight{from{transform:translateX(0)}to{transform:translateX(100%)}}';
+                document.head.appendChild(styleOut);
+            }
+            setTimeout(function() { detail.remove(); }, 200);
+        };
     }
 
     function getStoredOrders() {
