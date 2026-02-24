@@ -258,11 +258,10 @@ const Cart = (function() {
                     return;
                 }
                 var sec = Math.floor(diff / 1000);
-                var d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
-                var text = '';
-                if (d > 0) text = d + 'd ' + h + 'h left';
-                else if (h > 0) text = p(h) + ':' + p(m) + ':' + p(s);
-                else text = p(m) + ':' + p(s);
+                // Cap at 48 hours max
+                if (sec > 48 * 3600) sec = 48 * 3600;
+                var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+                var text = (h < 10 ? '0' : '') + h + ':' + p(m) + ':' + p(s);
 
                 var btn = document.getElementById('wallet-btn');
                 if (!btn) return;
