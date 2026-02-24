@@ -113,14 +113,18 @@ var Analytics = (function() {
             referrer: document.referrer || 'direct'
         };
 
-        // Fire and forget — don't block the UI
+        // Fire and forget — don't block the UI, but LOG errors for debugging
         try {
             fetch(SB + 'analytics_events', {
                 method: 'POST',
                 headers: HEADERS,
                 body: JSON.stringify(payload)
-            }).catch(function() {});
-        } catch(e) {}
+            }).then(function(r) {
+                if (!r.ok) {
+                    r.text().then(function(t) { console.error('📊 Analytics INSERT failed:', r.status, t); });
+                }
+            }).catch(function(err) { console.error('📊 Analytics network error:', err); });
+        } catch(e) { console.error('📊 Analytics exception:', e); }
 
         // Also update daily aggregate
         updateDailyStats(eventType, value);
@@ -160,9 +164,9 @@ var Analytics = (function() {
                         'Prefer': 'resolution=merge-duplicates,return=minimal'
                     },
                     body: JSON.stringify(data)
-                }).catch(function() {});
-            }).catch(function() {});
-        } catch(e) {}
+                }).catch(function(err) { console.error('📊 Daily upsert failed:', err); });
+            }).catch(function(err) { console.error('📊 Daily fetch failed:', err); });
+        } catch(e) { console.error('📊 Daily stats exception:', e); }
     }
 
     // ============================================
