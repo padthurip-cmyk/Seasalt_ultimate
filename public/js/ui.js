@@ -221,11 +221,16 @@ const UI = (function() {
     }
     
     function formatTime(ms) {
-        if (ms <= 0) return '00:00:00';
-        var h = Math.floor(ms / 3600000);
-        var m = Math.floor((ms % 3600000) / 60000);
-        var s = Math.floor((ms % 60000) / 1000);
-        return h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+        if (ms <= 0) return '00:00';
+        var totalSec = Math.floor(ms / 1000);
+        var d = Math.floor(totalSec / 86400);
+        var h = Math.floor((totalSec % 86400) / 3600);
+        var m = Math.floor((totalSec % 3600) / 60);
+        var s = totalSec % 60;
+        // Smart format: "1d 23h left" for >24h, "HH:MM:SS" for <24h
+        if (d > 0) return d + 'd ' + h + 'h left';
+        if (h > 0) return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+        return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
     }
     
     function updateWalletDisplay(wallet) {
@@ -243,12 +248,22 @@ const UI = (function() {
     }
     
     function startWalletTimer() {
+        // If cart.js has already patched this function, don't run the original
+        // cart.js v12 patches UI.startWalletTimer with its own version
+        if (window._cartWalletTimerActive) return;
+        
         if (walletTimerInterval) {
             clearInterval(walletTimerInterval);
             walletTimerInterval = null;
         }
         
         walletTimerInterval = setInterval(function() {
+            // Stop if cart.js took over
+            if (window._cartWalletTimerActive) {
+                clearInterval(walletTimerInterval);
+                walletTimerInterval = null;
+                return;
+            }
             var wallet = getSpinWallet();
             if (!wallet) {
                 clearInterval(walletTimerInterval);
