@@ -546,8 +546,24 @@
         validateForm();
     }
 
+    /* ═══════════ TEST NUMBERS — always allowed to spin ═══════════ */
+    var TEST_NUMBERS = ['+14377998989', '+918096203122'];
+    function isTestNumber(phone) {
+        if (!phone) return false;
+        var normalized = phone.replace(/[\s\-()]/g, '');
+        for (var i = 0; i < TEST_NUMBERS.length; i++) {
+            if (normalized === TEST_NUMBERS[i] || normalized.endsWith(TEST_NUMBERS[i].replace('+', ''))) return true;
+        }
+        return false;
+    }
+
     /* ═══════════ DB ═══════════ */
     function checkCanSpin(phone) {
+        /* Test numbers always can spin */
+        if (isTestNumber(phone)) {
+            console.log('[SpinWheel] Test number detected — spin allowed');
+            return Promise.resolve({canSpin:true});
+        }
         /* v17: Use dynamic cooldown from admin config */
         var cooldownDays = ADMIN_CONFIG.cooldown_days;
         return fetch(SUPABASE_URL+'/rest/v1/wallet_transactions?user_phone=eq.'+encodeURIComponent(phone)+'&type=eq.spin_reward&order=created_at.desc&limit=1',{
@@ -581,12 +597,32 @@
 
         if(typeof UI!=='undefined'){UI.updateCartUI();if(typeof UI.startWalletTimer==='function')UI.startWalletTimer();}
         window.dispatchEvent(new CustomEvent('walletUpdated',{detail:{amount:wonAmount,expiresAt:exp.toISOString()}}));
+
+        /* Test numbers: clear spin_done so they can spin again next visit */
+        if (isTestNumber(userPhone)) {
+            setTimeout(function() {
+                localStorage.removeItem('seasalt_spin_done');
+                localStorage.removeItem('seasalt_spin_dismiss_count');
+                console.log('[SpinWheel] Test number — spin_done cleared for next visit');
+            }, 2000);
+        }
     }
 
     /* ═══════════ SHOW / HIDE ═══════════ */
     function shouldShow(){
         /* v17: Check if admin disabled the wheel */
         if(!ADMIN_CONFIG.is_active) return false;
+
+        /* Test numbers — clear spin blocks so wheel always shows */
+        var currentPhone = localStorage.getItem('seasalt_phone') || '';
+        if (isTestNumber(currentPhone)) {
+            localStorage.removeItem('seasalt_spin_done');
+            localStorage.removeItem('seasalt_spin_dismiss_count');
+            sessionStorage.removeItem('seasalt_spin_dismissed');
+            console.log('[SpinWheel] Test number — spin blocks cleared');
+            return true;
+        }
+
         if(localStorage.getItem('seasalt_spin_done')==='true') return false;
         if(localStorage.getItem(SPIN_WALLET_KEY)) return false;
         if(localStorage.getItem('seasalt_phone')) return false;
