@@ -221,16 +221,15 @@ const UI = (function() {
     }
     
     function formatTime(ms) {
-        if (ms <= 0) return '00:00';
+        if (ms <= 0) return '00:00:00';
+        // Cap at 48 hours max
+        var maxMs = 48 * 3600000;
+        if (ms > maxMs) ms = maxMs;
         var totalSec = Math.floor(ms / 1000);
-        var d = Math.floor(totalSec / 86400);
-        var h = Math.floor((totalSec % 86400) / 3600);
+        var h = Math.floor(totalSec / 3600);
         var m = Math.floor((totalSec % 3600) / 60);
         var s = totalSec % 60;
-        // Smart format: "1d 23h left" for >24h, "HH:MM:SS" for <24h
-        if (d > 0) return d + 'd ' + h + 'h left';
-        if (h > 0) return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
-        return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+        return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
     }
     
     function updateWalletDisplay(wallet) {
