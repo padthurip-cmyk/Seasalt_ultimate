@@ -168,6 +168,17 @@ var Analytics = (function() {
     // ============================================
 
     function sendEvent(eventType, page, action, label, value) {
+        // Always check Firebase for latest phone (store never saves to localStorage)
+        try {
+            if (typeof firebase !== 'undefined' && firebase.auth && firebase.auth().currentUser) {
+                var fbPhone = firebase.auth().currentUser.phoneNumber;
+                if (fbPhone && userId !== fbPhone) {
+                    console.log('📊 Firebase phone detected: ' + fbPhone);
+                    userId = fbPhone;
+                }
+            }
+        } catch(e) {}
+
         var payload = {
             event_type: eventType || 'page_view',
             session_id: sessionId,
