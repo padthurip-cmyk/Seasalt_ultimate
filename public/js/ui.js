@@ -222,9 +222,6 @@ const UI = (function() {
     
     function formatTime(ms) {
         if (ms <= 0) return '00:00:00';
-        // Cap at 48 hours max
-        var maxMs = 48 * 3600000;
-        if (ms > maxMs) ms = maxMs;
         var totalSec = Math.floor(ms / 1000);
         var h = Math.floor(totalSec / 3600);
         var m = Math.floor((totalSec % 3600) / 60);
