@@ -1,9 +1,11 @@
 /**
- * SeaSalt Pickles - Cart & Checkout Module v10
+ * SeaSalt Pickles - Cart & Checkout Module v11
  * =============================================
- * Fixed: Orders save in correct format for orders page
- * Fixed: Wallet deduction persists (pauses Supabase sync)
- * Fixed: Orders accessible via both Orders and OrdersFix globals
+ * v11 Changes:
+ *  - Beautiful orders page built-in (no orders-fix.js dependency)
+ *  - Fixed ₹0 total on orders (reads all field name variants)
+ *  - WhatsApp notification on order completion
+ *  - Wallet timer smart formatting (days/hours/minutes)
  */
 
 const Cart = (function() {
@@ -18,6 +20,7 @@ const Cart = (function() {
     const SPIN_WALLET_KEY = 'seasalt_spin_wallet';
     const ORDERS_KEY = 'seasalt_orders';
     const GOOGLE_PLACES_KEY = 'AIzaSyA33gWiI28GPZw2v-sOYYcyEyMTz9Lm5s8';
+    const STORE_WHATSAPP = '919963971447';
     let googlePlacesLoaded = false;
 
     // ── Load Google Maps Places Library ──
@@ -34,7 +37,6 @@ const Cart = (function() {
         document.head.appendChild(script);
     }
 
-    // Load on module init
     try { loadGooglePlaces(); } catch(e) {}
 
     // ── Google Places Autocomplete for Address ──
@@ -44,8 +46,6 @@ const Cart = (function() {
         var pincodeField = modal.querySelector('#checkout-pincode');
         var cityField = modal.querySelector('#checkout-city');
         var stateField = modal.querySelector('#checkout-state');
-        var areaWrap = modal.querySelector('#area-dropdown-wrap');
-        var areaSelect = modal.querySelector('#checkout-area');
 
         if (!addressField || !suggestionsDiv) return;
 
@@ -73,141 +73,95 @@ const Cart = (function() {
         function showSuggestions(predictions) {
             suggestionsDiv.innerHTML = '';
             if (!predictions || predictions.length === 0) { hideSuggestions(); return; }
-
             predictions.forEach(function(prediction) {
                 var item = document.createElement('div');
                 item.className = 'px-4 py-3 cursor-pointer hover:bg-pickle-50 border-b border-gray-100 last:border-0 text-sm text-gray-700 flex items-start gap-2';
                 item.innerHTML = '<span class="text-pickle-500 mt-0.5 flex-shrink-0">\uD83D\uDCCD</span>' +
                     '<div><div class="font-medium text-gray-800">' + (prediction.structured_formatting ? prediction.structured_formatting.main_text : prediction.description.split(',')[0]) + '</div>' +
                     '<div class="text-xs text-gray-500 mt-0.5">' + prediction.description + '</div></div>';
-
-                item.addEventListener('click', function() {
-                    selectPlace(prediction);
-                });
+                item.addEventListener('click', function() { selectPlace(prediction); });
                 suggestionsDiv.appendChild(item);
             });
-
-            // Add Google attribution
             var attr = document.createElement('div');
             attr.className = 'px-4 py-2 text-right';
             attr.innerHTML = '<img src="https://developers.google.com/static/maps/documentation/images/powered_by_google_on_white.png" alt="Powered by Google" style="height:14px;display:inline;">';
             suggestionsDiv.appendChild(attr);
-
             suggestionsDiv.style.display = 'block';
         }
 
         function selectPlace(prediction) {
             hideSuggestions();
-
-            if (!ensureServices()) {
-                addressField.value = prediction.description;
-                return;
-            }
-
+            if (!ensureServices()) { addressField.value = prediction.description; return; }
             placesService.getDetails({
                 placeId: prediction.place_id,
                 fields: ['address_components', 'formatted_address'],
                 sessionToken: sessionToken
             }, function(place, status) {
-                // Reset session token after Place Details call (end of session)
                 sessionToken = new google.maps.places.AutocompleteSessionToken();
-
                 if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
-                    addressField.value = prediction.description;
-                    return;
+                    addressField.value = prediction.description; return;
                 }
-
                 var components = place.address_components || [];
                 var streetNumber = '', route = '', sublocality = '', locality = '', adminArea = '', postalCode = '', premise = '';
-
                 components.forEach(function(c) {
-                    var types = c.types;
-                    if (types.indexOf('street_number') !== -1) streetNumber = c.long_name;
-                    if (types.indexOf('route') !== -1) route = c.long_name;
-                    if (types.indexOf('premise') !== -1) premise = c.long_name;
-                    if (types.indexOf('sublocality_level_1') !== -1 || types.indexOf('sublocality') !== -1) sublocality = c.long_name;
-                    if (types.indexOf('locality') !== -1) locality = c.long_name;
-                    if (types.indexOf('administrative_area_level_1') !== -1) adminArea = c.long_name;
-                    if (types.indexOf('postal_code') !== -1) postalCode = c.long_name;
+                    var t = c.types;
+                    if (t.indexOf('street_number') !== -1) streetNumber = c.long_name;
+                    if (t.indexOf('route') !== -1) route = c.long_name;
+                    if (t.indexOf('premise') !== -1) premise = c.long_name;
+                    if (t.indexOf('sublocality_level_1') !== -1 || t.indexOf('sublocality') !== -1) sublocality = c.long_name;
+                    if (t.indexOf('locality') !== -1) locality = c.long_name;
+                    if (t.indexOf('administrative_area_level_1') !== -1) adminArea = c.long_name;
+                    if (t.indexOf('postal_code') !== -1) postalCode = c.long_name;
                 });
-
-                // Build clean address for the address field
                 var addressParts = [];
                 if (premise) addressParts.push(premise);
                 if (streetNumber) addressParts.push(streetNumber);
                 if (route) addressParts.push(route);
                 if (sublocality) addressParts.push(sublocality);
                 addressField.value = addressParts.join(', ') || prediction.description.split(',').slice(0, 2).join(',');
-
-                // Auto-fill city, state, pincode
                 if (locality && cityField) cityField.value = locality;
                 if (adminArea && stateField) stateField.value = adminArea;
-                if (postalCode && pincodeField && !pincodeField.value) pincodeField.value = postalCode;
-
-                // If pincode was filled, trigger its lookup for area dropdown
                 if (postalCode && pincodeField) {
                     pincodeField.value = postalCode;
                     pincodeField.dispatchEvent(new Event('input', { bubbles: true }));
                 }
-
-                console.log('[Cart] Address auto-filled from Google Places:', {
-                    address: addressField.value, city: locality, state: adminArea, pincode: postalCode
-                });
             });
         }
 
-        // Listen for typing in address field
         addressField.addEventListener('input', function() {
             var query = addressField.value.trim();
             clearTimeout(debounceTimer);
-
             if (query.length < 3) { hideSuggestions(); return; }
-
             debounceTimer = setTimeout(function() {
-                if (!ensureServices()) {
-                    console.warn('[Cart] Google Places not loaded yet');
-                    return;
-                }
-
+                if (!ensureServices()) return;
                 autocompleteService.getPlacePredictions({
-                    input: query,
-                    sessionToken: sessionToken,
-                    componentRestrictions: { country: 'in' },
-                    types: ['geocode', 'establishment']
+                    input: query, sessionToken: sessionToken,
+                    componentRestrictions: { country: 'in' }, types: ['geocode', 'establishment']
                 }, function(predictions, status) {
-                    if (status === google.maps.places.PlacesServiceStatus.OK) {
-                        showSuggestions(predictions);
-                    } else {
-                        hideSuggestions();
-                    }
+                    if (status === google.maps.places.PlacesServiceStatus.OK) showSuggestions(predictions);
+                    else hideSuggestions();
                 });
             }, 300);
         });
-
-        // Hide suggestions on blur (with small delay for click)
-        addressField.addEventListener('blur', function() {
-            setTimeout(hideSuggestions, 250);
-        });
-
-        // Re-show on focus if there's text
+        addressField.addEventListener('blur', function() { setTimeout(hideSuggestions, 250); });
         addressField.addEventListener('focus', function() {
-            if (addressField.value.trim().length >= 3 && suggestionsDiv.children.length > 0) {
-                suggestionsDiv.style.display = 'block';
-            }
+            if (addressField.value.trim().length >= 3 && suggestionsDiv.children.length > 0) suggestionsDiv.style.display = 'block';
         });
-
-        console.log('[Cart] Google Places Autocomplete initialized');
     }
 
     const DEFAULT_FREE_ABOVE = 500;
     const DEFAULT_FLAT_FEE = 50;
 
     function init() {
-        console.log('[Cart] v10 Initializing...');
+        console.log('[Cart] v11 Initializing...');
         loadDeliveryCharges();
         bindEvents();
         subscribeToChanges();
-        console.log('[Cart] v10 Initialized');
+        // Patch wallet timer after a small delay (wait for UI to be defined)
+        setTimeout(patchWalletTimer, 500);
+        // Patch orders nav button
+        setTimeout(patchOrdersNavButton, 300);
+        console.log('[Cart] v11 Initialized');
     }
 
     async function loadDeliveryCharges() {
@@ -219,9 +173,7 @@ const Cart = (function() {
                 deliveryChargesCache = await response.json();
                 console.log('[Cart] Delivery charges loaded:', deliveryChargesCache.length);
             }
-        } catch (err) {
-            console.warn('[Cart] Using default delivery charges');
-        }
+        } catch (err) { console.warn('[Cart] Using default delivery charges'); }
     }
 
     function getSpinWallet() {
@@ -231,54 +183,24 @@ const Cart = (function() {
             const data = JSON.parse(raw);
             if (!data || !data.amount || data.amount <= 0) return null;
             const expiresAt = new Date(data.expiresAt);
-            if (new Date() >= expiresAt) {
-                localStorage.removeItem(SPIN_WALLET_KEY);
-                return null;
-            }
+            if (new Date() >= expiresAt) { localStorage.removeItem(SPIN_WALLET_KEY); return null; }
             return { amount: data.amount, expiresAt: expiresAt };
-        } catch (e) {
-            return null;
-        }
+        } catch (e) { return null; }
     }
 
     function getDeliveryCharge(subtotal, country, region) {
         let freeAbove = DEFAULT_FREE_ABOVE;
         let flatFee = DEFAULT_FLAT_FEE;
-
         let userData = null;
-        try {
-            const raw = localStorage.getItem('seasalt_user');
-            if (raw) userData = JSON.parse(raw);
-        } catch (e) {}
-
+        try { const raw = localStorage.getItem('seasalt_user'); if (raw) userData = JSON.parse(raw); } catch (e) {}
         const userCountry = country || (userData && userData.country) || 'India';
-
         if (deliveryChargesCache && deliveryChargesCache.length > 0) {
-            // Try region-specific match first
             let match = null;
-            if (region) {
-                match = deliveryChargesCache.find(function(dc) {
-                    return dc.country === userCountry && dc.region === region;
-                });
-            }
-            // Fall back to "All" region
-            if (!match) {
-                match = deliveryChargesCache.find(function(dc) {
-                    return dc.country === userCountry && (dc.region === 'All' || !dc.region);
-                });
-            }
-            // Fall back to any country match
-            if (!match) {
-                match = deliveryChargesCache.find(function(dc) {
-                    return dc.country === userCountry;
-                });
-            }
-            if (match) {
-                freeAbove = match.min_order_free || DEFAULT_FREE_ABOVE;
-                flatFee = match.flat_charge || DEFAULT_FLAT_FEE;
-            }
+            if (region) match = deliveryChargesCache.find(function(dc) { return dc.country === userCountry && dc.region === region; });
+            if (!match) match = deliveryChargesCache.find(function(dc) { return dc.country === userCountry && (dc.region === 'All' || !dc.region); });
+            if (!match) match = deliveryChargesCache.find(function(dc) { return dc.country === userCountry; });
+            if (match) { freeAbove = match.min_order_free || DEFAULT_FREE_ABOVE; flatFee = match.flat_charge || DEFAULT_FLAT_FEE; }
         }
-
         return subtotal >= freeAbove ? 0 : flatFee;
     }
 
@@ -293,23 +215,97 @@ const Cart = (function() {
     function subscribeToChanges() {
         if (typeof Store !== 'undefined' && Store.subscribe) {
             Store.subscribe('cart', function() {
-                if (typeof UI !== 'undefined') {
-                    UI.renderCartItems();
-                    UI.updateCartUI();
-                }
+                if (typeof UI !== 'undefined') { UI.renderCartItems(); UI.updateCartUI(); }
             });
         }
     }
 
-    // ============ CHECKOUT FLOW ============
+    // ╔══════════════════════════════════════════════╗
+    // ║  WALLET TIMER FIX                             ║
+    // ╚══════════════════════════════════════════════╝
+
+    function patchWalletTimer() {
+        if (typeof UI === 'undefined') return;
+
+        UI.startWalletTimer = function() {
+            if (window._walletTimerInterval) { clearInterval(window._walletTimerInterval); window._walletTimerInterval = null; }
+
+            var expiresAt = null;
+            var sources = ['seasalt_spin_wallet', 'seasalt_admin_credit', 'seasalt_spin_reward'];
+            for (var i = 0; i < sources.length; i++) {
+                try {
+                    var raw = localStorage.getItem(sources[i]);
+                    if (raw) {
+                        var data = JSON.parse(raw);
+                        if (data && data.expiresAt) {
+                            var exp = new Date(data.expiresAt);
+                            if (exp > new Date() && (!expiresAt || exp < expiresAt)) expiresAt = exp;
+                        }
+                    }
+                } catch(e) {}
+            }
+            if (!expiresAt) return;
+
+            function tick() {
+                var diff = expiresAt - new Date();
+                if (diff <= 0) {
+                    var btn = document.getElementById('wallet-btn');
+                    var t = btn ? btn.querySelector('.wallet-timer') : null;
+                    if (t) t.remove();
+                    clearInterval(window._walletTimerInterval);
+                    return;
+                }
+                var sec = Math.floor(diff / 1000);
+                var d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+                var text = '';
+                if (d > 0) text = d + 'd ' + h + 'h left';
+                else if (h > 0) text = p(h) + ':' + p(m) + ':' + p(s);
+                else text = p(m) + ':' + p(s);
+
+                var btn = document.getElementById('wallet-btn');
+                if (!btn) return;
+                var el = btn.querySelector('.wallet-timer');
+                if (!el) { el = document.createElement('span'); el.className = 'wallet-timer'; el.style.cssText = 'font-size:0.65rem;color:#b45309;margin-left:4px;white-space:nowrap;'; btn.appendChild(el); }
+                el.textContent = '\u23F1 ' + text;
+            }
+            tick();
+            window._walletTimerInterval = setInterval(tick, 1000);
+        };
+        UI.startWalletTimer();
+        console.log('[Cart] Wallet timer patched');
+    }
+    function p(n) { return n < 10 ? '0' + n : '' + n; }
+
+    // ╔══════════════════════════════════════════════╗
+    // ║  ORDERS NAV BUTTON DIRECT PATCH               ║
+    // ╚══════════════════════════════════════════════╝
+
+    function patchOrdersNavButton() {
+        var navBtns = document.querySelectorAll('#bottom-nav button[data-page]');
+        navBtns.forEach(function(btn) {
+            if (btn.getAttribute('data-page') === 'orders') {
+                var newBtn = btn.cloneNode(true);
+                btn.parentNode.replaceChild(newBtn, btn);
+                newBtn.addEventListener('click', function(e) {
+                    e.preventDefault(); e.stopPropagation();
+                    document.querySelectorAll('#bottom-nav button[data-page]').forEach(function(b) { b.classList.remove('active'); });
+                    newBtn.classList.add('active');
+                    showBeautifulOrdersPage();
+                });
+                console.log('[Cart] Orders nav button patched directly');
+            }
+        });
+    }
+
+    // ╔══════════════════════════════════════════════╗
+    // ║  CHECKOUT FLOW                                ║
+    // ╚══════════════════════════════════════════════╝
 
     function handleCheckout() {
         var cart = typeof Store !== 'undefined' ? Store.getCart() : { items: [] };
         if (!cart.items || !cart.items.length) {
-            if (typeof UI !== 'undefined') UI.showToast('Your cart is empty!', 'error');
-            return;
+            if (typeof UI !== 'undefined') UI.showToast('Your cart is empty!', 'error'); return;
         }
-        
         var sidebar = document.getElementById('cart-sidebar');
         if (sidebar) sidebar.classList.add('hidden');
         document.body.style.overflow = '';
@@ -320,7 +316,6 @@ const Cart = (function() {
         var cart = typeof Store !== 'undefined' ? Store.getCart() : { items: [], subtotal: 0 };
         var user = typeof Store !== 'undefined' ? Store.getState().user || {} : {};
         
-        // Also check localStorage for user data (from spinwheel/previous checkout)
         if (!user.name || !user.phone) {
             try {
                 var savedUser = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
@@ -331,7 +326,6 @@ const Cart = (function() {
             } catch(e) {}
             if (!user.phone) user.phone = localStorage.getItem('seasalt_phone') || '';
         }
-        // Load address from localStorage if not in user object
         if (!user.address) {
             try {
                 var savedUser = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
@@ -341,7 +335,6 @@ const Cart = (function() {
             if (!user.address) user.address = localStorage.getItem('seasalt_address') || '';
             if (!user.pincode) user.pincode = localStorage.getItem('seasalt_pincode') || '';
         }
-        // Clean phone display (remove +91 for input field)
         var displayPhone = (user.phone || '').replace(/^\+91/, '');
 
         var deliveryCharge = getDeliveryCharge(cart.subtotal);
@@ -371,81 +364,37 @@ const Cart = (function() {
         modal.id = 'checkout-modal';
         modal.className = 'fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center';
         modal.innerHTML = '<div class="bg-white w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl sm:rounded-2xl">' +
-            // Sticky header
             '<div class="sticky top-0 bg-white p-4 border-b flex items-center justify-between z-10 rounded-t-3xl">' +
             '<h3 class="text-xl font-bold text-gray-800">Checkout</h3>' +
             '<button id="close-checkout" class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200">\u2715</button></div>' +
-            
             '<div class="p-4 space-y-5">' +
-            
-            // 1. DELIVERY ADDRESS
-            '<div>' +
-            '<h4 class="font-semibold text-gray-800 mb-3">\uD83D\uDCCD Delivery Details</h4>' +
+            '<div><h4 class="font-semibold text-gray-800 mb-3">\uD83D\uDCCD Delivery Details</h4>' +
             '<div class="space-y-3">' +
             '<input type="text" id="checkout-name" placeholder="Full Name *" value="' + (user.name || '') + '" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800">' +
             '<input type="tel" id="checkout-phone" placeholder="Phone Number *" value="' + displayPhone + '" maxlength="10" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800">' +
-            
-            // Pincode with auto-lookup indicator
-            '<div class="relative">' +
-            '<input type="text" id="checkout-pincode" placeholder="Pincode *" value="' + (user.pincode || '') + '" maxlength="6" inputmode="numeric" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800 pr-10">' +
-            '<span id="pincode-status" class="absolute right-3 top-1/2 -translate-y-1/2 text-sm"></span>' +
-            '</div>' +
-            
-            // City & State (auto-filled from pincode)
-            '<div class="grid grid-cols-2 gap-3">' +
-            '<input type="text" id="checkout-city" placeholder="City *" value="' + (user.city || '') + '" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800">' +
-            '<input type="text" id="checkout-state" placeholder="State *" value="' + (user.state || '') + '" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800">' +
-            '</div>' +
-            
-            // Area/Post Office dropdown (populated from pincode)
-            '<div id="area-dropdown-wrap" style="display:none;">' +
-            '<select id="checkout-area" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800 bg-white">' +
-            '<option value="">Select Area / Post Office</option>' +
-            '</select></div>' +
-            
-            // Full address with Google Places Autocomplete
-            '<div class="relative">' +
-            '<textarea id="checkout-address" placeholder="Start typing your address... (House No, Street, Landmark) *" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 resize-none text-gray-800" autocomplete="off">' + (user.address || '') + '</textarea>' +
-            '<div id="places-suggestions" class="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto" style="display:none;"></div>' +
-            '</div>' +
-            
+            '<div class="relative"><input type="text" id="checkout-pincode" placeholder="Pincode *" value="' + (user.pincode || '') + '" maxlength="6" inputmode="numeric" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800 pr-10"><span id="pincode-status" class="absolute right-3 top-1/2 -translate-y-1/2 text-sm"></span></div>' +
+            '<div class="grid grid-cols-2 gap-3"><input type="text" id="checkout-city" placeholder="City *" value="' + (user.city || '') + '" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800"><input type="text" id="checkout-state" placeholder="State *" value="' + (user.state || '') + '" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800"></div>' +
+            '<div id="area-dropdown-wrap" style="display:none;"><select id="checkout-area" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 text-gray-800 bg-white"><option value="">Select Area / Post Office</option></select></div>' +
+            '<div class="relative"><textarea id="checkout-address" placeholder="Start typing your address... (House No, Street, Landmark) *" rows="2" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:border-pickle-500 focus:ring-1 focus:ring-pickle-500/20 resize-none text-gray-800" autocomplete="off">' + (user.address || '') + '</textarea>' +
+            '<div id="places-suggestions" class="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto" style="display:none;"></div></div>' +
             '</div></div>' +
-            
-            // 2. WALLET (if available)
             walletHtml +
-            
-            // 3. ORDER SUMMARY (collapsible - starts collapsed on mobile)
-            '<div>' +
-            '<button id="toggle-summary" class="w-full flex items-center justify-between py-2" type="button">' +
-            '<h4 class="font-semibold text-gray-800">\uD83D\uDCE6 Order Summary (' + itemCount + ' items)</h4>' +
-            '<svg id="summary-arrow" class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>' +
-            '</button>' +
-            '<div id="order-summary-details" style="display:none;">' +
-            '<div class="bg-gray-50 rounded-xl p-3 mt-2">' + itemsHtml + '</div></div>' +
-            
-            // Price breakdown (always visible)
+            '<div><button id="toggle-summary" class="w-full flex items-center justify-between py-2" type="button"><h4 class="font-semibold text-gray-800">\uD83D\uDCE6 Order Summary (' + itemCount + ' items)</h4><svg id="summary-arrow" class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg></button>' +
+            '<div id="order-summary-details" style="display:none;"><div class="bg-gray-50 rounded-xl p-3 mt-2">' + itemsHtml + '</div></div>' +
             '<div class="bg-gray-50 rounded-xl p-3 mt-3 space-y-2">' +
             '<div class="flex justify-between text-sm"><span class="text-gray-600">Subtotal (' + itemCount + ' items)</span><span class="font-medium">\u20b9' + cart.subtotal + '</span></div>' +
             '<div class="flex justify-between text-sm"><span class="text-gray-600">Delivery</span><span class="font-medium ' + (deliveryCharge === 0 ? 'text-green-600' : '') + '">' + (deliveryCharge === 0 ? 'FREE' : '\u20b9' + deliveryCharge) + '</span></div>' +
             (walletDiscount > 0 ? '<div class="flex justify-between text-sm text-green-600"><span>Wallet Credit</span><span>-\u20b9' + walletDiscount + '</span></div>' : '') +
-            '<div class="flex justify-between text-base font-bold mt-2 pt-2 border-t border-gray-200"><span>Total</span><span class="text-pickle-600">\u20b9' + finalTotal + '</span></div>' +
-            '</div></div>' +
-            
+            '<div class="flex justify-between text-base font-bold mt-2 pt-2 border-t border-gray-200"><span>Total</span><span class="text-pickle-600">\u20b9' + finalTotal + '</span></div></div></div>' +
             '</div>' +
-            
-            // Sticky PAY button at bottom
-            '<div class="sticky bottom-0 bg-white p-4 border-t shadow-[0_-4px_12px_rgba(0,0,0,0.05)]">' +
-            '<button id="pay-now-btn" class="w-full py-4 bg-gradient-to-r from-pickle-500 to-pickle-600 text-white font-bold rounded-xl text-lg shadow-lg hover:shadow-xl transition-all active:scale-[0.98]">' +
-            '\uD83D\uDD12 Pay \u20b9' + finalTotal + '</button></div></div>';
+            '<div class="sticky bottom-0 bg-white p-4 border-t shadow-[0_-4px_12px_rgba(0,0,0,0.05)]"><button id="pay-now-btn" class="w-full py-4 bg-gradient-to-r from-pickle-500 to-pickle-600 text-white font-bold rounded-xl text-lg shadow-lg hover:shadow-xl transition-all active:scale-[0.98]">\uD83D\uDD12 Pay \u20b9' + finalTotal + '</button></div></div>';
 
         document.body.appendChild(modal);
         document.body.style.overflow = 'hidden';
 
-        // Close handlers
         modal.querySelector('#close-checkout').onclick = function() { modal.remove(); document.body.style.overflow = ''; };
         modal.onclick = function(e) { if (e.target === modal) { modal.remove(); document.body.style.overflow = ''; } };
         
-        // Toggle order summary
         var toggleBtn = modal.querySelector('#toggle-summary');
         var summaryDetails = modal.querySelector('#order-summary-details');
         var summaryArrow = modal.querySelector('#summary-arrow');
@@ -457,106 +406,65 @@ const Cart = (function() {
             });
         }
         
-        // Wallet checkbox
         var cwCheckbox = modal.querySelector('#checkout-use-wallet');
         if (cwCheckbox) {
             cwCheckbox.addEventListener('change', function(e) {
                 var mainCb = document.getElementById('use-wallet');
                 if (mainCb) mainCb.checked = e.target.checked;
-                modal.remove();
-                showCheckoutForm();
+                modal.remove(); showCheckoutForm();
             });
         }
 
-        // Pincode input filter
         var pincodeInput = modal.querySelector('#checkout-pincode');
         if (pincodeInput) pincodeInput.oninput = function(e) { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); };
-        
-        // Phone input filter
         var phoneInput = modal.querySelector('#checkout-phone');
         if (phoneInput) phoneInput.oninput = function(e) { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10); };
 
-        // ── GOOGLE PLACES AUTOCOMPLETE ──
         initPlacesAutocomplete(modal);
 
         modal._orderData = { subtotal: cart.subtotal, deliveryCharge: deliveryCharge, walletDiscount: walletDiscount, total: finalTotal, useWallet: walletChecked && walletDiscount > 0 };
         modal.querySelector('#pay-now-btn').onclick = function() { processPayment(modal); };
         
-        // ── AUTO-POPULATE from Supabase (last order's address) ──
-        // Only fetch if address or pincode is empty
+        // Auto-populate from Supabase (last order's address)
         var addrField = modal.querySelector('#checkout-address');
         var pinField = modal.querySelector('#checkout-pincode');
         var nameField = modal.querySelector('#checkout-name');
         if (addrField && !addrField.value.trim()) {
             var userPhone = displayPhone || (user.phone || '').replace(/^\+91/, '');
             if (userPhone && userPhone.length >= 10) {
-                try {
-                    // Fetch last order for this phone from Supabase
+                (async function() {
                     var phoneVariants = [userPhone, '+91' + userPhone, '91' + userPhone];
-                    var supaUrl = 'https://yosjbsncvghpscsrvxds.supabase.co';
-                    var supaKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlvc2pic25jdmdocHNjc3J2eGRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAyMjc3NTgsImV4cCI6MjA4NTgwMzc1OH0.PNEbeofoyT7KdkzepRfqg-zqyBiGAat5ElCMiyQ4UAs';
-                    
-                    // Try each phone variant
-                    (async function() {
-                        for (var v = 0; v < phoneVariants.length; v++) {
-                            try {
-                                var res = await fetch(supaUrl + '/rest/v1/orders?customer_phone=eq.' + encodeURIComponent(phoneVariants[v]) + '&order=created_at.desc&limit=1', {
-                                    headers: { 'apikey': supaKey, 'Authorization': 'Bearer ' + supaKey }
-                                });
-                                var orders = await res.json();
-                                if (orders && orders.length > 0) {
-                                    var lastOrder = orders[0];
-                                    var addr = lastOrder.customer_address || lastOrder.shipping_address || '';
-                                    var pin = lastOrder.customer_pincode || lastOrder.pincode || '';
-                                    var cname = lastOrder.customer_name || '';
-                                    
-                                    // Also try parsing from a JSON address field
-                                    if (!addr && lastOrder.address) {
-                                        try {
-                                            var addrObj = typeof lastOrder.address === 'string' ? JSON.parse(lastOrder.address) : lastOrder.address;
-                                            addr = addrObj.address || addrObj.street || addrObj.full_address || '';
-                                            pin = pin || addrObj.pincode || addrObj.zip || '';
-                                        } catch(pe) { addr = lastOrder.address; }
-                                    }
-                                    
-                                    // Fill empty fields
-                                    if (addr && addrField && !addrField.value.trim()) {
-                                        addrField.value = addr;
-                                        console.log('[Cart] Auto-filled address from last order');
-                                    }
-                                    if (pin && pinField && !pinField.value.trim()) {
-                                        pinField.value = pin;
-                                        console.log('[Cart] Auto-filled pincode from last order:', pin);
-                                    }
-                                    if (cname && nameField && !nameField.value.trim()) {
-                                        nameField.value = cname;
-                                    }
-                                    
-                                    // Save to localStorage for future use
-                                    if (addr) localStorage.setItem('seasalt_address', addr);
-                                    if (pin) localStorage.setItem('seasalt_pincode', pin);
-                                    try {
-                                        var su = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
-                                        if (addr) su.address = addr;
-                                        if (pin) su.pincode = pin;
-                                        localStorage.setItem('seasalt_user', JSON.stringify(su));
-                                    } catch(se) {}
-                                    
-                                    break; // Found an order, stop searching
-                                }
-                            } catch(fe) { console.warn('[Cart] Supabase address fetch error:', fe); }
-                        }
-                    })();
-                } catch(e) { console.warn('[Cart] Address auto-fill error:', e); }
+                    for (var v = 0; v < phoneVariants.length; v++) {
+                        try {
+                            var res = await fetch(SUPABASE_URL + '/rest/v1/orders?customer_phone=eq.' + encodeURIComponent(phoneVariants[v]) + '&order=created_at.desc&limit=1', {
+                                headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+                            });
+                            var orders = await res.json();
+                            if (orders && orders.length > 0) {
+                                var lo = orders[0];
+                                var addr = lo.customer_address || lo.shipping_address || '';
+                                var pin = lo.customer_pincode || lo.pincode || '';
+                                var cname = lo.customer_name || '';
+                                if (!addr && lo.address) { try { var ao = typeof lo.address === 'string' ? JSON.parse(lo.address) : lo.address; addr = ao.address || ao.street || ''; pin = pin || ao.pincode || ''; } catch(pe) { addr = lo.address; } }
+                                if (addr && addrField && !addrField.value.trim()) addrField.value = addr;
+                                if (pin && pinField && !pinField.value.trim()) pinField.value = pin;
+                                if (cname && nameField && !nameField.value.trim()) nameField.value = cname;
+                                if (addr) localStorage.setItem('seasalt_address', addr);
+                                if (pin) localStorage.setItem('seasalt_pincode', pin);
+                                try { var su = JSON.parse(localStorage.getItem('seasalt_user') || '{}'); if (addr) su.address = addr; if (pin) su.pincode = pin; localStorage.setItem('seasalt_user', JSON.stringify(su)); } catch(se) {}
+                                break;
+                            }
+                        } catch(fe) {}
+                    }
+                })();
             }
         }
         
-        // Auto-focus first empty field
         setTimeout(function() {
-            var nameInput = modal.querySelector('#checkout-name');
+            var nameIn = modal.querySelector('#checkout-name');
             var phoneIn = modal.querySelector('#checkout-phone');
             var addrIn = modal.querySelector('#checkout-address');
-            if (nameInput && !nameInput.value) nameInput.focus();
+            if (nameIn && !nameIn.value) nameIn.focus();
             else if (phoneIn && !phoneIn.value) phoneIn.focus();
             else if (addrIn && !addrIn.value) addrIn.focus();
         }, 300);
@@ -564,7 +472,6 @@ const Cart = (function() {
 
     function processPayment(modal) {
         if (checkoutInProgress) return;
-
         var payBtn = modal.querySelector('#pay-now-btn');
         var name = modal.querySelector('#checkout-name').value.trim();
         var phone = modal.querySelector('#checkout-phone').value.trim();
@@ -581,26 +488,15 @@ const Cart = (function() {
         payBtn.disabled = true;
         payBtn.innerHTML = '<span class="animate-pulse">Processing...</span>';
 
-        // Save user info from checkout form to localStorage (for profile page + auto-fill)
         try {
             var existingUser = JSON.parse(localStorage.getItem('seasalt_user') || '{}');
-            existingUser.name = name;
-            existingUser.address = address;
-            existingUser.pincode = pincode;
-            existingUser.city = city;
-            existingUser.state = state;
-            if (phone) {
-                var formattedPhone = phone.startsWith('+') ? phone : '+91' + phone.replace(/^0+/, '');
-                existingUser.phone = formattedPhone;
-            }
+            existingUser.name = name; existingUser.address = address; existingUser.pincode = pincode;
+            existingUser.city = city; existingUser.state = state;
+            if (phone) { existingUser.phone = phone.startsWith('+') ? phone : '+91' + phone.replace(/^0+/, ''); }
             localStorage.setItem('seasalt_user', JSON.stringify(existingUser));
-            // Also save address separately for quick access
             localStorage.setItem('seasalt_address', address);
             localStorage.setItem('seasalt_pincode', pincode);
-            if (phone && !localStorage.getItem('seasalt_phone')) {
-                localStorage.setItem('seasalt_phone', phone.startsWith('+') ? phone : '+91' + phone.replace(/^0+/, ''));
-            }
-            console.log('[Cart] User info saved from checkout:', name, phone, address, pincode);
+            if (phone && !localStorage.getItem('seasalt_phone')) localStorage.setItem('seasalt_phone', phone.startsWith('+') ? phone : '+91' + phone.replace(/^0+/, ''));
         } catch(e) {}
 
         var cart = typeof Store !== 'undefined' ? Store.getCart() : { items: [] };
@@ -608,23 +504,17 @@ const Cart = (function() {
         var orderId = 'SS' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 4).toUpperCase();
 
         var orderData = { 
-            orderId: orderId, 
-            status: 'pending', 
-            createdAt: new Date().toISOString(), 
-            customer: { name: name, phone: phone, address: address, pincode: pincode, city: city, state: state }, 
-            items: cart.items,
-            subtotal: orderCalc.subtotal,
-            deliveryCharge: orderCalc.deliveryCharge,
-            walletDiscount: orderCalc.walletDiscount,
-            total: orderCalc.total,
-            useWallet: orderCalc.useWallet
+            orderId: orderId, status: 'pending', createdAt: new Date().toISOString(),
+            customer: { name: name, phone: phone, address: address, pincode: pincode, city: city, state: state },
+            items: cart.items, subtotal: orderCalc.subtotal, deliveryCharge: orderCalc.deliveryCharge,
+            walletDiscount: orderCalc.walletDiscount, total: orderCalc.total, useWallet: orderCalc.useWallet
         };
 
         if (orderCalc.total <= 0) { completeOrder(orderData, modal, 'wallet_full', 'Wallet'); return; }
 
         if (typeof Razorpay === 'undefined') { 
-            if (typeof UI !== 'undefined') UI.showToast('Payment loading...', 'error'); 
-            payBtn.disabled = false; payBtn.textContent = 'Pay \u20b9' + orderCalc.total; checkoutInProgress = false; return; 
+            if (typeof UI !== 'undefined') UI.showToast('Payment loading...', 'error');
+            payBtn.disabled = false; payBtn.textContent = 'Pay \u20b9' + orderCalc.total; checkoutInProgress = false; return;
         }
 
         try {
@@ -636,17 +526,19 @@ const Cart = (function() {
                 modal: { ondismiss: function() { payBtn.disabled = false; payBtn.textContent = 'Pay \u20b9' + orderCalc.total; checkoutInProgress = false; } }
             });
             rzp.on('payment.failed', function() { 
-                if (typeof UI !== 'undefined') UI.showToast('Payment failed', 'error'); 
-                payBtn.disabled = false; payBtn.textContent = 'Pay \u20b9' + orderCalc.total; checkoutInProgress = false; 
+                if (typeof UI !== 'undefined') UI.showToast('Payment failed', 'error');
+                payBtn.disabled = false; payBtn.textContent = 'Pay \u20b9' + orderCalc.total; checkoutInProgress = false;
             });
             rzp.open();
         } catch (e) { 
-            if (typeof UI !== 'undefined') UI.showToast('Payment error', 'error'); 
-            payBtn.disabled = false; payBtn.textContent = 'Pay \u20b9' + orderCalc.total; checkoutInProgress = false; 
+            if (typeof UI !== 'undefined') UI.showToast('Payment error', 'error');
+            payBtn.disabled = false; payBtn.textContent = 'Pay \u20b9' + orderCalc.total; checkoutInProgress = false;
         }
     }
 
-    // ============ ORDER COMPLETION ============
+    // ╔══════════════════════════════════════════════╗
+    // ║  ORDER COMPLETION + WHATSAPP                  ║
+    // ╚══════════════════════════════════════════════╝
 
     async function completeOrder(orderData, modal, paymentId, paymentMethod) {
         console.log('[Cart] Completing order:', orderData.orderId, 'payment:', paymentMethod);
@@ -655,31 +547,17 @@ const Cart = (function() {
         orderData.paymentMethod = paymentMethod;
         orderData.status = 'confirmed';
 
-        // === SAVE ORDER to localStorage in BOTH formats ===
-        // Format that orders-fix.js and orders.js can read
         var orderForStorage = {
-            id: orderData.orderId,
-            orderId: orderData.orderId,
+            id: orderData.orderId, orderId: orderData.orderId,
             items: orderData.items || [],
             customer: orderData.customer,
-            // orders-fix.js reads these keys:
-            address: {
-                name: orderData.customer.name,
-                phone: orderData.customer.phone,
-                line1: orderData.customer.address,
-                city: '',
-                pincode: orderData.customer.pincode
-            },
+            address: { name: orderData.customer.name, phone: orderData.customer.phone, line1: orderData.customer.address, city: '', pincode: orderData.customer.pincode },
             subtotal: orderData.subtotal || 0,
-            delivery: orderData.deliveryCharge || 0,
-            deliveryCharge: orderData.deliveryCharge || 0,
-            walletUsed: orderData.walletDiscount || 0,
-            walletDiscount: orderData.walletDiscount || 0,
+            delivery: orderData.deliveryCharge || 0, deliveryCharge: orderData.deliveryCharge || 0,
+            walletUsed: orderData.walletDiscount || 0, walletDiscount: orderData.walletDiscount || 0,
             total: orderData.total || 0,
-            status: 'confirmed',
-            paymentId: paymentId,
-            paymentMethod: paymentMethod,
-            createdAt: orderData.createdAt,
+            status: 'confirmed', paymentId: paymentId, paymentMethod: paymentMethod,
+            createdAt: orderData.createdAt, created_at: orderData.createdAt, date: orderData.createdAt,
             updatedAt: new Date().toISOString(),
             statusHistory: [
                 { status: 'pending', timestamp: orderData.createdAt, message: 'Order placed' },
@@ -691,102 +569,38 @@ const Cart = (function() {
         try { orders = JSON.parse(localStorage.getItem(ORDERS_KEY) || '[]'); } catch (e) { orders = []; }
         orders.unshift(orderForStorage);
         localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
-        console.log('[Cart] Order saved to localStorage:', orderData.orderId, 'Total orders:', orders.length);
+        console.log('[Cart] Order saved:', orderData.orderId, 'total:', orderForStorage.total);
 
-        // === SAVE ORDER to Supabase ===
         await saveOrderToSupabase(orderData);
 
-        // === DEDUCT WALLET ===
+        // === WALLET DEDUCTION ===
         if (orderData.walletDiscount > 0) {
-            console.log('[Cart] Deducting wallet:', orderData.walletDiscount);
-            
-            // CRITICAL: Pause wallet sync so it doesn't overwrite our deduction
             window._walletSyncPaused = true;
             window._walletLastDeductedAt = Date.now();
-            
             var spinWallet = getSpinWallet();
             if (spinWallet) {
                 var remaining = spinWallet.amount - orderData.walletDiscount;
-                if (remaining <= 0) {
-                    // Fully used - remove wallet
-                    localStorage.removeItem(SPIN_WALLET_KEY);
-                    console.log('[Cart] Wallet fully used, removed from localStorage');
-                } else {
-                    // Partially used
-                    localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify({ 
-                        amount: remaining, 
-                        expiresAt: spinWallet.expiresAt.toISOString(),
-                        addedAt: new Date().toISOString()
-                    }));
-                    console.log('[Cart] Wallet reduced to:', remaining);
-                }
-                
-                // Get phone in correct format (must match Supabase users.phone)
-                // Priority: seasalt_phone (set by spinwheel with +91), then seasalt_user, then checkout form
-                var userPhone = localStorage.getItem('seasalt_phone') || localStorage.getItem('seasalt_user_phone') || localStorage.getItem('seasalt_spin_phone');
-                if (!userPhone) {
-                    try { userPhone = JSON.parse(localStorage.getItem('seasalt_user') || '{}').phone; } catch(e) {}
-                }
-                if (!userPhone) {
-                    userPhone = orderData.customer.phone;
-                }
-                // Ensure +91 prefix for India
-                if (userPhone && !userPhone.startsWith('+')) {
-                    userPhone = '+91' + userPhone.replace(/^0+/, '');
-                }
-                
-                console.log('[Cart] Wallet deduct - using phone:', userPhone, 'new balance:', Math.max(0, remaining));
-                
+                if (remaining <= 0) { localStorage.removeItem(SPIN_WALLET_KEY); }
+                else { localStorage.setItem(SPIN_WALLET_KEY, JSON.stringify({ amount: remaining, expiresAt: spinWallet.expiresAt.toISOString(), addedAt: new Date().toISOString() })); }
+                var userPhone = localStorage.getItem('seasalt_phone') || localStorage.getItem('seasalt_user_phone');
+                if (!userPhone) try { userPhone = JSON.parse(localStorage.getItem('seasalt_user') || '{}').phone; } catch(e) {}
+                if (!userPhone) userPhone = orderData.customer.phone;
+                if (userPhone && !userPhone.startsWith('+')) userPhone = '+91' + userPhone.replace(/^0+/, '');
                 if (userPhone) {
                     await updateWalletInSupabase(userPhone, Math.max(0, remaining));
-                    console.log('[Cart] Wallet PATCHED in Supabase to:', Math.max(0, remaining));
-                    
-                    // Verify the update actually worked
-                    try {
-                        var verifyRes = await fetch(SUPABASE_URL + '/rest/v1/users?phone=eq.' + encodeURIComponent(userPhone) + '&select=wallet_balance', {
-                            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-                        });
-                        var verifyData = await verifyRes.json();
-                        console.log('[Cart] Wallet verify after PATCH:', JSON.stringify(verifyData));
-                        if (verifyData && verifyData[0] && verifyData[0].wallet_balance > 0 && remaining <= 0) {
-                            // PATCH didn't work! Try again with different phone formats
-                            console.warn('[Cart] Wallet PATCH may have failed, retrying...');
-                            var altPhone = orderData.customer.phone;
-                            if (altPhone && !altPhone.startsWith('+')) altPhone = '+91' + altPhone.replace(/^0+/, '');
-                            if (altPhone !== userPhone) {
-                                await updateWalletInSupabase(altPhone, Math.max(0, remaining));
-                                console.log('[Cart] Wallet retry with:', altPhone);
-                            }
-                        }
-                    } catch(ve) { console.warn('[Cart] Wallet verify failed:', ve); }
-                }
-                
-                // Log wallet transaction
-                if (userPhone) {
                     try {
                         await fetch(SUPABASE_URL + '/rest/v1/wallet_transactions', {
                             method: 'POST',
                             headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-                            body: JSON.stringify({ 
-                                user_phone: userPhone, 
-                                amount: -orderData.walletDiscount, 
-                                type: 'order_deduction', 
-                                description: 'Used for order ' + orderData.orderId, 
-                                balance_after: Math.max(0, remaining) 
-                            })
+                            body: JSON.stringify({ user_phone: userPhone, amount: -orderData.walletDiscount, type: 'order_deduction', description: 'Used for order ' + orderData.orderId, balance_after: Math.max(0, remaining) })
                         });
-                    } catch (e) { console.warn('[Cart] Wallet transaction log failed:', e); }
+                    } catch (e) {}
                 }
             }
-            
-            // Keep sync paused for 15 seconds (full sync cycle) to let Supabase propagate
-            setTimeout(function() { 
-                window._walletSyncPaused = false; 
-                console.log('[Cart] Wallet sync unpaused');
-            }, 16000);
+            setTimeout(function() { window._walletSyncPaused = false; }, 16000);
         }
 
-        // === CLEAR CART & UPDATE UI ===
+        // === CLEAR CART & UI ===
         if (typeof Store !== 'undefined' && Store.clearCart) Store.clearCart();
         modal.remove();
         document.body.style.overflow = '';
@@ -794,89 +608,94 @@ const Cart = (function() {
         if (typeof UI !== 'undefined') {
             UI.showToast('\uD83C\uDF89 Order ' + orderData.orderId + ' confirmed!', 'success');
             UI.updateCartUI();
-            // Force wallet display update
-            if (UI.updateWalletDisplay) {
-                var w = UI.getSpinWallet ? UI.getSpinWallet() : null;
-                UI.updateWalletDisplay(w);
-            }
+            if (UI.updateWalletDisplay) { var w = UI.getSpinWallet ? UI.getSpinWallet() : null; UI.updateWalletDisplay(w); }
             if (UI.startWalletTimer) UI.startWalletTimer();
         }
         
         showOrderSuccessModal(orderForStorage);
+
+        // === WHATSAPP NOTIFICATION ===
+        setTimeout(function() { sendWhatsAppNotification(orderForStorage); }, 2500);
+
         checkoutInProgress = false;
+    }
+
+    // ── WhatsApp Notification ──
+    function sendWhatsAppNotification(order) {
+        var items = [];
+        try { items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []); } catch(e) {}
+
+        var cust = order.customer || {};
+        var custName = cust.name || order.customer_name || 'Customer';
+        var custPhone = cust.phone || order.customer_phone || '';
+        var custAddress = cust.address || '';
+        var custPincode = cust.pincode || '';
+
+        var msg = '\uD83E\uDDC2 *SeaSalt Pickles \u2014 New Order!*\n\n' +
+            '\uD83D\uDCCB *Order ID:* #' + (order.id || order.orderId) + '\n' +
+            '\uD83D\uDC64 *Customer:* ' + custName + '\n' +
+            '\uD83D\uDCF1 *Phone:* ' + custPhone + '\n' +
+            '\uD83D\uDCCD *Address:* ' + custAddress + (custPincode ? ', ' + custPincode : '') + '\n';
+
+        var date = order.createdAt || order.created_at || new Date().toISOString();
+        try {
+            var d = new Date(date);
+            msg += '\uD83D\uDCC5 *Date:* ' + d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) +
+                ', ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) + '\n';
+        } catch(e) {}
+
+        msg += '\n\uD83D\uDED2 *Items:*\n';
+        var calcTotal = 0;
+        items.forEach(function(it, i) {
+            var nm = it.name || 'Item';
+            var sz = it.size || it.weight || '';
+            var qty = it.quantity || 1;
+            var price = parseFloat(it.price) || 0;
+            var lineTotal = price * qty;
+            calcTotal += lineTotal;
+            msg += (i + 1) + '. ' + nm + (sz ? ' (' + sz + ')' : '') + ' \u00d7 ' + qty + ' = \u20b9' + lineTotal + '\n';
+        });
+
+        var total = parseFloat(order.total) || calcTotal;
+        msg += '\n\uD83D\uDCB0 *Total: \u20b9' + total + '*\n';
+        
+        if (order.walletUsed > 0 || order.walletDiscount > 0) {
+            msg += '\uD83D\uDCB3 *Wallet Used: \u20b9' + (order.walletUsed || order.walletDiscount) + '*\n';
+        }
+        
+        msg += '\nThank you for ordering! \uD83D\uDE4F';
+
+        var url = 'https://wa.me/' + STORE_WHATSAPP + '?text=' + encodeURIComponent(msg);
+        window.open(url, '_blank');
     }
 
     async function saveOrderToSupabase(orderData) {
         try {
-            // Format phone with +91 prefix
             var phone = orderData.customer.phone || '';
             if (phone && !phone.startsWith('+')) phone = '+91' + phone.replace(/^0+/, '');
-            
             var payload = {
-                id: orderData.orderId, 
-                customer_name: orderData.customer.name, 
-                customer_phone: phone,
-                customer_address: orderData.customer.address, 
-                customer_pincode: orderData.customer.pincode,
-                items: JSON.stringify(orderData.items), 
-                subtotal: orderData.subtotal, 
-                delivery_charge: orderData.deliveryCharge,
-                wallet_used: orderData.walletDiscount || 0, 
-                total: orderData.total, 
-                payment_method: orderData.paymentMethod,
-                payment_id: orderData.paymentId, 
-                status: 'confirmed', 
-                created_at: orderData.createdAt
+                id: orderData.orderId, customer_name: orderData.customer.name, customer_phone: phone,
+                customer_address: orderData.customer.address, customer_pincode: orderData.customer.pincode,
+                items: JSON.stringify(orderData.items), subtotal: orderData.subtotal,
+                delivery_charge: orderData.deliveryCharge, wallet_used: orderData.walletDiscount || 0,
+                total: orderData.total, payment_method: orderData.paymentMethod,
+                payment_id: orderData.paymentId, status: 'confirmed', created_at: orderData.createdAt
             };
-            
-            console.log('[Cart] Saving order to Supabase:', orderData.orderId, payload);
-            
             var res = await fetch(SUPABASE_URL + '/rest/v1/orders', {
                 method: 'POST',
                 headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
                 body: JSON.stringify(payload)
             });
-            
-            if (res.ok) {
-                var saved = await res.json();
-                console.log('[Cart] Order saved to Supabase:', orderData.orderId, saved);
-            } else {
+            if (res.ok) { console.log('[Cart] Order saved to Supabase'); }
+            else {
                 var errText = await res.text();
-                console.error('[Cart] Supabase order save FAILED:', res.status, errText);
-                
-                // If 404 or column error, the orders table may not exist or have different columns
-                // Try a minimal payload with just the essential columns
+                console.error('[Cart] Supabase save failed:', res.status, errText);
                 if (res.status === 400 || res.status === 404 || res.status === 409) {
-                    console.log('[Cart] Retrying with minimal payload...');
-                    var minPayload = {
-                        order_id: orderData.orderId,
-                        customer_name: orderData.customer.name,
-                        customer_phone: phone,
-                        address: orderData.customer.address + ', ' + orderData.customer.pincode,
-                        items: JSON.stringify(orderData.items),
-                        total: orderData.total,
-                        status: 'confirmed',
-                        payment_id: orderData.paymentId,
-                        payment_method: orderData.paymentMethod
-                    };
-                    
-                    var res2 = await fetch(SUPABASE_URL + '/rest/v1/orders', {
-                        method: 'POST',
-                        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-                        body: JSON.stringify(minPayload)
-                    });
-                    
-                    if (res2.ok) {
-                        console.log('[Cart] Order saved with minimal payload');
-                    } else {
-                        var errText2 = await res2.text();
-                        console.error('[Cart] Minimal save also failed:', res2.status, errText2);
-                        console.error('[Cart] You may need to create the "orders" table in Supabase.');
-                        console.error('[Cart] Required columns: id (text PK), customer_name, customer_phone, customer_address, customer_pincode, items (jsonb), subtotal (numeric), delivery_charge (numeric), wallet_used (numeric), total (numeric), payment_method, payment_id, status, created_at (timestamptz)');
-                    }
+                    var minPayload = { order_id: orderData.orderId, customer_name: orderData.customer.name, customer_phone: phone, address: orderData.customer.address + ', ' + orderData.customer.pincode, items: JSON.stringify(orderData.items), total: orderData.total, status: 'confirmed', payment_id: orderData.paymentId, payment_method: orderData.paymentMethod };
+                    await fetch(SUPABASE_URL + '/rest/v1/orders', { method: 'POST', headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }, body: JSON.stringify(minPayload) });
                 }
             }
-        } catch (e) { console.error('[Cart] Supabase order save network error:', e); }
+        } catch (e) { console.error('[Cart] Supabase save error:', e); }
     }
 
     async function updateWalletInSupabase(phone, balance) {
@@ -886,7 +705,7 @@ const Cart = (function() {
                 headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
                 body: JSON.stringify({ wallet_balance: balance })
             });
-        } catch (e) { console.warn('[Cart] Wallet update failed:', e); }
+        } catch (e) {}
     }
 
     function showOrderSuccessModal(order) {
@@ -899,7 +718,6 @@ const Cart = (function() {
                     '</div>';
                 }).join('') + '</div>';
         }
-        
         var m = document.createElement('div');
         m.className = 'fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4';
         m.innerHTML = '<div class="bg-white rounded-2xl p-8 max-w-sm w-full text-center">' +
@@ -911,76 +729,154 @@ const Cart = (function() {
             (order.walletUsed > 0 ? '<p class="text-sm text-green-600 mb-4">\u2705 \u20b9' + order.walletUsed + ' wallet credit applied</p>' : '') +
             '<div class="space-y-3">' +
             '<button class="w-full py-4 bg-pickle-500 text-white font-bold rounded-xl" onclick="this.closest(\'.fixed\').remove()">Continue Shopping</button>' +
-            '<button class="w-full py-3 text-pickle-600 font-semibold border border-pickle-200 rounded-xl hover:bg-pickle-50" onclick="this.closest(\'.fixed\').remove(); if(typeof OrdersFix!==\'undefined\') OrdersFix.showOrdersPage(); else if(typeof OrdersPage!==\'undefined\') OrdersPage.init();">View My Orders</button>' +
+            '<button class="w-full py-3 text-pickle-600 font-semibold border border-pickle-200 rounded-xl hover:bg-pickle-50" onclick="this.closest(\'.fixed\').remove(); Cart.showOrdersPage();">View My Orders</button>' +
             '</div></div>';
         document.body.appendChild(m);
     }
 
-    // ============ ORDERS PAGE (accessible from app.js) ============
-    
-    function showOrdersPage() {
-        // Delegate to OrdersFix or OrdersPage if available
-        if (typeof OrdersFix !== 'undefined' && OrdersFix.showOrdersPage) {
-            OrdersFix.showOrdersPage();
-        } else if (typeof OrdersPage !== 'undefined' && OrdersPage.init) {
-            OrdersPage.init();
+    // ╔══════════════════════════════════════════════╗
+    // ║  BEAUTIFUL ORDERS PAGE (BUILT-IN)             ║
+    // ╚══════════════════════════════════════════════╝
+
+    function showBeautifulOrdersPage() {
+        var orders = getStoredOrders();
+
+        var old = document.getElementById('orders-modal');
+        if (old) old.remove();
+
+        var modal = document.createElement('div');
+        modal.id = 'orders-modal';
+        modal.style.cssText = 'position:fixed;inset:0;z-index:86;display:flex;align-items:flex-end;justify-content:center;';
+
+        // Backdrop
+        var backdrop = document.createElement('div');
+        backdrop.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);';
+        backdrop.onclick = function() { modal.remove(); document.body.style.overflow = ''; };
+        modal.appendChild(backdrop);
+
+        // Panel
+        var panel = document.createElement('div');
+        panel.style.cssText = 'position:relative;background:#fff;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column;';
+        modal.appendChild(panel);
+
+        // Header
+        var hdr = document.createElement('div');
+        hdr.style.cssText = 'padding:20px 20px 16px;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;';
+        hdr.innerHTML = '<div><h3 style="font-weight:800;font-size:1.25rem;color:#1f2937;margin:0;">My Orders</h3>' +
+            '<p style="font-size:0.8rem;color:#9ca3af;margin:4px 0 0;">' + orders.length + ' order' + (orders.length !== 1 ? 's' : '') + '</p></div>' +
+            '<button style="width:36px;height:36px;border-radius:50%;background:#f3f4f6;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:1.1rem;" id="close-orders-x">\u2715</button>';
+        panel.appendChild(hdr);
+        hdr.querySelector('#close-orders-x').onclick = function() { modal.remove(); document.body.style.overflow = ''; };
+
+        // Body
+        var body = document.createElement('div');
+        body.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px 24px;';
+        panel.appendChild(body);
+
+        if (orders.length === 0) {
+            body.innerHTML = '<div style="text-align:center;padding:60px 0;"><div style="font-size:4rem;margin-bottom:16px;">\uD83D\uDCE6</div>' +
+                '<h4 style="font-weight:700;color:#1f2937;font-size:1.1rem;margin:0 0 8px;">No orders yet</h4>' +
+                '<p style="color:#9ca3af;font-size:0.9rem;margin:0;">Your orders will appear here after checkout</p></div>';
         } else {
-            // Inline simple orders view
-            showSimpleOrdersModal();
+            orders.forEach(function(order) { body.appendChild(buildCard(order)); });
         }
+
+        document.body.appendChild(modal);
+        document.body.style.overflow = 'hidden';
+    }
+
+    function buildCard(order) {
+        var card = document.createElement('div');
+        card.style.cssText = 'background:#f9fafb;border-radius:16px;padding:16px;margin-bottom:12px;border:1px solid #e5e7eb;';
+
+        var orderId = order.id || order.orderId || order.order_id || '???';
+        var status = order.status || 'pending';
+        // Read date from ALL possible fields
+        var date = order.createdAt || order.created_at || order.date || '';
+        // Read total from ALL possible fields
+        var total = parseFloat(order.total) || 0;
+
+        var items = [];
+        try { items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []); } catch(e) {}
+
+        var itemCount = 0;
+        items.forEach(function(it) { itemCount += (it.quantity || 1); });
+
+        // If total is still 0, calculate from items
+        if (total === 0 && items.length > 0) {
+            items.forEach(function(it) { total += (parseFloat(it.price) || 0) * (it.quantity || 1); });
+            total += parseFloat(order.delivery || order.deliveryCharge || order.delivery_charge || 0);
+            total -= parseFloat(order.walletUsed || order.walletDiscount || order.wallet_used || 0);
+            if (total < 0) total = 0;
+        }
+
+        // Status config
+        var sc = { 'confirmed': { bg:'#dcfce7', c:'#166534', i:'\u2705', l:'Confirmed' }, 'pending': { bg:'#fef3c7', c:'#92400e', i:'\u23F3', l:'Pending' }, 'shipped': { bg:'#dbeafe', c:'#1e40af', i:'\uD83D\uDE9A', l:'Shipped' }, 'delivered': { bg:'#d1fae5', c:'#065f46', i:'\uD83C\uDF89', l:'Delivered' }, 'cancelled': { bg:'#fee2e2', c:'#991b1b', i:'\u274C', l:'Cancelled' } };
+        var s = sc[status] || sc['pending'];
+
+        // Date
+        var dateStr = '';
+        if (date) { try { var dd = new Date(date); dateStr = dd.toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) + ', ' + dd.toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit',hour12:true}); } catch(e) {} }
+
+        // Items detail
+        var itemsHtml = '';
+        items.forEach(function(it) {
+            var nm = it.name || 'Item';
+            var sz = it.size || it.weight || it.variant || '';
+            var qty = it.quantity || 1;
+            var pr = parseFloat(it.price) || 0;
+            itemsHtml += '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.85rem;">' +
+                '<span style="color:#4b5563;">' + nm + (sz ? ' (' + sz + ')' : '') + ' \u00d7 ' + qty + '</span>' +
+                '<span style="font-weight:600;color:#374151;">\u20b9' + (pr * qty) + '</span></div>';
+        });
+        if (itemsHtml) itemsHtml = '<div style="border-top:1px solid #e5e7eb;padding-top:8px;margin-bottom:8px;">' + itemsHtml + '</div>';
+
+        card.innerHTML =
+            // Header: ID + Status
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">' +
+            '<div style="font-weight:700;color:#1f2937;font-size:0.95rem;">#' + orderId + '</div>' +
+            '<span style="display:inline-flex;align-items:center;gap:4px;font-size:0.75rem;font-weight:600;padding:4px 10px;border-radius:20px;background:' + s.bg + ';color:' + s.c + ';">' + s.i + ' ' + s.l + '</span></div>' +
+            // Date
+            (dateStr ? '<div style="font-size:0.8rem;color:#9ca3af;margin-bottom:10px;">' + dateStr + '</div>' : '') +
+            // Items
+            itemsHtml +
+            // Footer
+            '<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid #e5e7eb;padding-top:8px;">' +
+            '<span style="font-size:0.85rem;color:#6b7280;">' + itemCount + ' item' + (itemCount !== 1 ? 's' : '') + '</span>' +
+            '<span style="font-weight:800;font-size:1.15rem;color:#1f2937;">\u20b9' + total + '</span></div>';
+
+        return card;
+    }
+
+    function getStoredOrders() {
+        var orders = [];
+        try { orders = JSON.parse(localStorage.getItem(ORDERS_KEY) || '[]'); } catch(e) {}
+        orders.sort(function(a, b) {
+            var da = new Date(a.createdAt || a.created_at || a.date || 0).getTime();
+            var db = new Date(b.createdAt || b.created_at || b.date || 0).getTime();
+            return db - da;
+        });
+        return orders;
+    }
+
+    // ╔══════════════════════════════════════════════╗
+    // ║  ORDERS PAGE ROUTING                          ║
+    // ╚══════════════════════════════════════════════╝
+
+    function showOrdersPage() {
+        // Always use our built-in beautiful version
+        showBeautifulOrdersPage();
     }
     
     function showSimpleOrdersModal() {
-        var orders = [];
-        try { orders = JSON.parse(localStorage.getItem(ORDERS_KEY) || '[]'); } catch(e) {}
-        
-        var existing = document.getElementById('orders-modal');
-        if (existing) existing.remove();
-        
-        var modal = document.createElement('div');
-        modal.id = 'orders-modal';
-        modal.className = 'fixed inset-0 z-[85] flex items-end justify-center';
-        
-        var ordersHtml = '';
-        if (orders.length === 0) {
-            ordersHtml = '<div class="text-center py-12"><div class="text-6xl mb-4">\uD83D\uDCE6</div>' +
-                '<h4 class="font-semibold text-gray-800 mb-2">No orders yet</h4>' +
-                '<p class="text-gray-500 text-sm">Your orders will appear here after checkout</p></div>';
-        } else {
-            ordersHtml = '<div class="space-y-3 max-h-[60vh] overflow-y-auto">';
-            for (var i = 0; i < orders.length; i++) {
-                var o = orders[i];
-                var statusLabel = o.status === 'confirmed' ? '\u2705 Confirmed' : o.status === 'delivered' ? '\uD83C\uDF89 Delivered' : o.status === 'cancelled' ? '\u274C Cancelled' : '\uD83D\uDCDD ' + (o.status || 'Pending');
-                var itemCount = 0;
-                if (o.items) { for (var j = 0; j < o.items.length; j++) itemCount += (o.items[j].quantity || 1); }
-                ordersHtml += '<div class="bg-gray-50 rounded-xl p-4">' +
-                    '<div class="flex justify-between items-start mb-2">' +
-                    '<div><span class="font-bold text-gray-800">#' + (o.id || o.orderId) + '</span>' +
-                    '<p class="text-xs text-gray-500 mt-1">' + new Date(o.createdAt).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'}) + '</p></div>' +
-                    '<span class="text-xs font-semibold px-3 py-1 rounded-full bg-blue-100 text-blue-800">' + statusLabel + '</span></div>' +
-                    '<div class="flex justify-between items-center"><span class="text-sm text-gray-600">' + itemCount + ' item(s)</span>' +
-                    '<span class="font-bold text-lg">\u20b9' + (o.total || 0) + '</span></div></div>';
-            }
-            ordersHtml += '</div>';
-        }
-        
-        modal.innerHTML = '<div class="absolute inset-0 bg-black/60 backdrop-blur-sm close-orders-modal"></div>' +
-            '<div class="relative bg-white rounded-t-3xl w-full max-w-lg p-6">' +
-            '<div class="flex justify-between items-center mb-6">' +
-            '<div><h3 class="font-bold text-xl text-gray-800">My Orders</h3>' +
-            '<p class="text-sm text-gray-500">' + orders.length + ' order(s)</p></div>' +
-            '<button class="close-orders-modal w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center">\u2715</button></div>' +
-            ordersHtml + '</div>';
-        
-        document.body.appendChild(modal);
-        document.body.style.overflow = 'hidden';
-        
-        modal.querySelectorAll('.close-orders-modal').forEach(function(btn) {
-            btn.addEventListener('click', function() { modal.remove(); document.body.style.overflow = ''; });
-        });
+        // Redirect to beautiful version
+        showBeautifulOrdersPage();
     }
 
-    // ============ PUBLIC API ============
+    // ╔══════════════════════════════════════════════╗
+    // ║  PUBLIC API                                   ║
+    // ╚══════════════════════════════════════════════╝
+
     return { 
         init: init, 
         checkout: handleCheckout, 
@@ -991,11 +887,9 @@ const Cart = (function() {
     };
 })();
 
-// Export globally
 window.Cart = Cart;
-
-// Also export as Orders so app.js can find it
 window.Orders = { showOrdersPage: Cart.showOrdersPage };
+window.OrdersFix = { showOrdersPage: Cart.showOrdersPage };
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', Cart.init);
 else Cart.init();
