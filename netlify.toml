@@ -30,6 +30,12 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# Blog RSS Feed (MUST be before /blog/*)
+[[redirects]]
+  from = "/blog/feed.xml"
+  to = "/.netlify/functions/blog-feed"
+  status = 200
+
 # Blog routes (MUST be before the catch-all)
 [[redirects]]
   from = "/blog"
