@@ -42,32 +42,36 @@
 
         /* ═══════════ BRAND COLORS PER AMOUNT ═══════════ */
         var AMOUNT_COLORS = {
-            99:  { bg: '#FF6B35', text: '#fff', glow: '#FF8C5A' },   // Burnt orange
-            199: { bg: '#E71D73', text: '#fff', glow: '#FF4D94' },   // Hot pink
-            399: { bg: '#8338EC', text: '#fff', glow: '#A855F7' },   // Electric purple
-            599: { bg: '#F72585', text: '#fff', glow: '#FF5BA3' }    // Magenta
+            99:  { bg: '#FF6B35', text: '#fff', glow: '#FF8C5A' },
+            199: { bg: '#3A86FF', text: '#fff', glow: '#5A9FFF' },
+            299: { bg: '#8338EC', text: '#fff', glow: '#A855F7' },
+            399: { bg: '#06D6A0', text: '#fff', glow: '#34E8B8' },
+            499: { bg: '#1B998B', text: '#fff', glow: '#2DBFAD' },
+            599: { bg: '#F72585', text: '#fff', glow: '#FF5BA3' }
         };
         function getAmountColor(val) {
             return AMOUNT_COLORS[val] || { bg: '#FF6B35', text: '#fff', glow: '#FF8C5A' };
         }
 
-        /* Default segments — each prize once, alternating with Try Again */
+        /* Default segments — all prizes, no Try Again, no duplicates side by side */
         var SEGMENTS = [
-            { label: '\u20B999',      value: 99,  color: '#FF6B35' },
-            { label: 'Try Again',     value: 0,   color: '#2D3047' },
-            { label: '\u20B9299',     value: 299, color: '#8338EC' },
-            { label: 'Try Again',     value: 0,   color: '#1B998B' },
-            { label: '\u20B9599',     value: 599, color: '#F72585' },
-            { label: 'Try Again',     value: 0,   color: '#3A86FF' },
-            { label: '\u20B999',      value: 99,  color: '#E71D73' },
-            { label: 'Try Again',     value: 0,   color: '#06D6A0' }
+            { label: '\u20B999',  value: 99,  color: '#FF6B35' },
+            { label: '\u20B9299', value: 299, color: '#8338EC' },
+            { label: '\u20B999',  value: 99,  color: '#E71D73' },
+            { label: '\u20B9499', value: 499, color: '#1B998B' },
+            { label: '\u20B9199', value: 199, color: '#3A86FF' },
+            { label: '\u20B9399', value: 399, color: '#06D6A0' },
+            { label: '\u20B999',  value: 99,  color: '#2D3047' },
+            { label: '\u20B9599', value: 599, color: '#F72585' }
         ];
 
         var PRIZES = [
-            { value: 99,  weight: 30, segments: [0, 6] },
-            { value: 299, weight: 15, segments: [2] },
-            { value: 599, weight: 5,  segments: [4] },
-            { value: 0,   weight: 50, segments: [1, 3, 5, 7] }
+            { value: 99,  weight: 40, segments: [0, 2, 6] },
+            { value: 199, weight: 20, segments: [4] },
+            { value: 299, weight: 15, segments: [1] },
+            { value: 399, weight: 12, segments: [5] },
+            { value: 499, weight: 8,  segments: [3] },
+            { value: 599, weight: 5,  segments: [7] }
         ];
 
         /* ═══════════ FETCH CONFIG FROM SUPABASE ═══════════ */
@@ -96,45 +100,46 @@
 
         function rebuildSegmentsFromAdmin(adminPrizes) {
             var TOTAL_SEGMENTS = 8;
-            var tryAgainColors = ['#2D3047','#1B998B','#3A86FF','#06D6A0'];
-            var prizeColors = ['#FF6B35','#8338EC','#F72585','#E71D73','#FFD166'];
-            // Each prize gets exactly 1 segment, rest are Try Again
-            var prizeCount = Math.min(adminPrizes.length, Math.floor(TOTAL_SEGMENTS / 2));
-            var tryCount = TOTAL_SEGMENTS - prizeCount;
+            var fillerColors = ['#FF6B35','#E71D73','#2D3047'];
+            var prizeColors = ['#8338EC','#3A86FF','#1B998B','#06D6A0','#F72585','#FFD166'];
+            // Sort prizes by amount descending (high value prizes placed first)
+            var sorted = adminPrizes.slice().sort(function(a,b){return b.amount-a.amount});
+            // Place each prize once, fill remaining with ₹99, no same values adjacent
             var newSegments = [], newPrizes = [];
-            var prizeSegs = [], trySegs = [];
-            var segIdx = 0;
-            // Interleave: prize, try again, prize, try again...
+            var placed = [];
+            // Interleave: prize, filler(99), prize, filler(99)...
             for (var i = 0; i < TOTAL_SEGMENTS; i++) {
-                if (i % 2 === 0 && prizeSegs.length < prizeCount) {
-                    var pi = prizeSegs.length;
-                    var p = adminPrizes[pi];
+                if (i % 2 === 0 && placed.length < sorted.length) {
+                    var p = sorted[placed.length];
                     newSegments.push({
                         label: p.label || ('\u20B9' + p.amount),
                         value: p.amount,
-                        color: p.color || prizeColors[pi % prizeColors.length]
+                        color: p.color || prizeColors[placed.length % prizeColors.length]
                     });
-                    prizeSegs.push(segIdx);
+                    placed.push(i);
                 } else {
-                    var ti = trySegs.length;
+                    var fi = Math.floor(i/2);
                     newSegments.push({
-                        label: 'Try Again',
-                        value: 0,
-                        color: tryAgainColors[ti % tryAgainColors.length]
+                        label: '\u20B999',
+                        value: 99,
+                        color: fillerColors[fi % fillerColors.length]
                     });
-                    trySegs.push(segIdx);
                 }
-                segIdx++;
             }
-            // Build prize entries with their segment indices
-            for (var i = 0; i < prizeCount; i++) {
-                newPrizes.push({ value: adminPrizes[i].amount, weight: adminPrizes[i].probability, segments: [prizeSegs[i]] });
+            // Build prize weights
+            var fillerSegs = [];
+            for (var i = 0; i < TOTAL_SEGMENTS; i++) {
+                if (placed.indexOf(i) >= 0) {
+                    var pi = placed.indexOf(i);
+                    newPrizes.push({ value: sorted[pi].amount, weight: sorted[pi].probability, segments: [i] });
+                } else {
+                    fillerSegs.push(i);
+                }
             }
-            // Try Again gets remaining probability
-            var totalPrizeWeight = 0;
-            for (var i = 0; i < newPrizes.length; i++) totalPrizeWeight += newPrizes[i].weight;
-            var tryWeight = Math.max(0, 100 - totalPrizeWeight);
-            if (trySegs.length > 0) newPrizes.push({ value: 0, weight: tryWeight, segments: trySegs });
+            // ₹99 fillers get remaining weight
+            var usedWeight = 0;
+            for (var i = 0; i < newPrizes.length; i++) usedWeight += newPrizes[i].weight;
+            if (fillerSegs.length > 0) newPrizes.push({ value: 99, weight: Math.max(0, 100 - usedWeight), segments: fillerSegs });
             SEGMENTS = newSegments; PRIZES = newPrizes;
             window.SEGMENTS = SEGMENTS; window.PRIZES = PRIZES;
         }
@@ -687,32 +692,21 @@
 
             // Reveal result with celebration
             setTimeout(function() {
-                if (wonAmount > 0) {
-                    // WIN — show amount and save to wallet
-                    var ac = getAmountColor(wonAmount);
-                    var wonBox = document.getElementById('sw-won-box');
-                    if (wonBox) {
-                        wonBox.style.background = 'linear-gradient(135deg, ' + ac.bg + ', ' + ac.glow + ')';
-                        wonBox.style.boxShadow = '0 8px 32px ' + ac.bg + '66';
-                        wonBox.style.display = 'block';
-                    }
-                    document.getElementById('sw-result-amount').textContent = '\u20B9' + wonAmount;
-                    document.getElementById('sw-congrats-title').textContent = 'Congratulations!';
-                    document.querySelector('.sw-result-text').textContent = 'You won';
-                    step('result');
-                    var resultBox = document.getElementById('sw-result-box');
-                    launchCelebration(resultBox);
-                    toast('\uD83C\uDF89 You won \u20B9' + wonAmount + '!', 'success');
-                    saveToWallet();
-                } else {
-                    // TRY AGAIN — no wallet, encouraging message
-                    var wonBox = document.getElementById('sw-won-box');
-                    if (wonBox) wonBox.style.display = 'none';
-                    document.getElementById('sw-congrats-title').textContent = 'Better luck next time!';
-                    document.querySelector('.sw-result-text').textContent = 'Don\'t worry — check out our amazing products!';
-                    step('result');
-                    toast('Try again next time!', 'info');
+                var ac = getAmountColor(wonAmount);
+                var wonBox = document.getElementById('sw-won-box');
+                if (wonBox) {
+                    wonBox.style.background = 'linear-gradient(135deg, ' + ac.bg + ', ' + ac.glow + ')';
+                    wonBox.style.boxShadow = '0 8px 32px ' + ac.bg + '66';
+                    wonBox.style.display = 'block';
                 }
+                document.getElementById('sw-result-amount').textContent = '\u20B9' + wonAmount;
+                document.getElementById('sw-congrats-title').textContent = 'Congratulations!';
+                document.querySelector('.sw-result-text').textContent = 'You won';
+                step('result');
+                var resultBox = document.getElementById('sw-result-box');
+                launchCelebration(resultBox);
+                toast('\uD83C\uDF89 You won \u20B9' + wonAmount + '!', 'success');
+                saveToWallet();
             }, 4800);
         }
 
@@ -762,7 +756,6 @@
         }
 
         function saveToWallet() {
-            if (!wonAmount || wonAmount <= 0) return; // Skip for Try Again
             var expiryMs = ADMIN_CONFIG.wallet_expiry_hours * 36e5;
             var now = new Date(), exp = new Date(now.getTime() + expiryMs);
             localStorage.setItem('seasalt_user', JSON.stringify({ name: userName, phone: userPhone, country: userCountry }));
