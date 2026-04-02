@@ -47,13 +47,25 @@ var API = (function() {
                 if (p.is_active === false || p.is_active === 'false') continue;
 
                 var variants = parseVariants(p.variants);
+                var rawImg = p.image || (p.images && p.images.length ? p.images[0] : null);
+                var resolvedImg = (typeof CONFIG !== 'undefined' && CONFIG.getImageUrl) 
+                    ? CONFIG.getImageUrl(rawImg, 'CARD')
+                    : (rawImg && rawImg.startsWith('http') ? rawImg : 'https://placehold.co/400x400/D4451A/fff?text=' + encodeURIComponent(p.name || 'Pickle'));
+                var resolvedImages = [];
+                if (p.images && Array.isArray(p.images)) {
+                    for (var j = 0; j < p.images.length; j++) {
+                        resolvedImages.push((typeof CONFIG !== 'undefined' && CONFIG.getImageUrl) ? CONFIG.getImageUrl(p.images[j], 'CARD') : p.images[j]);
+                    }
+                }
+                if (!resolvedImages.length) resolvedImages = [resolvedImg];
+
                 products.push({
                     id: p.id || ('prod-' + i),
                     name: p.name || 'Product',
                     description: p.description || '',
                     category: p.category || 'mixed',
-                    image: p.image || 'https://placehold.co/400x400/D4451A/fff?text=' + encodeURIComponent(p.name || 'Pickle'),
-                    images: p.image ? [p.image] : ['https://placehold.co/400x400/D4451A/fff?text=Pickle'],
+                    image: resolvedImg,
+                    images: resolvedImages,
                     badge: p.badge || null,
                     ribbon: p.badge || null,
                     isFeatured: true,
