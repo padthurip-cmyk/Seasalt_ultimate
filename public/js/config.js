@@ -190,17 +190,26 @@ FIREBASE: {
 // ============================================
 
 /**
- * Get full image URL from filename
+ * Get full image URL from filename or URL
+ * Supports: full URLs (Supabase Storage, CDN), legacy Wix filenames
  */
 CONFIG.getImageUrl = function(filename, size = 'CARD') {
     if (!filename) return this.IMAGES.PLACEHOLDER;
     
-    // If it's already a full URL, return as-is
+    // If it's already a full URL (Supabase Storage, CDN, any http), return as-is
     if (filename.startsWith('http')) return filename;
     
-    // Build Wix image URL with sizing
-    const sizeConfig = this.IMAGES.SIZES[size] || this.IMAGES.SIZES.CARD;
-    return `${this.IMAGES.BASE_URL}${filename}/v1/fill/w_${sizeConfig.width},h_${sizeConfig.height},al_c,q_${this.IMAGES.QUALITY}/image.jpg`;
+    // If it's a data URI, return as-is
+    if (filename.startsWith('data:')) return filename;
+    
+    // Legacy Wix filename (contains ~mv2 or known prefixes)
+    if (filename.indexOf('~mv2') >= 0 || filename.startsWith('163af4_') || filename.startsWith('53b0e3_')) {
+        const sizeConfig = this.IMAGES.SIZES[size] || this.IMAGES.SIZES.CARD;
+        return `${this.IMAGES.BASE_URL}${filename}/v1/fill/w_${sizeConfig.width},h_${sizeConfig.height},al_c,q_${this.IMAGES.QUALITY}/image.jpg`;
+    }
+    
+    // Unknown format — try as relative path or return placeholder
+    return filename.startsWith('/') ? filename : this.IMAGES.PLACEHOLDER;
 };
 
 /**
