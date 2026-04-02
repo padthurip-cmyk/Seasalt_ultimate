@@ -1,4 +1,4 @@
-    /**
+/**
      * SeaSalt Pickles - Spin Wheel v18 (Enhanced UX + Brand Theme)
      * =============================================================
      * CHANGES FROM v17.2:
@@ -211,38 +211,48 @@
             /* Responsive */
             '@media(max-width:380px){.sw-modal{max-width:340px;border-radius:22px}.sw-wheel-wrap{width:250px;height:250px}.sw-otp-input{width:40px;height:50px;font-size:20px}.sw-won-amount{font-size:44px}.sw-title{font-size:24px}}';
 
-        /* ═══════════ WHEEL SVG (enhanced with outer ring + ticker marks) ═══════════ */
+        /* ═══════════ WHEEL SVG (polished with proper label alignment) ═══════════ */
         function createWheelSVG() {
-            var s = 280, cx = s/2, cy = s/2, r = s/2 - 12, n = SEGMENTS.length, a = 360/n;
+            var s = 280, cx = s/2, cy = s/2, r = s/2 - 14, n = SEGMENTS.length, a = 360/n;
             var svg = '<svg viewBox="0 0 '+s+' '+s+'" id="sw-wheel">';
-            // Outer decorative ring
-            svg += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+9)+'" fill="none" stroke="#8338EC" stroke-width="3" opacity=".6"/>';
-            svg += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+6)+'" fill="#fff"/>';
-            // Ticker marks
-            for (var t = 0; t < n; t++) {
-                var ta = (t * a - 90) * Math.PI / 180;
-                var tx1 = cx + (r+6) * Math.cos(ta), ty1 = cy + (r+6) * Math.sin(ta);
-                var tx2 = cx + (r-2) * Math.cos(ta), ty2 = cy + (r-2) * Math.sin(ta);
-                svg += '<line x1="'+tx1.toFixed(1)+'" y1="'+ty1.toFixed(1)+'" x2="'+tx2.toFixed(1)+'" y2="'+ty2.toFixed(1)+'" stroke="#8338EC" stroke-width="3" stroke-linecap="round"/>';
-            }
+            // Outer decorative rings
+            svg += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+11)+'" fill="none" stroke="#8338EC" stroke-width="2.5" opacity=".5"/>';
+            svg += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+7)+'" fill="none" stroke="#fff" stroke-width="1"/>';
+            svg += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+5)+'" fill="#fff"/>';
             // Segments
             for (var i = 0; i < n; i++) {
                 var seg = SEGMENTS[i];
                 var sa = (i * a - 90) * Math.PI / 180, ea = ((i + 1) * a - 90) * Math.PI / 180;
                 var x1 = cx + r * Math.cos(sa), y1 = cy + r * Math.sin(sa);
                 var x2 = cx + r * Math.cos(ea), y2 = cy + r * Math.sin(ea);
-                svg += '<path d="M'+cx+','+cy+' L'+x1.toFixed(1)+','+y1.toFixed(1)+' A'+r+','+r+' 0 0,1 '+x2.toFixed(1)+','+y2.toFixed(1)+' Z" fill="'+seg.color+'" stroke="rgba(255,255,255,.4)" stroke-width="1.5"/>';
-                // Label with pill background
-                var ma = ((i + .5) * a - 90) * Math.PI / 180, lr = r * .62;
-                var lx = cx + lr * Math.cos(ma), ly = cy + lr * Math.sin(ma);
-                var rotDeg = (i + .5) * a;
-                svg += '<g transform="rotate('+rotDeg+','+lx.toFixed(1)+','+ly.toFixed(1)+')">';
-                svg += '<rect x="'+(lx-30).toFixed(1)+'" y="'+(ly-13).toFixed(1)+'" width="60" height="26" rx="13" fill="rgba(255,255,255,.92)" filter="url(#sw-shadow)"/>';
-                svg += '<text x="'+lx.toFixed(1)+'" y="'+(ly+1).toFixed(1)+'" font-size="14" font-weight="800" fill="'+seg.color+'" text-anchor="middle" dominant-baseline="middle" font-family="Outfit,sans-serif">'+seg.label+'</text>';
+                svg += '<path d="M'+cx+','+cy+' L'+x1.toFixed(1)+','+y1.toFixed(1)+' A'+r+','+r+' 0 0,1 '+x2.toFixed(1)+','+y2.toFixed(1)+' Z" fill="'+seg.color+'" stroke="rgba(255,255,255,.3)" stroke-width="1"/>';
+            }
+            // Inner circle mask (clean center)
+            svg += '<circle cx="'+cx+'" cy="'+cy+'" r="38" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="1"/>';
+            // Labels — placed radially, auto-flipped so never upside down
+            for (var i = 0; i < n; i++) {
+                var seg = SEGMENTS[i];
+                var midAngle = (i + 0.5) * a;
+                var radAngle = (midAngle - 90) * Math.PI / 180;
+                var isTryAgain = seg.value === 0;
+                var lr = r * (isTryAgain ? 0.58 : 0.6);
+                var lx = cx + lr * Math.cos(radAngle);
+                var ly = cy + lr * Math.sin(radAngle);
+                // Flip text if it would appear upside down
+                var rotDeg = midAngle;
+                var flipped = (rotDeg > 90 && rotDeg < 270);
+                if (flipped) rotDeg += 180;
+                var pillW = isTryAgain ? 52 : 48;
+                var pillH = 20;
+                var fontSize = isTryAgain ? 9 : 13;
+                var fontWeight = isTryAgain ? '700' : '800';
+                svg += '<g transform="rotate('+rotDeg.toFixed(1)+','+lx.toFixed(1)+','+ly.toFixed(1)+')">';
+                svg += '<rect x="'+(lx - pillW/2).toFixed(1)+'" y="'+(ly - pillH/2).toFixed(1)+'" width="'+pillW+'" height="'+pillH+'" rx="'+(pillH/2)+'" fill="rgba(255,255,255,.92)" filter="url(#sw-shadow)"/>';
+                svg += '<text x="'+lx.toFixed(1)+'" y="'+(ly+0.5).toFixed(1)+'" font-size="'+fontSize+'" font-weight="'+fontWeight+'" fill="'+seg.color+'" text-anchor="middle" dominant-baseline="middle" font-family="Outfit,sans-serif">'+seg.label+'</text>';
                 svg += '</g>';
             }
             // Shadow filter
-            svg += '<defs><filter id="sw-shadow"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity=".15"/></filter></defs>';
+            svg += '<defs><filter id="sw-shadow"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-opacity=".12"/></filter></defs>';
             svg += '</svg>';
             return svg;
         }
