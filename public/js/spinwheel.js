@@ -42,25 +42,25 @@
 
         /* ═══════════ BRAND COLORS PER AMOUNT ═══════════ */
         var AMOUNT_COLORS = {
-            99:  { bg: '#2E7D32', text: '#fff', glow: '#4CAF50' },   // Leaf green
-            199: { bg: '#D4451A', text: '#fff', glow: '#F97316' },   // Pickle orange (brand)
-            399: { bg: '#7B2D8E', text: '#fff', glow: '#A855F7' },   // Royal purple
-            599: { bg: '#DAA520', text: '#fff', glow: '#F4C430' }    // Spice gold
+            99:  { bg: '#FF6B35', text: '#fff', glow: '#FF8C5A' },   // Burnt orange
+            199: { bg: '#E71D73', text: '#fff', glow: '#FF4D94' },   // Hot pink
+            399: { bg: '#8338EC', text: '#fff', glow: '#A855F7' },   // Electric purple
+            599: { bg: '#F72585', text: '#fff', glow: '#FF5BA3' }    // Magenta
         };
         function getAmountColor(val) {
-            return AMOUNT_COLORS[val] || { bg: '#D4451A', text: '#fff', glow: '#F97316' };
+            return AMOUNT_COLORS[val] || { bg: '#FF6B35', text: '#fff', glow: '#FF8C5A' };
         }
 
         /* Default segments */
         var SEGMENTS = [
-            { label: '\u20B999',  value: 99,  color: '#2E7D32' },
-            { label: '\u20B9199', value: 199, color: '#D4451A' },
-            { label: '\u20B9399', value: 399, color: '#7B2D8E' },
-            { label: '\u20B9199', value: 199, color: '#C2410C' },
-            { label: '\u20B9599', value: 599, color: '#DAA520' },
-            { label: '\u20B9199', value: 199, color: '#E53935' },
-            { label: '\u20B999',  value: 99,  color: '#1B5E20' },
-            { label: '\u20B9199', value: 199, color: '#9A3412' }
+            { label: '\u20B999',  value: 99,  color: '#FF6B35' },
+            { label: '\u20B9199', value: 199, color: '#1B998B' },
+            { label: '\u20B9399', value: 399, color: '#8338EC' },
+            { label: '\u20B9199', value: 199, color: '#3A86FF' },
+            { label: '\u20B9599', value: 599, color: '#F72585' },
+            { label: '\u20B9199', value: 199, color: '#06D6A0' },
+            { label: '\u20B999',  value: 99,  color: '#E71D73' },
+            { label: '\u20B9199', value: 199, color: '#2D3047' }
         ];
 
         var PRIZES = [
@@ -116,18 +116,18 @@
             }
             // Use brand-matched colors per amount
             var colorVariants = {
-                99: ['#2E7D32','#1B5E20'], 199: ['#D4451A','#C2410C','#E53935','#9A3412'],
-                399: ['#7B2D8E','#6D28D9'], 599: ['#DAA520','#B8860B']
+                99: ['#FF6B35','#E71D73'], 199: ['#1B998B','#3A86FF','#06D6A0','#2D3047'],
+                399: ['#8338EC','#6D28D9'], 599: ['#F72585','#D61F69']
             };
             var newSegments = [], newPrizes = [], segIdx = 0;
             for (var i = 0; i < adminPrizes.length; i++) {
                 var p = adminPrizes[i], segs = [];
-                var cv = colorVariants[p.amount] || ['#D4451A','#C2410C'];
+                var cv = colorVariants[p.amount] || ['#FF6B35','#E71D73'];
                 for (var j = 0; j < segCounts[i]; j++) {
                     newSegments.push({
                         label: p.label || ('\u20B9' + p.amount),
                         value: p.amount,
-                        color: p.color || cv[j % cv.length]
+                        color: cv[j % cv.length]
                     });
                     segs.push(segIdx); segIdx++;
                 }
@@ -147,7 +147,7 @@
             '.sw-close{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,.15);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.2);color:#fff;font-size:16px;cursor:pointer;z-index:10;display:flex;align-items:center;justify-content:center;transition:all .2s}.sw-close:hover{background:rgba(255,255,255,.3);transform:scale(1.1)}' +
             /* Header */
             '.sw-header{text-align:center;padding:30px 20px 16px}' +
-            '.sw-badge{display:inline-block;background:linear-gradient(135deg,#F4C430,#DAA520);color:#7C2D12;padding:6px 16px;border-radius:20px;font-size:11px;font-weight:700;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;box-shadow:0 2px 8px rgba(218,165,32,.4)}' +
+            '.sw-badge{display:inline-block;background:linear-gradient(135deg,#FFD166,#FF6B35);color:#7C2D12;padding:6px 16px;border-radius:20px;font-size:11px;font-weight:700;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;box-shadow:0 2px 8px rgba(255,107,53,.4)}' +
             '.sw-title{font-family:"Playfair Display",serif;font-size:28px;font-weight:700;color:#fff;margin:0 0 6px;text-shadow:0 2px 8px rgba(0,0,0,.2)}' +
             '.sw-subtitle{font-size:14px;color:rgba(255,255,255,.85);margin:0;font-weight:400}' +
             '.sw-content{padding:0 24px 28px}.sw-hidden{display:none!important}' +
@@ -158,8 +158,8 @@
             '.sw-wheel-section{display:flex;flex-direction:column;align-items:center;gap:20px}' +
             '.sw-wheel-wrap{position:relative;width:280px;height:280px}' +
             '.sw-pointer{position:absolute;top:-8px;left:50%;transform:translateX(-50%);z-index:10;filter:drop-shadow(0 4px 8px rgba(0,0,0,.3))}' +
-            '.sw-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:64px;height:64px;background:linear-gradient(180deg,#fff,#f0f0f0);border-radius:50%;border:3px solid #DAA520;display:flex;align-items:center;justify-content:center;font-size:26px;box-shadow:0 4px 20px rgba(0,0,0,.25),0 0 0 3px rgba(218,165,32,.3);z-index:5}' +
-            '.sw-btn-spin{padding:16px 44px;background:linear-gradient(135deg,#F4C430,#DAA520);color:#7C2D12;border:none;border-radius:16px;font-size:18px;font-weight:800;cursor:pointer;box-shadow:0 6px 24px rgba(218,165,32,.5);text-transform:uppercase;transition:all .2s;font-family:Outfit,sans-serif;letter-spacing:.5px}.sw-btn-spin:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(218,165,32,.6)}.sw-btn-spin:disabled{opacity:.7;cursor:not-allowed;transform:none}' +
+            '.sw-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:64px;height:64px;background:linear-gradient(180deg,#fff,#f0f0f0);border-radius:50%;border:3px solid #8338EC;display:flex;align-items:center;justify-content:center;font-size:26px;box-shadow:0 4px 20px rgba(0,0,0,.25),0 0 0 3px rgba(131,56,236,.3);z-index:5}' +
+            '.sw-btn-spin{padding:16px 44px;background:linear-gradient(135deg,#FFD166,#F72585);color:#fff;border:none;border-radius:16px;font-size:18px;font-weight:800;cursor:pointer;box-shadow:0 6px 24px rgba(247,37,133,.4);text-transform:uppercase;transition:all .2s;font-family:Outfit,sans-serif;letter-spacing:.5px}.sw-btn-spin:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(247,37,133,.5)}.sw-btn-spin:disabled{opacity:.7;cursor:not-allowed;transform:none}' +
             /* Spin animations */
             '.sw-spinning{animation:sw-spin-fast .4s linear infinite}' +
             '@keyframes sw-spin-fast{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}' +
@@ -173,8 +173,8 @@
             '.sw-select,.sw-input{width:100%;padding:14px 16px;border:none;border-radius:14px;background:rgba(255,255,255,.95);font-size:16px;font-weight:500;color:#333;outline:none;box-sizing:border-box;font-family:Outfit,sans-serif;transition:box-shadow .2s}.sw-select:focus,.sw-input:focus{box-shadow:0 0 0 3px rgba(244,196,48,.4)}' +
             '.sw-phone-row{display:flex;gap:8px}.sw-phone-code{width:85px;flex-shrink:0;text-align:center;font-weight:700;background:#f3f4f6}' +
             '.sw-btn{width:100%;padding:16px;border:none;border-radius:14px;font-size:17px;font-weight:700;cursor:pointer;transition:all .2s;font-family:Outfit,sans-serif}.sw-btn:disabled{opacity:.6;cursor:not-allowed}' +
-            '.sw-btn-orange{background:linear-gradient(135deg,#F4C430,#DAA520);color:#7C2D12;box-shadow:0 4px 16px rgba(218,165,32,.4)}.sw-btn-orange:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 20px rgba(218,165,32,.5)}' +
-            '.sw-btn-green{background:linear-gradient(135deg,#2E7D32,#1B5E20);color:#fff;box-shadow:0 4px 16px rgba(46,125,50,.4)}.sw-btn-green:hover:not(:disabled){transform:translateY(-1px)}' +
+            '.sw-btn-orange{background:linear-gradient(135deg,#FFD166,#FF6B35);color:#fff;box-shadow:0 4px 16px rgba(255,107,53,.4)}.sw-btn-orange:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 6px 20px rgba(255,107,53,.5)}' +
+            '.sw-btn-green{background:linear-gradient(135deg,#1B998B,#06D6A0);color:#fff;box-shadow:0 4px 16px rgba(27,153,139,.4)}.sw-btn-green:hover:not(:disabled){transform:translateY(-1px)}' +
             '.sw-helper{text-align:center;color:rgba(255,255,255,.7);font-size:13px;margin-top:4px}' +
             '.sw-error{background:#FEE2E2;color:#DC2626;padding:10px;border-radius:10px;font-size:13px;text-align:center}' +
             /* OTP */
@@ -213,14 +213,14 @@
             var s = 280, cx = s/2, cy = s/2, r = s/2 - 12, n = SEGMENTS.length, a = 360/n;
             var svg = '<svg viewBox="0 0 '+s+' '+s+'" id="sw-wheel">';
             // Outer decorative ring
-            svg += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+9)+'" fill="none" stroke="#DAA520" stroke-width="3" opacity=".6"/>';
+            svg += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+9)+'" fill="none" stroke="#8338EC" stroke-width="3" opacity=".6"/>';
             svg += '<circle cx="'+cx+'" cy="'+cy+'" r="'+(r+6)+'" fill="#fff"/>';
             // Ticker marks
             for (var t = 0; t < n; t++) {
                 var ta = (t * a - 90) * Math.PI / 180;
                 var tx1 = cx + (r+6) * Math.cos(ta), ty1 = cy + (r+6) * Math.sin(ta);
                 var tx2 = cx + (r-2) * Math.cos(ta), ty2 = cy + (r-2) * Math.sin(ta);
-                svg += '<line x1="'+tx1.toFixed(1)+'" y1="'+ty1.toFixed(1)+'" x2="'+tx2.toFixed(1)+'" y2="'+ty2.toFixed(1)+'" stroke="#DAA520" stroke-width="3" stroke-linecap="round"/>';
+                svg += '<line x1="'+tx1.toFixed(1)+'" y1="'+ty1.toFixed(1)+'" x2="'+tx2.toFixed(1)+'" y2="'+ty2.toFixed(1)+'" stroke="#8338EC" stroke-width="3" stroke-linecap="round"/>';
             }
             // Segments
             for (var i = 0; i < n; i++) {
@@ -247,7 +247,7 @@
         /* ═══════════ POINTER SVG ═══════════ */
         function createPointerSVG() {
             return '<svg width="40" height="40" viewBox="0 0 40 40">' +
-                '<polygon points="20,2 34,38 6,38" fill="#DAA520" stroke="#fff" stroke-width="2"/>' +
+                '<polygon points="20,2 34,38 6,38" fill="#F72585" stroke="#fff" stroke-width="2"/>' +
                 '<circle cx="20" cy="26" r="4" fill="#fff"/>' +
                 '</svg>';
         }
@@ -264,7 +264,7 @@
             container.appendChild(box);
 
             // Confetti burst
-            var confettiColors = ['#D4451A','#F4C430','#DAA520','#2E7D32','#E53935','#7B2D8E','#fff','#FB923C','#60A5FA'];
+            var confettiColors = ['#FF6B35','#F72585','#8338EC','#3A86FF','#06D6A0','#E71D73','#fff','#1B998B','#FFD166'];
             var shapes = ['circle','square','strip'];
             for (var i = 0; i < 60; i++) {
                 var c = document.createElement('div');
