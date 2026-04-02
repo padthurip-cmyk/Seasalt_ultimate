@@ -51,23 +51,23 @@
             return AMOUNT_COLORS[val] || { bg: '#FF6B35', text: '#fff', glow: '#FF8C5A' };
         }
 
-        /* Default segments */
+        /* Default segments — each prize once, alternating with Try Again */
         var SEGMENTS = [
-            { label: '\u20B999',  value: 99,  color: '#FF6B35' },
-            { label: '\u20B9199', value: 199, color: '#1B998B' },
-            { label: '\u20B9399', value: 399, color: '#8338EC' },
-            { label: '\u20B9199', value: 199, color: '#3A86FF' },
-            { label: '\u20B9599', value: 599, color: '#F72585' },
-            { label: '\u20B9199', value: 199, color: '#06D6A0' },
-            { label: '\u20B999',  value: 99,  color: '#E71D73' },
-            { label: '\u20B9199', value: 199, color: '#2D3047' }
+            { label: '\u20B999',      value: 99,  color: '#FF6B35' },
+            { label: 'Try Again',     value: 0,   color: '#2D3047' },
+            { label: '\u20B9299',     value: 299, color: '#8338EC' },
+            { label: 'Try Again',     value: 0,   color: '#1B998B' },
+            { label: '\u20B9599',     value: 599, color: '#F72585' },
+            { label: 'Try Again',     value: 0,   color: '#3A86FF' },
+            { label: '\u20B999',      value: 99,  color: '#E71D73' },
+            { label: 'Try Again',     value: 0,   color: '#06D6A0' }
         ];
 
         var PRIZES = [
-            { value: 99,  weight: 20, segments: [0, 6] },
-            { value: 199, weight: 50, segments: [1, 3, 5, 7] },
-            { value: 399, weight: 20, segments: [2] },
-            { value: 599, weight: 10, segments: [4] }
+            { value: 99,  weight: 30, segments: [0, 6] },
+            { value: 299, weight: 15, segments: [2] },
+            { value: 599, weight: 5,  segments: [4] },
+            { value: 0,   weight: 50, segments: [1, 3, 5, 7] }
         ];
 
         /* ═══════════ FETCH CONFIG FROM SUPABASE ═══════════ */
@@ -96,44 +96,47 @@
 
         function rebuildSegmentsFromAdmin(adminPrizes) {
             var TOTAL_SEGMENTS = 8;
-            var totalProb = 0;
-            for (var i = 0; i < adminPrizes.length; i++) totalProb += (adminPrizes[i].probability || 0);
-            if (totalProb === 0) return;
-            var segCounts = [], assigned = 0;
-            for (var i = 0; i < adminPrizes.length; i++) {
-                var count = Math.max(1, Math.round((adminPrizes[i].probability / totalProb) * TOTAL_SEGMENTS));
-                segCounts.push(count); assigned += count;
-            }
-            while (assigned > TOTAL_SEGMENTS) {
-                var maxIdx = 0;
-                for (var i = 1; i < segCounts.length; i++) { if (segCounts[i] > segCounts[maxIdx]) maxIdx = i; }
-                if (segCounts[maxIdx] > 1) { segCounts[maxIdx]--; assigned--; } else break;
-            }
-            while (assigned < TOTAL_SEGMENTS) {
-                var maxIdx = 0;
-                for (var i = 1; i < adminPrizes.length; i++) { if (adminPrizes[i].probability > adminPrizes[maxIdx].probability) maxIdx = i; }
-                segCounts[maxIdx]++; assigned++;
-            }
-            // Use brand-matched colors per amount
-            var colorVariants = {
-                99: ['#FF6B35','#E71D73'], 199: ['#1B998B','#3A86FF','#06D6A0','#2D3047'],
-                399: ['#8338EC','#6D28D9'], 599: ['#F72585','#D61F69']
-            };
-            var newSegments = [], newPrizes = [], segIdx = 0;
-            for (var i = 0; i < adminPrizes.length; i++) {
-                var p = adminPrizes[i], segs = [];
-                var cv = colorVariants[p.amount] || ['#FF6B35','#E71D73'];
-                for (var j = 0; j < segCounts[i]; j++) {
+            var tryAgainColors = ['#2D3047','#1B998B','#3A86FF','#06D6A0'];
+            var prizeColors = ['#FF6B35','#8338EC','#F72585','#E71D73','#FFD166'];
+            // Each prize gets exactly 1 segment, rest are Try Again
+            var prizeCount = Math.min(adminPrizes.length, Math.floor(TOTAL_SEGMENTS / 2));
+            var tryCount = TOTAL_SEGMENTS - prizeCount;
+            var newSegments = [], newPrizes = [];
+            var prizeSegs = [], trySegs = [];
+            var segIdx = 0;
+            // Interleave: prize, try again, prize, try again...
+            for (var i = 0; i < TOTAL_SEGMENTS; i++) {
+                if (i % 2 === 0 && prizeSegs.length < prizeCount) {
+                    var pi = prizeSegs.length;
+                    var p = adminPrizes[pi];
                     newSegments.push({
                         label: p.label || ('\u20B9' + p.amount),
                         value: p.amount,
-                        color: cv[j % cv.length]
+                        color: p.color || prizeColors[pi % prizeColors.length]
                     });
-                    segs.push(segIdx); segIdx++;
+                    prizeSegs.push(segIdx);
+                } else {
+                    var ti = trySegs.length;
+                    newSegments.push({
+                        label: 'Try Again',
+                        value: 0,
+                        color: tryAgainColors[ti % tryAgainColors.length]
+                    });
+                    trySegs.push(segIdx);
                 }
-                newPrizes.push({ value: p.amount, weight: p.probability, segments: segs });
+                segIdx++;
             }
+            // Build prize entries with their segment indices
+            for (var i = 0; i < prizeCount; i++) {
+                newPrizes.push({ value: adminPrizes[i].amount, weight: adminPrizes[i].probability, segments: [prizeSegs[i]] });
+            }
+            // Try Again gets remaining probability
+            var totalPrizeWeight = 0;
+            for (var i = 0; i < newPrizes.length; i++) totalPrizeWeight += newPrizes[i].weight;
+            var tryWeight = Math.max(0, 100 - totalPrizeWeight);
+            if (trySegs.length > 0) newPrizes.push({ value: 0, weight: tryWeight, segments: trySegs });
             SEGMENTS = newSegments; PRIZES = newPrizes;
+            window.SEGMENTS = SEGMENTS; window.PRIZES = PRIZES;
         }
 
         /* ═══════════ STYLES (Brand-matched) ═══════════ */
@@ -674,22 +677,32 @@
 
             // Reveal result with celebration
             setTimeout(function() {
-                // Set amount-specific color on won box
-                var ac = getAmountColor(wonAmount);
-                var wonBox = document.getElementById('sw-won-box');
-                if (wonBox) {
-                    wonBox.style.background = 'linear-gradient(135deg, ' + ac.bg + ', ' + ac.glow + ')';
-                    wonBox.style.boxShadow = '0 8px 32px ' + ac.bg + '66';
+                if (wonAmount > 0) {
+                    // WIN — show amount and save to wallet
+                    var ac = getAmountColor(wonAmount);
+                    var wonBox = document.getElementById('sw-won-box');
+                    if (wonBox) {
+                        wonBox.style.background = 'linear-gradient(135deg, ' + ac.bg + ', ' + ac.glow + ')';
+                        wonBox.style.boxShadow = '0 8px 32px ' + ac.bg + '66';
+                        wonBox.style.display = 'block';
+                    }
+                    document.getElementById('sw-result-amount').textContent = '\u20B9' + wonAmount;
+                    document.getElementById('sw-congrats-title').textContent = 'Congratulations!';
+                    document.querySelector('.sw-result-text').textContent = 'You won';
+                    step('result');
+                    var resultBox = document.getElementById('sw-result-box');
+                    launchCelebration(resultBox);
+                    toast('\uD83C\uDF89 You won \u20B9' + wonAmount + '!', 'success');
+                    saveToWallet();
+                } else {
+                    // TRY AGAIN — no wallet, encouraging message
+                    var wonBox = document.getElementById('sw-won-box');
+                    if (wonBox) wonBox.style.display = 'none';
+                    document.getElementById('sw-congrats-title').textContent = 'Better luck next time!';
+                    document.querySelector('.sw-result-text').textContent = 'Don\'t worry — check out our amazing products!';
+                    step('result');
+                    toast('Try again next time!', 'info');
                 }
-                document.getElementById('sw-result-amount').textContent = '\u20B9' + wonAmount;
-                step('result');
-
-                // Launch celebration!
-                var resultBox = document.getElementById('sw-result-box');
-                launchCelebration(resultBox);
-
-                toast('\uD83C\uDF89 You won \u20B9' + wonAmount + '!', 'success');
-                saveToWallet();
             }, 4800);
         }
 
@@ -739,6 +752,7 @@
         }
 
         function saveToWallet() {
+            if (!wonAmount || wonAmount <= 0) return; // Skip for Try Again
             var expiryMs = ADMIN_CONFIG.wallet_expiry_hours * 36e5;
             var now = new Date(), exp = new Date(now.getTime() + expiryMs);
             localStorage.setItem('seasalt_user', JSON.stringify({ name: userName, phone: userPhone, country: userCountry }));
