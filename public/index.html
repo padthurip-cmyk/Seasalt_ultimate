@@ -314,19 +314,23 @@
                     </div>
                     <div id="wheel-section" class="hidden">
                         <div class="relative w-72 h-72 mx-auto mb-6">
-                            <div class="absolute inset-0 rounded-full bg-gradient-to-r from-spice-gold via-yellow-400 to-spice-gold animate-pulse opacity-30 blur-xl"></div>
+                            <div class="absolute inset-0 rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 animate-pulse opacity-25 blur-xl"></div>
                             <div class="absolute -top-2 left-1/2 -translate-x-1/2 z-20"><div class="w-0 h-0 border-l-[15px] border-r-[15px] border-t-[25px] border-l-transparent border-r-transparent border-t-white drop-shadow-lg"></div></div>
-                            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-gradient-to-br from-white to-gray-200 rounded-full z-10 shadow-lg flex items-center justify-center"><span class="text-2xl">🎰</span></div>
+                            <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 bg-gradient-to-br from-white to-gray-100 rounded-full z-10 shadow-xl flex items-center justify-center border-2 border-white/50"><span class="text-2xl">🎰</span></div>
                             <svg id="spin-wheel" class="w-full h-full drop-shadow-2xl" viewBox="0 0 300 300" style="transition: transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99);">
-                                <path d="M150,150 L150,10 A140,140 0 0,1 271.24,71.24 Z" fill="#DAA520"/><text x="190" y="70" fill="white" font-size="18" font-weight="bold" transform="rotate(22.5, 150, 150)">₹99</text>
-                                <path d="M150,150 L271.24,71.24 A140,140 0 0,1 290,150 Z" fill="#2E7D32"/><text x="230" y="130" fill="white" font-size="10" font-weight="bold" transform="rotate(67.5, 150, 150)">TRY AGAIN</text>
-                                <path d="M150,150 L290,150 A140,140 0 0,1 271.24,228.76 Z" fill="#E53935"/><text x="225" y="185" fill="white" font-size="16" font-weight="bold" transform="rotate(112.5, 150, 150)">₹299</text>
-                                <path d="M150,150 L271.24,228.76 A140,140 0 0,1 150,290 Z" fill="#388E3C"/><text x="180" y="245" fill="white" font-size="10" font-weight="bold" transform="rotate(157.5, 150, 150)">TRY AGAIN</text>
-                                <path d="M150,150 L150,290 A140,140 0 0,1 28.76,228.76 Z" fill="#7B1FA2"/><text x="85" y="245" fill="white" font-size="16" font-weight="bold" transform="rotate(202.5, 150, 150)">₹599</text>
-                                <path d="M150,150 L28.76,228.76 A140,140 0 0,1 10,150 Z" fill="#43A047"/><text x="35" y="185" fill="white" font-size="10" font-weight="bold" transform="rotate(247.5, 150, 150)">TRY AGAIN</text>
-                                <path d="M150,150 L10,150 A140,140 0 0,1 28.76,71.24 Z" fill="#FFA000"/><text x="50" y="115" fill="white" font-size="18" font-weight="bold" transform="rotate(292.5, 150, 150)">₹99</text>
-                                <path d="M150,150 L28.76,71.24 A140,140 0 0,1 150,10 Z" fill="#2E7D32"/><text x="95" y="55" fill="white" font-size="10" font-weight="bold" transform="rotate(337.5, 150, 150)">TRY AGAIN</text>
-                                <circle cx="150" cy="150" r="140" fill="none" stroke="white" stroke-width="8"/><circle cx="150" cy="150" r="130" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+                                <defs>
+                                    <filter id="glow"><feGaussianBlur stdDeviation="2" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+                                </defs>
+                                <path d="M150,150 L150,10 A140,140 0 0,1 271.24,71.24 Z" fill="#FF6B35"/><text x="190" y="70" fill="white" font-size="18" font-weight="bold" transform="rotate(22.5, 150, 150)" filter="url(#glow)">₹99</text>
+                                <path d="M150,150 L271.24,71.24 A140,140 0 0,1 290,150 Z" fill="#1B998B"/><text x="230" y="130" fill="white" font-size="10" font-weight="bold" transform="rotate(67.5, 150, 150)">TRY AGAIN</text>
+                                <path d="M150,150 L290,150 A140,140 0 0,1 271.24,228.76 Z" fill="#E71D73"/><text x="225" y="185" fill="white" font-size="16" font-weight="bold" transform="rotate(112.5, 150, 150)" filter="url(#glow)">₹299</text>
+                                <path d="M150,150 L271.24,228.76 A140,140 0 0,1 150,290 Z" fill="#2D3047"/><text x="180" y="245" fill="rgba(255,255,255,0.8)" font-size="10" font-weight="bold" transform="rotate(157.5, 150, 150)">TRY AGAIN</text>
+                                <path d="M150,150 L150,290 A140,140 0 0,1 28.76,228.76 Z" fill="#8338EC"/><text x="85" y="245" fill="white" font-size="16" font-weight="bold" transform="rotate(202.5, 150, 150)" filter="url(#glow)">₹599</text>
+                                <path d="M150,150 L28.76,228.76 A140,140 0 0,1 10,150 Z" fill="#06D6A0"/><text x="35" y="185" fill="white" font-size="10" font-weight="bold" transform="rotate(247.5, 150, 150)">TRY AGAIN</text>
+                                <path d="M150,150 L10,150 A140,140 0 0,1 28.76,71.24 Z" fill="#F72585"/><text x="50" y="115" fill="white" font-size="18" font-weight="bold" transform="rotate(292.5, 150, 150)" filter="url(#glow)">₹99</text>
+                                <path d="M150,150 L28.76,71.24 A140,140 0 0,1 150,10 Z" fill="#3A86FF"/><text x="95" y="55" fill="white" font-size="10" font-weight="bold" transform="rotate(337.5, 150, 150)">TRY AGAIN</text>
+                                <circle cx="150" cy="150" r="140" fill="none" stroke="white" stroke-width="6"/><circle cx="150" cy="150" r="133" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+                                <circle cx="150" cy="150" r="140" fill="none" stroke="rgba(255,255,255,0.4)" stroke-width="1" stroke-dasharray="4 8"/>
                             </svg>
                         </div>
                         <button id="spin-btn" class="w-full py-4 bg-gradient-to-r from-white to-gray-100 text-pickle-600 font-bold rounded-xl hover:from-gray-100 hover:to-white transition-all shadow-lg flex items-center justify-center gap-2"><span class="text-2xl">🎰</span><span>SPIN NOW!</span><span class="text-2xl">🎰</span></button>
