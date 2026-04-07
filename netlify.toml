@@ -47,6 +47,18 @@
   to = "/.netlify/functions/seasalt-blog"
   status = 200
 
+# Dynamic sitemap (MUST be before catch-all)
+[[redirects]]
+  from = "/sitemap.xml"
+  to = "/.netlify/functions/sitemap"
+  status = 200
+
+# Product SEO pages (MUST be before catch-all)
+[[redirects]]
+  from = "/product/*"
+  to = "/.netlify/functions/product-page"
+  status = 200
+
 # SPA fallback for main app (catch-all — must be LAST)
 [[redirects]]
   from = "/*"
