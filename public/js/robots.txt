@@ -1,5 +1,10 @@
 User-agent: *
 Allow: /
-Disallow: /admin-index.html
+Allow: /blog
+Allow: /blog/*
+Allow: /product/*
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /.netlify/
 
 Sitemap: https://seasaltpickles.com/sitemap.xml
